@@ -1,3 +1,5 @@
+packages: []
+
 allowBuilds:
   esbuild: true
-# pnpm settings (pnpm >= 10 reads config from this file, not package.json).
+  msw: false

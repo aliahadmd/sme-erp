@@ -36,7 +36,11 @@ shell-api: ## Shell into the api container
 shell-web: ## Shell into the web container
 	$(COMPOSE) exec web sh
 
-verify: ## Run all quality gates (lint, format check, tests)
-	$(COMPOSE) exec api uv run ruff check app tests
-	$(COMPOSE) exec api uv run ruff format --check app tests
-	$(COMPOSE) exec api uv run pytest
+verify: ## Run all quality gates (api: lint/format/tests · web: typecheck/lint/tests/build)
+	$(COMPOSE) exec -T api uv run ruff check app tests
+	$(COMPOSE) exec -T api uv run ruff format --check app tests
+	$(COMPOSE) exec -T api uv run pytest -q
+	$(COMPOSE) exec -T web pnpm typecheck
+	$(COMPOSE) exec -T web pnpm lint
+	$(COMPOSE) exec -T web pnpm test
+	$(COMPOSE) exec -T web pnpm build
