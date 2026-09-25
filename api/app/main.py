@@ -67,6 +67,10 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
 
+    from app.modules.core.router import router as core_router
+
+    app.include_router(core_router, prefix=settings.api_prefix)
+
     @app.middleware("http")
     async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]
         request_id = request.headers.get("x-request-id", uuid.uuid4().hex)

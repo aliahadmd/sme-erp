@@ -4,6 +4,11 @@
  */
 export const queryKeys = {
   me: () => ["auth", "me"] as const,
+  users: (params: Record<string, unknown> = {}) => ["core", "users", params] as const,
+  roles: () => ["core", "roles"] as const,
+  permissions: () => ["core", "permissions"] as const,
+  organization: () => ["core", "org"] as const,
+  branches: () => ["core", "branches"] as const,
   contacts: (params: Record<string, unknown> = {}) => ["crm", "contacts", params] as const,
   contact: (id: string) => ["crm", "contacts", id] as const,
   products: (params: Record<string, unknown> = {}) => ["catalog", "products", params] as const,

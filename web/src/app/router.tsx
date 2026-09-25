@@ -4,6 +4,11 @@ import { PlaceholderPage } from "@/app/placeholder-page"
 import { RequireAuth } from "@/app/require-auth"
 import { LoginPage } from "@/features/auth/login-page"
 import { DashboardPage } from "@/features/dashboard/dashboard-page"
+import { AuditPage as SettingsAuditPage } from "@/features/settings/audit-page"
+import { SettingsLayout } from "@/features/settings/layout"
+import { OrganizationPage as SettingsOrganizationPage } from "@/features/settings/organization-page"
+import { RolesPage as SettingsRolesPage } from "@/features/settings/roles-page"
+import { UsersPage as SettingsUsersPage } from "@/features/settings/users-page"
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -19,7 +24,16 @@ export const router = createBrowserRouter([
       { path: "invoicing", element: <PlaceholderPage title="Invoicing" plan={8} /> },
       { path: "accounting", element: <PlaceholderPage title="Accounting" plan={9} /> },
       { path: "reports", element: <PlaceholderPage title="Reports" plan={10} /> },
-      { path: "settings", element: <PlaceholderPage title="Settings" plan={4} /> },
+      {
+        path: "settings",
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <SettingsUsersPage /> },
+          { path: "roles", element: <SettingsRolesPage /> },
+          { path: "organization", element: <SettingsOrganizationPage /> },
+          { path: "audit", element: <SettingsAuditPage /> },
+        ],
+      },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

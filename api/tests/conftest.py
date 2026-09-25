@@ -41,7 +41,7 @@ def _run_migrations() -> None:
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _database():
-    """Recreate erp_test and apply migrations once per test session."""
+    """Recreate erp_test, apply migrations, and seed base data once per session."""
     admin_engine = create_async_engine(BASE_DATABASE_URL, isolation_level="AUTOCOMMIT")
     async with admin_engine.connect() as conn:
         await conn.exec_driver_sql('DROP DATABASE IF EXISTS "erp_test" WITH (FORCE)')
@@ -49,6 +49,16 @@ async def _database():
     await admin_engine.dispose()
 
     await asyncio.to_thread(_run_migrations)
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine as _cae  # noqa: F401
+
+    engine = create_async_engine(TEST_DATABASE_URL)
+    from app.core.seed import seed
+
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        await seed(session)
+    await engine.dispose()
     yield
 
 
