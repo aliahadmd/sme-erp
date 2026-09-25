@@ -30,9 +30,11 @@ make up        # builds & starts postgres, redis, seaweedfs, api, web
 | Web (Vite dev server) | http://localhost:5173 |
 | API | http://localhost:8000 |
 | API health | http://localhost:8000/healthz |
-| Postgres | localhost:5432 |
-| Redis | localhost:6379 |
-| SeaweedFS S3 | localhost:8333 (master console: http://localhost:9333) |
+| Postgres | localhost:55432 (host) — `postgres:5432` inside the docker network |
+| Redis | localhost:56379 (host) — `redis:6379` inside the docker network |
+| SeaweedFS S3 | localhost:18333 (host) — `seaweedfs:8333` inside the network; master console: http://localhost:19333 |
+
+Host ports are chosen to avoid clashes with other local Docker projects.
 
 ## Make targets
 

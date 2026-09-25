@@ -130,7 +130,7 @@ update the Status column here as work completes.
 
 | # | Plan file | Delivers | Depends on | Status |
 |---|---|---|---|---|
-| 1 | [plan-1.md](plan-1.md) | Repo skeleton + full Docker dev environment (`make up` works) | — | ☐ todo |
+| 1 | [plan-1.md](plan-1.md) | Repo skeleton + full Docker dev environment (`make up` works) | — | ✅ done |
 | 2 | [plan-2.md](plan-2.md) | FastAPI foundation: config, DB, Alembic, auth plumbing, AI client, tests | 1 | ☐ todo |
 | 3 | [plan-3.md](plan-3.md) | Frontend foundation: Vite+shadcn shell, router, typed API client, login UI | 1 (2 for live login) | ☐ todo |
 | 4 | [plan-4.md](plan-4.md) | ERP Core: org, branches, users, RBAC, real auth, settings, audit, notifications | 2+3 | ☐ todo |

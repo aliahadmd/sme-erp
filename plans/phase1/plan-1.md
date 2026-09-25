@@ -8,10 +8,10 @@
 ## 1. Tasks
 
 ### Repo skeleton
-- [ ] `git init`, root `.gitignore` (node, python, .env, docker volumes), `README.md`,
+- [x] `git init`, root `.gitignore` (node, python, .env, docker volumes), `README.md`,
       `.env.example`, `Makefile`, `docker/`, `api/`, `web/` (placeholder dirs; real
       scaffolds land in plans 2–3).
-- [ ] `README.md`: 3-command quickstart, architecture diagram (copy from
+- [x] `README.md`: 3-command quickstart, architecture diagram (copy from
       `plans/phase1/index.md`), env var table, Makefile target list.
 
 ### docker-compose.yml (dev)
@@ -54,30 +54,30 @@ services:
 volumes: { pgdata: {}, redisdata: {}, s3data: {}, web_node_modules: {} }
 ```
 
-- [ ] `docker/api.Dockerfile`: `python:3.12-slim` + uv (copied from ghcr image or installer),
+- [x] `docker/api.Dockerfile`: `python:3.12-slim` + uv (copied from ghcr image or installer),
       installs `api/` deps. Placeholder app for now (returns `{"status":"ok"}`) so the
       stack is up before plan-2.
-- [ ] `docker/web.Dockerfile`: `node:22-alpine` + corepack pnpm. Placeholder page for now.
-- [ ] `.env.example` — single source of all config:
+- [x] `docker/web.Dockerfile`: `node:22-alpine` + corepack pnpm. Placeholder page for now.
+- [x] `.env.example` — single source of all config:
       `POSTGRES_USER/PASSWORD/DB`, `DATABASE_URL`, `REDIS_URL`,
       `S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET`,
       `JWT_SECRET`, `OPENROUTER_API_KEY=` (may stay empty), `OPENROUTER_MODEL`,
       `ADMIN_EMAIL/ADMIN_PASSWORD` (used by `make seed` in plan-4), `VITE_API_URL=http://localhost:8000`.
-- [ ] Apps read **only** env vars — no hostnames like `postgres:` hardcoded outside compose
+- [x] Apps read **only** env vars — no hostnames like `postgres:` hardcoded outside compose
       (that is what keeps the Dokploy external-credentials swap trivial later).
 
 ### Makefile
-- [ ] `up` (compose up -d --build), `down`, `logs` (follow), `ps`, `restart`,
+- [x] `up` (compose up -d --build), `down`, `logs` (follow), `ps`, `restart`,
       `reset` (**down -v** — destructive, documented as such),
       `migrate` (runs in api container; no-op until plan-2), `seed` (plan-4),
       `shell-api`, `shell-web`, `verify` (lint/typecheck/test; fills in as plans land).
 
 ## 2. Acceptance
 
-- [ ] Fresh clone: `cp .env.example .env && make up` → all services healthy;
+- [x] Fresh clone: `cp .env.example .env && make up` → all services healthy;
       `make ps` shows healthy states.
-- [ ] Postgres accepts `CREATE EXTENSION vector;` (proves pgvector works).
-- [ ] `redis-cli ping` → PONG; a test object PUT/GET against SeaweedFS S3 API on :8333
+- [x] Postgres accepts `CREATE EXTENSION vector;` (proves pgvector works).
+- [x] `redis-cli ping` → PONG; a test object PUT/GET against SeaweedFS S3 API on :8333
       into bucket `erp-dev` succeeds.
-- [ ] `http://localhost:8000/healthz` → ok (placeholder); `http://localhost:5173` → placeholder page.
-- [ ] `make down && make up` is idempotent; `make reset` wipes volumes cleanly.
+- [x] `http://localhost:8000/healthz` → ok (placeholder); `http://localhost:5173` → placeholder page.
+- [x] `make down && make up` is idempotent; `make reset` wipes volumes cleanly.

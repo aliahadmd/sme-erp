@@ -7,4 +7,4 @@ RUN corepack enable
 WORKDIR /app
 EXPOSE 5173
 
-CMD ["sh", "-c", "pnpm install && pnpm dev"]
+CMD ["sh", "-c", "pnpm approve-builds --all && pnpm install --ignore-scripts && pnpm dev"]

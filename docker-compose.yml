@@ -7,8 +7,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-erp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-erp}
+    # Host ports avoid clashes with other local Docker projects (e.g. 5432/6379/8333).
+    # Inside the docker network the services keep their canonical names/ports.
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +23,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "56379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -43,13 +45,13 @@ services:
       - -s3.port=8333
       - -s3.config=/etc/seaweedfs/s3.json
     ports:
-      - "8333:8333"
-      - "9333:9333"
+      - "18333:8333"
+      - "19333:9333"
     volumes:
       - s3data:/data
       - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:9333/cluster/status || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O - http://seaweedfs:9333/cluster/status || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 24
@@ -93,7 +95,7 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-    command: ["sh", "-c", "pnpm install && pnpm dev"]
+    command: ["sh", "-c", "pnpm approve-builds --all && pnpm install --ignore-scripts && pnpm dev"]
     environment:
       CHOKIDAR_USEPOLLING: "true"
       npm_config_store_dir: /pnpm/store

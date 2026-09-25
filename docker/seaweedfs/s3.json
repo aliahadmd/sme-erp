@@ -1,4 +1,3 @@
-# SeaweedFS S3 API auth config (dev credentials; see .env.example).
 {
   "identities": [
     {
