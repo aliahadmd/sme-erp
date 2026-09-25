@@ -50,7 +50,7 @@ async def _database():
 
     await asyncio.to_thread(_run_migrations)
 
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine as _cae  # noqa: F401
+    from sqlalchemy.ext.asyncio import async_sessionmaker
 
     engine = create_async_engine(TEST_DATABASE_URL)
     from app.core.seed import seed

@@ -115,22 +115,16 @@ async def test_roles_listed_with_permissions(client):
 async def test_settings_roundtrip_and_audit(client):
     admin = await _login(client)
     value = {"payment_terms_days": 14}
-    put = await client.put(
-        "/api/settings/test.key", headers=_auth(admin), json={"value": value}
-    )
+    put = await client.put("/api/settings/test.key", headers=_auth(admin), json={"value": value})
     assert put.status_code == 200, put.text
     got = (await client.get("/api/settings/test.key", headers=_auth(admin))).json()
     assert got["value"] == value
 
     # Login + settings change are audited
-    logs = (
-        await client.get("/api/audit-logs", headers=_auth(admin), params={"limit": 50})
-    ).json()
+    logs = (await client.get("/api/audit-logs", headers=_auth(admin), params={"limit": 50})).json()
     actions = {item["action"] for item in logs["items"]}
     assert "login" in actions
-    setting_updates = [
-        item for item in logs["items"] if item["entity_type"] == "core.setting"
-    ]
+    setting_updates = [item for item in logs["items"] if item["entity_type"] == "core.setting"]
     assert setting_updates, "settings change must be audited"
 
 

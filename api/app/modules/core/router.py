@@ -308,9 +308,7 @@ async def update_user_endpoint(
     data = body.model_dump(exclude_unset=True)
     role_codes = data.pop("role_codes", None)
     password = data.pop("password", None)
-    role_ids = (
-        await _resolve_role_ids(session, role_codes) if role_codes is not None else None
-    )
+    role_ids = await _resolve_role_ids(session, role_codes) if role_codes is not None else None
     updated = await update_user(
         session,
         target,
