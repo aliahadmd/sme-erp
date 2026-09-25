@@ -15,4 +15,6 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-proj
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 
+# docker-compose overrides this with "uv sync --frozen && uvicorn ..." so the
+# venv always matches the mounted lockfile.
 CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]

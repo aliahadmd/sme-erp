@@ -76,13 +76,15 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    command: ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+    # Sync deps from the mounted lockfile at start (no stale venv volume).
+    command:
+      ["sh", "-c", "uv sync --frozen && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"]
     env_file: .env
     ports:
       - "8000:8000"
     volumes:
       - ./api:/app
-      - api_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,6 +112,6 @@ volumes:
   pgdata:
   redisdata:
   s3data:
-  api_venv:
+  uv_cache:
   web_node_modules:
   pnpm_store:
