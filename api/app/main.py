@@ -67,9 +67,13 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
 
+    from app.modules.catalog.router import router as catalog_router
     from app.modules.core.router import router as core_router
+    from app.modules.crm.router import router as crm_router
 
     app.include_router(core_router, prefix=settings.api_prefix)
+    app.include_router(crm_router, prefix=settings.api_prefix)
+    app.include_router(catalog_router, prefix=settings.api_prefix)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]

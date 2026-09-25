@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Boxes,
+  Package,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -20,6 +21,7 @@ type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/crm", label: "CRM", icon: Users },
+  { to: "/products", label: "Products", icon: Package },
   { to: "/sales", label: "Sales", icon: ShoppingCart },
   { to: "/purchasing", label: "Purchasing", icon: Truck },
   { to: "/inventory", label: "Inventory", icon: Boxes },

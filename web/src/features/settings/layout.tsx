@@ -4,6 +4,7 @@ const TABS = [
   { to: "/settings", label: "Users", end: true },
   { to: "/settings/roles", label: "Roles", end: false },
   { to: "/settings/organization", label: "Organization", end: false },
+  { to: "/settings/catalog", label: "Catalog", end: false },
   { to: "/settings/audit", label: "Audit log", end: false },
 ]
 

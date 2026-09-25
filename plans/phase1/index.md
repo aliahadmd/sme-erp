@@ -133,7 +133,7 @@ update the Status column here as work completes.
 | 1 | [plan-1.md](plan-1.md) | Repo skeleton + full Docker dev environment (`make up` works) | — | ✅ done |
 | 2 | [plan-2.md](plan-2.md) | FastAPI foundation: config, DB, Alembic, auth plumbing, AI client, tests | 1 | ✅ done |
 | 3 | [plan-3.md](plan-3.md) | Frontend foundation: Vite+shadcn shell, router, typed API client, login UI | 1 (2 for live login) | ✅ done |
-| 4 | [plan-4.md](plan-4.md) | ERP Core: org, branches, users, RBAC, real auth, settings, audit, notifications | 2+3 | ☐ todo |
+| 4 | [plan-4.md](plan-4.md) | ERP Core: org, branches, users, RBAC, real auth, settings, audit, notifications | 2+3 | ✅ done |
 | 5 | [plan-5.md](plan-5.md) | Master data: contacts (customers/suppliers), products, categories, UoM, taxes | 4 | ☐ todo |
 | 6 | [plan-6.md](plan-6.md) | Sales & Purchasing: SO/PO with numbering, state machines, line editors | 5 | ☐ todo |
 | 7 | [plan-7.md](plan-7.md) | Inventory: warehouses, stock moves, receipts/deliveries, avg costing | 6 | ☐ todo |

@@ -9,6 +9,9 @@ import { SettingsLayout } from "@/features/settings/layout"
 import { OrganizationPage as SettingsOrganizationPage } from "@/features/settings/organization-page"
 import { RolesPage as SettingsRolesPage } from "@/features/settings/roles-page"
 import { UsersPage as SettingsUsersPage } from "@/features/settings/users-page"
+import { CatalogSettingsPage } from "@/features/products/catalog-settings-page"
+import { ContactsPage } from "@/features/contacts/contacts-page"
+import { ProductsPage } from "@/features/products/products-page"
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -17,7 +20,8 @@ export const router = createBrowserRouter([
     element: <RequireAuth />,
     children: [
       { index: true, element: <DashboardPage /> },
-      { path: "crm", element: <PlaceholderPage title="CRM" plan={5} /> },
+      { path: "crm", element: <ContactsPage /> },
+      { path: "products", element: <ProductsPage /> },
       { path: "sales", element: <PlaceholderPage title="Sales" plan={6} /> },
       { path: "purchasing", element: <PlaceholderPage title="Purchasing" plan={6} /> },
       { path: "inventory", element: <PlaceholderPage title="Inventory" plan={7} /> },
@@ -31,6 +35,7 @@ export const router = createBrowserRouter([
           { index: true, element: <SettingsUsersPage /> },
           { path: "roles", element: <SettingsRolesPage /> },
           { path: "organization", element: <SettingsOrganizationPage /> },
+          { path: "catalog", element: <CatalogSettingsPage /> },
           { path: "audit", element: <SettingsAuditPage /> },
         ],
       },
