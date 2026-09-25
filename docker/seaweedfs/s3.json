@@ -1,0 +1,12 @@
+# SeaweedFS S3 API auth config (dev credentials; see .env.example).
+{
+  "identities": [
+    {
+      "name": "erp",
+      "credentials": [
+        { "accessKey": "erp", "secretKey": "erpdevsecret" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List"]
+    }
+  ]
+}

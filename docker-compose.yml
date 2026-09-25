@@ -1,0 +1,113 @@
+name: erp
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    command:
+      - server
+      - -dir=/data
+      - -ip=seaweedfs
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+      - -filer
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "8333:8333"
+      - "9333:9333"
+    volumes:
+      - s3data:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9333/cluster/status || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 15s
+
+  # One-shot: create the dev bucket if missing. Safe to run on every `make up`.
+  seaweed-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-erp}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-erpdevsecret}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+    entrypoint: ["sh", "-c"]
+    command: >
+      'aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket ${S3_BUCKET:-erp-dev}
+      || aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket ${S3_BUCKET:-erp-dev}'
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+      - api_venv:/app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    command: ["sh", "-c", "pnpm install && pnpm dev"]
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      npm_config_store_dir: /pnpm/store
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+      - pnpm_store:/pnpm/store
+
+volumes:
+  pgdata:
+  redisdata:
+  s3data:
+  api_venv:
+  web_node_modules:
+  pnpm_store:
