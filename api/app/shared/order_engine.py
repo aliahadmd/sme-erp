@@ -17,11 +17,11 @@ from app.shared.totals import LineMath, compute_line, compute_totals
 
 ORDER_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"confirmed", "cancelled"},
-    "confirmed": {"cancelled"},
-    # delivered/received/invoiced/closed are terminal-ish and set by the
-    # inventory/invoicing modules through their own services.
-    "delivered": set(),
-    "received": set(),
+    "confirmed": {"cancelled", "delivered", "received"},
+    # delivered/received are set by the inventory module when goods move;
+    # invoiced/closed by the invoicing module.
+    "delivered": {"invoiced", "closed"},
+    "received": {"invoiced", "closed"},
     "invoiced": {"closed"},
     "closed": set(),
     "cancelled": set(),

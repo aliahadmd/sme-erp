@@ -20,6 +20,7 @@ from app.modules.crm import models as crm_models  # noqa: F401
 from app.modules.catalog import models as catalog_models  # noqa: F401
 from app.modules.sales import models as sales_models  # noqa: F401
 from app.modules.purchasing import models as purchasing_models  # noqa: F401
+from app.modules.inventory import models as inventory_models  # noqa: F401
 
 config = context.config
 

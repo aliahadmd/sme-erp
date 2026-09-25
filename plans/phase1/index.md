@@ -135,7 +135,7 @@ update the Status column here as work completes.
 | 3 | [plan-3.md](plan-3.md) | Frontend foundation: Vite+shadcn shell, router, typed API client, login UI | 1 (2 for live login) | ✅ done |
 | 4 | [plan-4.md](plan-4.md) | ERP Core: org, branches, users, RBAC, real auth, settings, audit, notifications | 2+3 | ✅ done |
 | 5 | [plan-5.md](plan-5.md) | Master data: contacts (customers/suppliers), products, categories, UoM, taxes | 4 | ✅ done |
-| 6 | [plan-6.md](plan-6.md) | Sales & Purchasing: SO/PO with numbering, state machines, line editors | 5 | ☐ todo |
+| 6 | [plan-6.md](plan-6.md) | Sales & Purchasing: SO/PO with numbering, state machines, line editors | 5 | ✅ done |
 | 7 | [plan-7.md](plan-7.md) | Inventory: warehouses, stock moves, receipts/deliveries, avg costing | 6 | ☐ todo |
 | 8 | [plan-8.md](plan-8.md) | Invoicing & payments: AR/AP invoices, payments, allocations, statements | 7 | ☐ todo |
 | 9 | [plan-9.md](plan-9.md) | Basic accounting: CoA, auto-posted journals, ledger, trial balance | 8 | ☐ todo |

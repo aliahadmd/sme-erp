@@ -12,6 +12,13 @@ import { UsersPage as SettingsUsersPage } from "@/features/settings/users-page"
 import { CatalogSettingsPage } from "@/features/products/catalog-settings-page"
 import { ContactsPage } from "@/features/contacts/contacts-page"
 import { ProductsPage } from "@/features/products/products-page"
+import {
+  AdjustmentsPage,
+  DeliveriesPage,
+  ReceiptsPage,
+  StockPage,
+} from "@/features/inventory/inventory-pages"
+import { InventoryLayout } from "@/features/inventory/layout"
 import { OrderEditorRoute } from "@/features/documents/order-editor-page"
 import { OrdersListPage } from "@/features/documents/orders-list-page"
 
@@ -30,7 +37,16 @@ export const router = createBrowserRouter([
       { path: "purchasing", element: <OrdersListPage module="purchasing" /> },
       { path: "purchasing/new", element: <OrderEditorRoute module="purchasing" /> },
       { path: "purchasing/:id", element: <OrderEditorRoute module="purchasing" /> },
-      { path: "inventory", element: <PlaceholderPage title="Inventory" plan={7} /> },
+      {
+        path: "inventory",
+        element: <InventoryLayout />,
+        children: [
+          { index: true, element: <StockPage /> },
+          { path: "receipts", element: <ReceiptsPage /> },
+          { path: "deliveries", element: <DeliveriesPage /> },
+          { path: "adjustments", element: <AdjustmentsPage /> },
+        ],
+      },
       { path: "invoicing", element: <PlaceholderPage title="Invoicing" plan={8} /> },
       { path: "accounting", element: <PlaceholderPage title="Accounting" plan={9} /> },
       { path: "reports", element: <PlaceholderPage title="Reports" plan={10} /> },
