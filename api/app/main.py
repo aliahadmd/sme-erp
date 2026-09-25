@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
     from app.modules.core.router import router as core_router
     from app.modules.crm.router import router as crm_router
     from app.modules.inventory.router import router as inventory_router
+    from app.modules.invoicing.router import router as invoicing_router
     from app.modules.purchasing.router import router as purchasing_router
     from app.modules.sales.router import router as sales_router
 
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(sales_router, prefix=settings.api_prefix)
     app.include_router(purchasing_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
+    app.include_router(invoicing_router, prefix=settings.api_prefix)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]

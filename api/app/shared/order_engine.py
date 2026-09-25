@@ -17,7 +17,7 @@ from app.shared.totals import LineMath, compute_line, compute_totals
 
 ORDER_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"confirmed", "cancelled"},
-    "confirmed": {"cancelled", "delivered", "received"},
+    "confirmed": {"cancelled", "delivered", "received", "invoiced"},
     # delivered/received are set by the inventory module when goods move;
     # invoiced/closed by the invoicing module.
     "delivered": {"invoiced", "closed"},

@@ -19,6 +19,9 @@ import {
   StockPage,
 } from "@/features/inventory/inventory-pages"
 import { InventoryLayout } from "@/features/inventory/layout"
+import { InvoicingLayout } from "@/features/invoicing/layout"
+import { InvoicesPage } from "@/features/invoicing/invoices-page"
+import { PaymentsPage } from "@/features/invoicing/payments-page"
 import { OrderEditorRoute } from "@/features/documents/order-editor-page"
 import { OrdersListPage } from "@/features/documents/orders-list-page"
 
@@ -47,7 +50,15 @@ export const router = createBrowserRouter([
           { path: "adjustments", element: <AdjustmentsPage /> },
         ],
       },
-      { path: "invoicing", element: <PlaceholderPage title="Invoicing" plan={8} /> },
+      {
+        path: "invoicing",
+        element: <InvoicingLayout />,
+        children: [
+          { path: "ar", element: <InvoicesPage side="ar" /> },
+          { path: "ap", element: <InvoicesPage side="ap" /> },
+          { path: "payments", element: <PaymentsPage /> },
+        ],
+      },
       { path: "accounting", element: <PlaceholderPage title="Accounting" plan={9} /> },
       { path: "reports", element: <PlaceholderPage title="Reports" plan={10} /> },
       {

@@ -3,8 +3,8 @@
 import uuid
 
 from app.core.errors import ConflictError, NotFoundError
-from app.shared.order_engine import ORDER_TRANSITIONS
 from app.modules.purchasing.models import PurchaseOrder
+from app.shared.order_engine import ORDER_TRANSITIONS
 
 ALLOWED_REMOTE = {"received", "invoiced", "closed"}
 
