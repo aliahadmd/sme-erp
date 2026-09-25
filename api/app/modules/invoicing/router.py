@@ -127,9 +127,7 @@ async def create_invoice(
     else:
         if not body.lines:
             raise ValidationError("Standalone invoice needs at least one line")
-        lines = await build_lines_from_input(
-            session, org.id, body.lines, body.invoice_type == "ap"
-        )
+        lines = await build_lines_from_input(session, org.id, body.lines, body.invoice_type == "ap")
 
     # Assign while the invoice is still transient — after flush the assignment
     # would trigger a sync lazy-load (MissingGreenlet).
@@ -357,7 +355,9 @@ async def create_payment(
 
     payment = (
         await session.scalars(
-            select(Payment).where(Payment.id == payment.id).options(selectinload(Payment.allocations))
+            select(Payment)
+            .where(Payment.id == payment.id)
+            .options(selectinload(Payment.allocations))
         )
     ).first()
     await publish(
@@ -411,6 +411,7 @@ async def void_payment(
             payload={
                 "payment_id": str(payment.id),
                 "number": payment.number,
+                "direction": payment.direction,
                 "amount": str(payment.amount),
                 "method": payment.method,
             },
@@ -459,6 +460,8 @@ async def party_statement(
     return inv.StatementOut(
         party_id=party_id,
         party_name=party.name,
-        open_balance=sum((line.balance for line in lines), Decimal("0.00")).quantize(Decimal("0.01")),
+        open_balance=sum((line.balance for line in lines), Decimal("0.00")).quantize(
+            Decimal("0.01")
+        ),
         invoices=lines,
     )

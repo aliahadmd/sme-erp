@@ -22,6 +22,9 @@ import { InventoryLayout } from "@/features/inventory/layout"
 import { InvoicingLayout } from "@/features/invoicing/layout"
 import { InvoicesPage } from "@/features/invoicing/invoices-page"
 import { PaymentsPage } from "@/features/invoicing/payments-page"
+import { AccountingLayout } from "@/features/accounting/layout"
+import { AccountsPage } from "@/features/accounting/accounts-page"
+import { JournalPage, TrialBalancePage } from "@/features/accounting/journal-and-trial-page"
 import { OrderEditorRoute } from "@/features/documents/order-editor-page"
 import { OrdersListPage } from "@/features/documents/orders-list-page"
 
@@ -59,7 +62,15 @@ export const router = createBrowserRouter([
           { path: "payments", element: <PaymentsPage /> },
         ],
       },
-      { path: "accounting", element: <PlaceholderPage title="Accounting" plan={9} /> },
+      {
+        path: "accounting",
+        element: <AccountingLayout />,
+        children: [
+          { path: "accounts", element: <AccountsPage /> },
+          { path: "journal", element: <JournalPage /> },
+          { path: "trial-balance", element: <TrialBalancePage /> },
+        ],
+      },
       { path: "reports", element: <PlaceholderPage title="Reports" plan={10} /> },
       {
         path: "settings",

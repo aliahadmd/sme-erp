@@ -630,6 +630,7 @@ async def post_adjustment(
     adjustment = await _adjustment_or_404(session, org.id, adjustment_id)
     if adjustment.status != "draft":
         raise ConflictError(f"Cannot post an adjustment in status '{adjustment.status}'")
+    posted_moves: list[StockMove] = []
     for line in adjustment.lines:
         stock_row = await session.scalars(
             select(Stock).where(
@@ -640,7 +641,7 @@ async def post_adjustment(
         )
         row = stock_row.first()
         cost = row.avg_cost if row else Decimal("0")
-        await post_move(
+        move = await post_move(
             session,
             org_id=org.id,
             product_id=line.product_id,
@@ -654,6 +655,7 @@ async def post_adjustment(
             reason=adjustment.reason,
             actor_id=user.id,
         )
+        posted_moves.append(move)
     adjustment.status = "posted"
     adjustment.posted_at = datetime.now(UTC)
     adjustment.posted_by = user.id
@@ -666,5 +668,20 @@ async def post_adjustment(
         after={"number": adjustment.number},
     )
     await session.commit()
+    total_value = sum((m.qty * m.unit_cost for m in posted_moves), Decimal("0")).quantize(
+        Decimal("0.01")
+    )
+    await publish(
+        Event(
+            name="adjustment.posted",
+            payload={
+                "adjustment_id": str(adjustment.id),
+                "number": adjustment.number,
+                "qty": str(sum((m.qty for m in posted_moves), Decimal("0"))),
+                "value": str(total_value),
+            },
+            org_id=org.id,
+        )
+    )
     await session.refresh(adjustment)
     return adjustment

@@ -104,6 +104,11 @@ async def seed(session) -> None:  # noqa: ANN001
             session.add(UserRole(user_id=admin.id, role_id=admin_role.id))
         logger.info("seed_admin_created", email=settings.admin_email)
 
+    # Chart of accounts + accounting mapping
+    from app.modules.accounting.service import seed_coa
+
+    await seed_coa(session, org.id)
+
     # Default settings
     for key, value in DEFAULT_SETTINGS.items():
         existing_setting = (
