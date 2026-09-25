@@ -12,6 +12,8 @@ import { UsersPage as SettingsUsersPage } from "@/features/settings/users-page"
 import { CatalogSettingsPage } from "@/features/products/catalog-settings-page"
 import { ContactsPage } from "@/features/contacts/contacts-page"
 import { ProductsPage } from "@/features/products/products-page"
+import { OrderEditorRoute } from "@/features/documents/order-editor-page"
+import { OrdersListPage } from "@/features/documents/orders-list-page"
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -22,8 +24,12 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: "crm", element: <ContactsPage /> },
       { path: "products", element: <ProductsPage /> },
-      { path: "sales", element: <PlaceholderPage title="Sales" plan={6} /> },
-      { path: "purchasing", element: <PlaceholderPage title="Purchasing" plan={6} /> },
+      { path: "sales", element: <OrdersListPage module="sales" /> },
+      { path: "sales/new", element: <OrderEditorRoute module="sales" /> },
+      { path: "sales/:id", element: <OrderEditorRoute module="sales" /> },
+      { path: "purchasing", element: <OrdersListPage module="purchasing" /> },
+      { path: "purchasing/new", element: <OrderEditorRoute module="purchasing" /> },
+      { path: "purchasing/:id", element: <OrderEditorRoute module="purchasing" /> },
       { path: "inventory", element: <PlaceholderPage title="Inventory" plan={7} /> },
       { path: "invoicing", element: <PlaceholderPage title="Invoicing" plan={8} /> },
       { path: "accounting", element: <PlaceholderPage title="Accounting" plan={9} /> },

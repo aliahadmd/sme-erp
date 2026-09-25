@@ -13,8 +13,8 @@ async def _org_id(session) -> object:
 
 async def test_numbering_increments(db_session):
     org = (await db_session.scalars(select(Organization).limit(1))).first()
-    n1 = await next_number(db_session, org.id, "sales_order", "SO")
-    n2 = await next_number(db_session, org.id, "sales_order", "SO")
+    n1 = await next_number(db_session, org.id, "numbering_so_test", "SO")
+    n2 = await next_number(db_session, org.id, "numbering_so_test", "SO")
     assert n1.endswith("0001")
     assert n2.endswith("0002")
     assert n1.startswith("SO-")
@@ -22,8 +22,8 @@ async def test_numbering_increments(db_session):
 
 async def test_numbering_entities_are_independent(db_session):
     org = (await db_session.scalars(select(Organization).limit(1))).first()
-    so = await next_number(db_session, org.id, "sales_order", "SO")
-    po = await next_number(db_session, org.id, "purchase_order", "PO")
+    so = await next_number(db_session, org.id, "numbering_so_test", "SO")
+    po = await next_number(db_session, org.id, "numbering_po_test", "PO")
     assert so.endswith("0001") and po.endswith("0001")
 
 

@@ -1,5 +1,7 @@
 """Uniform error model: every failure responds as {"error": {"code", "detail", ...}}."""
 
+import json
+
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -7,6 +9,14 @@ from fastapi.responses import JSONResponse
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _json_safe(value):  # noqa: ANN001
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class DomainError(Exception):
@@ -68,11 +78,10 @@ def register_exception_handlers(app) -> None:  # noqa: ANN001 (FastAPI app)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        errors = [{k: _json_safe(v) for k, v in err.items()} for err in exc.errors()]
         return JSONResponse(
             status_code=422,
-            content=_error_body(
-                "validation_error", "Request validation failed", errors=exc.errors()
-            ),
+            content=_error_body("validation_error", "Request validation failed", errors=errors),
         )
 
     @app.exception_handler(Exception)
