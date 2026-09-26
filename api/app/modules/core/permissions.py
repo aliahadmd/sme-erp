@@ -94,6 +94,18 @@ SYSTEM_ROLES: dict[str, dict] = {
             "purchasing.order.read",
         ],
     },
+    "hr": {
+        "name": "HR",
+        "description": "Employees, leave, and approvals.",
+        "permissions": [
+            "hr.employee.read",
+            "hr.employee.create",
+            "hr.employee.update",
+            "hr.leave.read",
+            "hr.leave.request",
+            "hr.leave.approve",
+        ],
+    },
     "viewer": {
         "name": "Viewer",
         "description": "Read-only access across modules.",
@@ -203,6 +215,13 @@ PERMISSION_CATALOG: list[tuple[str, str, str, str]] = [
     ("accounting.entry.create", "accounting", "create", "Create manual journal entries"),
     # reporting
     ("reports.view", "reporting", "read", "Run reports and view dashboards"),
+    # hr
+    ("hr.employee.read", "hr", "read", "View employees"),
+    ("hr.employee.create", "hr", "create", "Create employees"),
+    ("hr.employee.update", "hr", "update", "Edit employees"),
+    ("hr.leave.read", "hr", "read", "View leave requests"),
+    ("hr.leave.request", "hr", "create", "Submit leave requests"),
+    ("hr.leave.approve", "hr", "approve", "Approve/reject leave requests"),
 ]
 
 

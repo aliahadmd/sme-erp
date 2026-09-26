@@ -17,6 +17,7 @@ from app.shared.models import Base
 # Import every module's models so autogenerate sees the full metadata.
 from app.modules.core import models as core_models  # noqa: F401
 from app.modules.currencies import models as currencies_models  # noqa: F401
+from app.modules.hr import models as hr_models  # noqa: F401
 from app.modules.crm import models as crm_models  # noqa: F401
 from app.modules.catalog import models as catalog_models  # noqa: F401
 from app.modules.sales import models as sales_models  # noqa: F401

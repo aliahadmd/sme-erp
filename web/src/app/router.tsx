@@ -19,6 +19,8 @@ import { NumberingPage } from "@/features/settings/numbering-page"
 import { CurrenciesPage } from "@/features/settings/currencies-page"
 import { ProductsLayout } from "@/features/products/layout"
 import { AiDraftsPage } from "@/features/ai/ai-drafts-page"
+import { EmployeesPage, LeaveRequestsPage } from "@/features/hr/hr-page"
+import { HRLayout } from "@/features/hr/layout"
 import {
   AdjustmentsPage,
   DeliveriesPage,
@@ -124,6 +126,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "403", element: <ForbiddenPage /> },
+      {
+        path: "hr",
+        element: <HRLayout />,
+        children: [
+          { index: true, element: <EmployeesPage /> },
+          { path: "leave", element: <LeaveRequestsPage /> },
+        ],
+      },
       {
         path: "settings",
         element: <SettingsLayout />,

@@ -15,6 +15,7 @@ depends_on: str | Sequence[str] | None = None
 
 MODULE_SCHEMAS = (
     "core",
+    "hr",
     "crm",
     "catalog",
     "sales",
