@@ -38,6 +38,11 @@ deploy-check: ## Build the prod compose locally and run the smoke script
 	./docker/deploy-smoke.sh
 	docker compose -f docker-compose.prod.yml down
 
+backup: ## Dump the dev database (custom format) into dumps/
+	@mkdir -p dumps
+	$(COMPOSE) exec -T postgres sh -c 'pg_dump --format=custom --dbname "$$POSTGRES_DB"' > dumps/erp-$$(date +%Y%m%dT%H%M%S).dump
+	@ls -lh dumps | tail -3
+
 jobs-logs: ## Follow the background worker logs
 	$(COMPOSE) logs -f --tail=100 worker
 

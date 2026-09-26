@@ -9,7 +9,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
-from app.jobs import maintenance
+from app.jobs import backups, maintenance
 from app.jobs.queue import enqueue, job_names, register_job  # noqa: F401
 
 
@@ -26,11 +26,15 @@ class WorkerSettings:
     functions = [
         maintenance.check_overdue_invoices,
         maintenance.purge_login_counters,
+        backups.backup_database,
+        backups.prune_audit_logs,
         worker_heartbeat,
     ]
     cron_jobs = [
         cron(maintenance.check_overdue_invoices, hour=7, minute=0, unique=True),
         cron(maintenance.purge_login_counters, minute={0, 10, 20, 30, 40, 50}, unique=True),
+        cron(backups.backup_database, hour=2, minute=30, unique=True),
+        cron(backups.prune_audit_logs, hour=3, minute=15, unique=True),
         cron(worker_heartbeat, minute=set(range(60)), unique=True),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

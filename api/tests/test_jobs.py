@@ -13,7 +13,7 @@ async def test_worker_settings_wiring():
 
     names = [f.__name__ for f in WorkerSettings.functions]
     assert set(names) >= {"check_overdue_invoices", "purge_login_counters", "worker_heartbeat"}
-    assert len(WorkerSettings.cron_jobs) == 3
+    assert len(WorkerSettings.cron_jobs) == 5  # overdue, counters, backup, retention, heartbeat
 
 
 async def test_inline_enqueue_runs_job(client):

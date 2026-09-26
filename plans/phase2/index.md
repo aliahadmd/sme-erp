@@ -61,7 +61,7 @@ e-invoicing integrations, payroll, multi-org tenancy, mobile apps.
 |---|---|---|---|---|
 | 1 | [plan-1.md](plan-1.md) | Background jobs infrastructure (arq worker, scheduling, retries) | — | ✅ done |
 | 2 | [plan-2.md](plan-2.md) | Production build & Dokploy deployment (multi-stage images, HTTPS, non-root) | — | ✅ done |
-| 3 | [plan-3.md](plan-3.md) | CI pipeline + backups + audit-log retention | 1, 2 | ☐ todo |
+| 3 | [plan-3.md](plan-3.md) | CI pipeline + backups + audit-log retention | 1, 2 | ✅ done |
 | 4 | [plan-4.md](plan-4.md) | Quotations (quote documents, conversion to orders) + numbering admin UI | — | ☐ todo |
 | 5 | [plan-5.md](plan-5.md) | Fulfillment UX: partial delivery/billing states in the UI, backorder visibility | — | ☐ todo |
 | 6 | [plan-6.md](plan-6.md) | Credit notes & refunds | 4 | ☐ todo |

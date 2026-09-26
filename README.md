@@ -66,6 +66,14 @@ In development the database, Redis, and S3 run as local containers; for
 deployment their host/credential variables can simply be pointed at external
 services — no code changes.
 
+## CI & backups
+
+- `.github/workflows/ci.yml` — ruff + pytest (with pgvector/redis services) and
+  web typecheck/lint/vitest/build on every push.
+- `.github/workflows/images.yml` — publishes api/web images to GHCR from main.
+- Backups: prod worker cron `backup_database` (02:30, GFS retention) and
+  `prune_audit_logs` (03:15, `AUDIT_RETENTION_DAYS`); dev: `make backup`.
+
 ## Production deployment
 
 ```bash

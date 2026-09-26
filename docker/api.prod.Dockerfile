@@ -6,7 +6,14 @@ COPY api/pyproject.toml api/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.12-slim AS runtime
-RUN groupadd -r app && useradd -r -g app --home-dir /app appuser
+# pg_dump (PGDG, server-matching v17) for the backup job.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd -r app && useradd -r -g app --home-dir /app appuser
 
 WORKDIR /app
 COPY --from=deps /app/.venv /app/.venv
