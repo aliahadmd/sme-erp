@@ -15,7 +15,10 @@ class Invoice(Base, TimestampMixin, UuidPk):
     __table_args__ = (UniqueConstraint("org_id", "number"), {"schema": "invoicing"})
 
     org_id: Mapped[uuid.UUID] = mapped_column(index=True)
-    invoice_type: Mapped[str] = mapped_column(String(2), index=True)  # ar | ap
+    # ar | ap | ar_credit | ap_credit
+    invoice_type: Mapped[str] = mapped_column(String(12), index=True)
+    original_invoice_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    applied_credits: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     number: Mapped[str | None] = mapped_column(String(30), unique=False)  # assigned at post
     party_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("crm.contacts.id", ondelete="SET NULL")
@@ -87,6 +90,7 @@ class Payment(Base, TimestampMixin, UuidPk):
     reference: Mapped[str | None] = mapped_column(String(100))
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="recorded", index=True)  # recorded|void
+    credit_note_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column()
 

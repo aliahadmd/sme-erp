@@ -22,6 +22,27 @@ async def invoice_or_404(
     return invoice
 
 
+def build_lines_from_invoice(original: Invoice) -> list[InvoiceLine]:
+    """Copy snapshot lines from an invoice (for credit notes)."""
+    lines: list[InvoiceLine] = []
+    for position, line in enumerate(original.lines):
+        new_line = InvoiceLine(
+            position=position,
+            product_id=line.product_id,
+            product_name=line.product_name,
+            description=line.description,
+            qty=line.qty,
+            uom_code=line.uom_code,
+            unit_price=line.unit_price,
+            discount_pct=line.discount_pct,
+            tax_id=line.tax_id,
+            tax_rate_pct=line.tax_rate_pct,
+        )
+        apply_line_math(new_line)
+        lines.append(new_line)
+    return lines
+
+
 async def build_lines_from_order(
     session: AsyncSession,
     order: object,
@@ -88,8 +109,19 @@ async def post_invoice(
         raise ConflictError(f"Cannot post an invoice in status '{invoice.status}'")
     if not invoice.lines:
         raise ValidationError("Cannot post an invoice without lines")
-    entity = "ar_invoice" if invoice.invoice_type == "ar" else "ap_invoice"
-    default_prefix = "INV" if invoice.invoice_type == "ar" else "BILL"
+    is_ar = invoice.invoice_type.startswith("ar")
+    is_credit = "credit" in invoice.invoice_type
+    entity = (
+        ("ar_credit" if is_credit else "ar_invoice")
+        if is_ar
+        else ("ap_credit" if is_credit else "ap_invoice")
+    )
+    default_prefix = {
+        "ar_invoice": "INV",
+        "ap_invoice": "BILL",
+        "ar_credit": "CRN",
+        "ap_credit": "SCN",
+    }[entity]
     prefixes = await get_setting(session, org_id, "numbering.prefixes")
     prefix = (
         prefixes.get(entity)
@@ -108,7 +140,7 @@ async def post_invoice(
 
 async def apply_allocation_to_invoice(invoice: Invoice, amount: Decimal, sign: int = 1) -> None:
     """Adjust paid amount and derived status. sign=-1 releases an allocation."""
-    invoice.amount_paid = Decimal(str(invoice.amount_paid)) + sign * Decimal(str(amount))
+    invoice.amount_paid = Decimal(str(invoice.amount_paid)) + sign * Decimal(str(amount))  # noqa: E501
     total = Decimal(str(invoice.total))
     if invoice.status == "void":
         raise ConflictError("Cannot allocate against a void invoice")
@@ -144,6 +176,7 @@ async def record_payment(
     allocations: list[tuple[uuid.UUID, Decimal]],
     actor_id: uuid.UUID,
     prefix: str,
+    credit_note_id: uuid.UUID | None = None,
 ) -> Payment:
     """Create a payment with allocations; updates invoice statuses in the same tx."""
     total_allocated = sum((Decimal(str(a)) for _, a in allocations), Decimal("0"))
@@ -171,6 +204,7 @@ async def record_payment(
         reference=reference,
         notes=notes,
         created_by=actor_id,
+        credit_note_id=credit_note_id,
     )
     session.add(payment)
     await session.flush()

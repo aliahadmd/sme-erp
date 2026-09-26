@@ -19,7 +19,8 @@ class InvoiceLineIn(BaseModel):
 
 
 class InvoiceCreateIn(BaseModel):
-    invoice_type: str = Field("ar", pattern=r"^(ar|ap)$")
+    invoice_type: str = Field("ar", pattern=r"^(ar|ap|ar_credit|ap_credit)$")
+    original_invoice_id: uuid.UUID | None = None
     party_id: uuid.UUID
     source_order_id: uuid.UUID | None = None
     invoice_date: date | None = None
@@ -42,6 +43,7 @@ class PaymentIn(BaseModel):
     method: str = Field("bank", pattern=r"^(cash|bank|card|transfer|other)$")
     reference: str | None = None
     notes: str | None = None
+    credit_note_id: uuid.UUID | None = None
     allocations: list[PaymentAllocateIn] = []
 
 
@@ -110,6 +112,7 @@ class PaymentOut(BaseModel):
     reference: str | None
     notes: str | None
     status: str
+    credit_note_id: uuid.UUID | None = None
     allocations: list[PaymentAllocationOut] = []
 
 

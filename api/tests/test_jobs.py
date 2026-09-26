@@ -46,21 +46,46 @@ async def test_inline_enqueue_runs_job(client):
             },
         )
     ).json()
-    await client.post(
+    posted = await client.post(
         f"/api/invoicing/invoices/{invoice['id']}/post",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
+    assert posted.status_code == 200, posted.text
 
     await enqueue("check_overdue_invoices")
 
-    page = (
-        await client.get(
-            "/api/notifications",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-    ).json()
-    overdue = [n for n in page["items"] if n["type"] == "invoice_overdue"]
-    assert overdue, "job must create overdue notifications"
+    from sqlalchemy import select as _select
+
+    from app.core.db import SessionFactory as _SF
+    from app.modules.core.models import Notification as _N
+
+    async with _SF() as dbg:
+        rows = (await dbg.scalars(_select(_N))).all()
+        from app.modules.core.models import User as _U
+
+        emails = {}
+        for n in rows:
+            u = await dbg.get(_U, n.user_id)
+            emails.setdefault(u.email if u else "?", []).append(n.type)
+        print("DBG by user:", {k: len(v) for k, v in emails.items()})
+
+    # Assert directly on the DB for THIS invoice (deterministic regardless of
+    # cross-test notification volume).
+    from sqlalchemy import select
+
+    from app.core.db import SessionFactory
+    from app.modules.core.models import Notification
+
+    async with SessionFactory() as s:
+        rows = (
+            await s.scalars(
+                select(Notification).where(
+                    Notification.type == "invoice_overdue",
+                    Notification.payload["dedupe"].astext == f"overdue:{invoice['id']}",
+                )
+            )
+        ).all()
+    assert rows, "job must create the overdue notification for this invoice"
 
 
 async def test_unknown_job_raises():

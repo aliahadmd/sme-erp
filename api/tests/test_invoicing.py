@@ -437,3 +437,111 @@ async def test_duplicate_invoicing_of_order_rejected_and_autoclose(client):
     assert so_view["status"] == "closed"
     po_view = (await client.get(f"/api/purchasing/orders/{po['id']}", headers=_auth(admin))).json()
     assert po_view["status"] == "received"  # billed via standalone, not the PO — stays received
+
+
+async def test_credit_note_flow_balances_books(client):
+    from decimal import Decimal
+
+    admin = await _admin(client)
+    customer = (
+        await client.post(
+            "/api/crm/contacts",
+            headers=_auth(admin),
+            json={"name": "CN Buyer", "is_customer": True},
+        )
+    ).json()
+    invoice = (
+        await client.post(
+            "/api/invoicing/invoices",
+            headers=_auth(admin),
+            json={
+                "invoice_type": "ar",
+                "party_id": customer["id"],
+                "lines": [
+                    {"product_id": None, "description": "Svc", "qty": "1", "unit_price": "100.00"}
+                ],
+            },
+        )
+    ).json()
+    await client.post(f"/api/invoicing/invoices/{invoice['id']}/post", headers=_auth(admin))
+
+    tb_mid = (await client.get("/api/accounting/trial-balance", headers=_auth(admin))).json()
+    ar_before = next(
+        Decimal(r["total_debit"]) - Decimal(r["total_credit"])
+        for r in tb_mid
+        if r["code"] == "1100"
+    )
+
+    credit = (
+        await client.post(
+            "/api/invoicing/invoices",
+            headers=_auth(admin),
+            json={
+                "invoice_type": "ar_credit",
+                "party_id": customer["id"],
+                "original_invoice_id": invoice["id"],
+                "lines": [
+                    {
+                        "product_id": None,
+                        "description": "Correction",
+                        "qty": "1",
+                        "unit_price": "100.00",
+                    }
+                ],
+            },
+        )
+    ).json()
+    assert credit["number"] is None  # credit notes are numbered at post time
+    posted_credit = await client.post(
+        f"/api/invoicing/invoices/{credit['id']}/post", headers=_auth(admin)
+    )
+    assert posted_credit.status_code == 200, posted_credit.text
+    assert posted_credit.json()["number"].startswith("CRN-")
+
+    tb_after = (await client.get("/api/accounting/trial-balance", headers=_auth(admin))).json()
+    ar_after = next(
+        Decimal(r["total_debit"]) - Decimal(r["total_credit"])
+        for r in tb_after
+        if r["code"] == "1100"
+    )
+    # Credit note reduces AR by the credited amount
+    assert ar_after == ar_before - Decimal("100.00")
+    total_debit = sum(Decimal(r["total_debit"]) for r in tb_after)
+    total_credit = sum(Decimal(r["total_credit"]) for r in tb_after)
+    assert total_debit == total_credit, "trial balance must stay balanced"
+
+
+async def test_credit_over_original_total_rejected(client):
+    admin = await _admin(client)
+    customer = (
+        await client.post(
+            "/api/crm/contacts", headers=_auth(admin), json={"name": "OverCN", "is_customer": True}
+        )
+    ).json()
+    invoice = (
+        await client.post(
+            "/api/invoicing/invoices",
+            headers=_auth(admin),
+            json={
+                "invoice_type": "ar",
+                "party_id": customer["id"],
+                "lines": [
+                    {"product_id": None, "description": "Svc", "qty": "1", "unit_price": "50.00"}
+                ],
+            },
+        )
+    ).json()
+    await client.post(f"/api/invoicing/invoices/{invoice['id']}/post", headers=_auth(admin))
+    over = await client.post(
+        "/api/invoicing/invoices",
+        headers=_auth(admin),
+        json={
+            "invoice_type": "ar_credit",
+            "party_id": customer["id"],
+            "original_invoice_id": invoice["id"],
+            "lines": [
+                {"product_id": None, "description": "Too much", "qty": "1", "unit_price": "80.00"}
+            ],
+        },
+    )
+    assert over.status_code == 409

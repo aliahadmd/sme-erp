@@ -21,6 +21,7 @@ from app.modules.invoicing.models import Invoice, Payment
 from app.modules.invoicing.service import (
     apply_allocation_to_invoice,
     build_lines_from_input,
+    build_lines_from_invoice,
     build_lines_from_order,
     invoice_or_404,
     payment_or_404,
@@ -93,9 +94,13 @@ async def create_invoice(
 ) -> Invoice:
     org = await get_organization(session)
     party = await _party(session, body.party_id)
-    flag = "is_customer" if body.invoice_type == "ar" else "is_supplier"
+    is_credit = body.invoice_type.endswith("_credit")
+    base_type = "ar" if body.invoice_type.startswith("ar") else "ap"
+    flag = "is_customer" if base_type == "ar" else "is_supplier"
     if not getattr(party, flag):
-        raise ValidationError(f"Contact is not a {_expected_party_type(body.invoice_type)}")
+        raise ValidationError(f"Contact is not a {_expected_party_type(base_type)}")
+    if is_credit and not body.original_invoice_id:
+        raise ValidationError("Credit notes must reference the original invoice")
 
     invoice = Invoice(
         org_id=org.id,
@@ -107,7 +112,18 @@ async def create_invoice(
         currency=body.currency,
         notes=body.notes,
     )
-    if body.source_order_id:
+    original = None
+    lines: list = []
+    if body.original_invoice_id:
+        # Credit note: mirrors the original invoice's lines.
+        original = await invoice_or_404(session, org.id, body.original_invoice_id)
+        if original.status not in ("posted", "partial", "paid"):
+            raise ConflictError("Can only credit posted invoices")
+        if body.lines:
+            lines = await build_lines_from_input(session, org.id, body.lines, False)
+        else:
+            lines = build_lines_from_invoice(original)
+    elif body.source_order_id:
         source_type = "sales_order" if body.invoice_type == "ar" else "purchase_order"
         module = {
             "sales_order": "app.modules.sales.models",
@@ -145,6 +161,25 @@ async def create_invoice(
     from app.shared.order_engine import recompute_header
 
     recompute_header(invoice, lines)
+    if is_credit and original is not None:
+        already_credited = sum(
+            (
+                Decimal(str(c.total))
+                for c in (
+                    await session.scalars(
+                        select(Invoice).where(
+                            Invoice.original_invoice_id == original.id,
+                            Invoice.status.in_(("posted", "partial", "paid")),
+                        )
+                    )
+                )
+            ),
+            Decimal("0"),
+        )
+        if already_credited + invoice.total > original.total:
+            raise ConflictError(
+                f"Credit exceeds the invoice total (already credited {already_credited})"
+            )
     # default due date from payment terms
     if invoice.due_date is None and party.payment_terms_days:
         from datetime import timedelta
@@ -343,6 +378,26 @@ async def create_payment(
 ) -> Payment:
     org = await get_organization(session)
     party = await _party(session, body.party_id)
+    # Refund: money out against a posted AR credit note
+    credit_note = None
+    if body.credit_note_id:
+        if body.direction != "out":
+            raise ValidationError("Refunds are recorded as payments going out")
+        credit_note = await invoice_or_404(session, org.id, body.credit_note_id)
+        if not credit_note.invoice_type.startswith("ar_credit") or credit_note.status != "posted":
+            raise ValidationError("Refunds must reference a posted AR credit note")
+        refunded = (
+            await session.scalars(
+                select(Payment).where(
+                    Payment.credit_note_id == credit_note.id,
+                    Payment.status == "recorded",
+                )
+            )
+        ).all()
+        already_refunded = sum((p.amount for p in refunded), Decimal("0"))
+        if already_refunded + body.amount > credit_note.total:
+            raise ValidationError("Refund exceeds the credit note total")
+
     prefixes = {"in": "PAY", "out": "SPAY"}
     payment = await record_payment(
         session,
@@ -358,6 +413,7 @@ async def create_payment(
         allocations=[(a.invoice_id, a.amount) for a in body.allocations],
         actor_id=user.id,
         prefix=prefixes[body.direction],
+        credit_note_id=body.credit_note_id,
     )
     await write_audit(
         session,
@@ -389,6 +445,7 @@ async def create_payment(
                 "party_id": str(party.id),
                 "amount": str(payment.amount),
                 "method": payment.method,
+                "credit_note_id": str(payment.credit_note_id) if payment.credit_note_id else None,
                 "allocations": [
                     {"invoice_id": str(a.invoice_id), "amount": str(a.amount)}
                     for a in payment.allocations

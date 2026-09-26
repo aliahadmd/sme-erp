@@ -24,6 +24,7 @@ from app.modules.core.models import (
     Role,
     RolePermission,
     User,
+    UserRole,
 )
 from app.shared.events import Event, subscribe
 
@@ -33,9 +34,10 @@ logger = get_logger(__name__)
 async def _recipients_with(session, permission_code: str) -> list[uuid.UUID]:  # noqa: ANN001
     result = await session.scalars(
         select(User.id)
-        .join(User.roles)
-        .join(Role.permissions)
-        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
         .where(User.is_active.is_(True), Permission.code == permission_code)
         .distinct()
     )
@@ -202,7 +204,14 @@ async def notify_overdue_invoices(session, org_id: uuid.UUID) -> int:  # noqa: A
     return created
 
 
+_registered = False
+
+
 def register() -> None:
+    global _registered
+    if _registered:
+        return
+    _registered = True
     subscribe("delivery.posted", _on_delivery_posted)
     subscribe("invoice.posted", _on_invoice_posted)
     subscribe("payment.recorded", _on_payment_recorded)

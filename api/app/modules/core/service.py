@@ -166,6 +166,8 @@ DEFAULT_SETTINGS: dict[str, dict] = {
         "adjustment": "ADJ",
         "ar_invoice": "INV",
         "ap_invoice": "BILL",
+        "ar_credit": "CRN",
+        "ap_credit": "SCN",
         "customer_payment": "PAY",
         "supplier_payment": "SPAY",
         "journal_entry": "JE",

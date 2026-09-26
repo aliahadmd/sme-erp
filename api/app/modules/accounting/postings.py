@@ -29,12 +29,30 @@ async def _on_invoice_posted(event: Event) -> None:
     async with SessionFactory() as session:
         org_id = event.org_id
         assert org_id is not None
-        is_ar = event.payload["invoice_type"] == "ar"
+        invoice_type = event.payload["invoice_type"]
+        is_credit = "credit" in invoice_type
+        is_ar = invoice_type.startswith("ar")
         total = _d(event.payload["total"])
         net = _d(event.payload["subtotal"]) - _d(event.payload["discount_total"])
         tax = _d(event.payload["tax_total"])
         lines = []
-        if is_ar:
+        if is_credit:
+            # Mirror of the original posting — keeps the trial balance zero.
+            if is_ar:
+                lines.append((await resolve_account(session, org_id, "ar"), Decimal("0"), total))
+                lines.append(
+                    (await resolve_account(session, org_id, "sales_revenue"), net, Decimal("0"))
+                )
+                if tax:
+                    lines.append(
+                        (await resolve_account(session, org_id, "tax_payable"), tax, Decimal("0"))
+                    )
+            else:
+                purchases = await resolve_account(session, org_id, "purchases")
+                lines.append((purchases, Decimal("0"), total))
+                ap = await resolve_account(session, org_id, "ap")
+                lines.append((ap, total, Decimal("0")))
+        elif is_ar:
             lines.append((await resolve_account(session, org_id, "ar"), total, Decimal("0")))
             lines.append(
                 (await resolve_account(session, org_id, "sales_revenue"), Decimal("0"), net)
@@ -47,11 +65,12 @@ async def _on_invoice_posted(event: Event) -> None:
             # Phase-1 simplification: AP booked gross (input-tax recovery deferred).
             lines.append((await resolve_account(session, org_id, "purchases"), total, Decimal("0")))
             lines.append((await resolve_account(session, org_id, "ap"), Decimal("0"), total))
+        label = "Credit note" if is_credit else ("AR" if is_ar else "AP")
         await post_entry(
             session,
             org_id,
             entry_date=date.today(),
-            memo=f"{'AR' if is_ar else 'AP'} invoice {event.payload['number']}",
+            memo=f"{label} invoice {event.payload['number']}",
             source_type="ar_invoice" if is_ar else "ap_invoice",
             source_id=uuid.UUID(event.payload["invoice_id"]),
             lines=lines,
@@ -63,12 +82,30 @@ async def _on_invoice_voided(event: Event) -> None:
     async with SessionFactory() as session:
         org_id = event.org_id
         assert org_id is not None
-        is_ar = event.payload["invoice_type"] == "ar"
+        invoice_type = event.payload["invoice_type"]
+        is_credit = "credit" in invoice_type
+        is_ar = invoice_type.startswith("ar")
         total = _d(event.payload["total"])
         net = _d(event.payload["subtotal"]) - _d(event.payload["discount_total"])
         tax = _d(event.payload["tax_total"])
         lines = []
-        if is_ar:
+        if is_credit:
+            # Reversing the mirror puts the amounts back on the books.
+            if is_ar:
+                lines.append((await resolve_account(session, org_id, "ar"), total, Decimal("0")))
+                lines.append(
+                    (await resolve_account(session, org_id, "sales_revenue"), Decimal("0"), net)
+                )
+                if tax:
+                    lines.append(
+                        (await resolve_account(session, org_id, "tax_payable"), Decimal("0"), tax)
+                    )
+            else:
+                lines.append(
+                    (await resolve_account(session, org_id, "purchases"), total, Decimal("0"))
+                )
+                lines.append((await resolve_account(session, org_id, "ap"), Decimal("0"), total))
+        elif is_ar:
             lines.append((await resolve_account(session, org_id, "ar"), Decimal("0"), total))
             lines.append(
                 (await resolve_account(session, org_id, "sales_revenue"), net, Decimal("0"))
@@ -196,7 +233,14 @@ async def _on_adjustment_posted(event: Event) -> None:
         await session.commit()
 
 
+_registered = False
+
+
 def register() -> None:
+    global _registered
+    if _registered:
+        return
+    _registered = True
     subscribe("invoice.posted", _on_invoice_posted)
     subscribe("invoice.voided", _on_invoice_voided)
     subscribe("payment.recorded", _on_payment_recorded)
