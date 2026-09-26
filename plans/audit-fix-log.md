@@ -26,3 +26,23 @@ Deliberately NOT changed (documented design/phase-2):
 - Receipt-void restores quantity, not average cost
 - Containers run as root (dev-only; production Dockerfiles are phase 2, non-root then)
 - CI/CD + backups (phase 2)
+
+
+---
+
+# Post-Phase-2 Audit Fix Log — 2026-09-27
+
+Findings from the second full audit, all fixed and verified (`make verify` exit 0,
+88 API tests + 7 web tests). Commits: `4ea5d14`, `f214f45`+`bd9141f`+`0163e18` (HR UI/fixes).
+
+| Finding | Severity | Fix | Test |
+|---|---|---|---|
+| Prod backup job crashes (root-owned /app/dumps) | HIGH | `install -d -o appuser /app/dumps` in api.prod.Dockerfile | backup job skips gracefully in dev |
+| Quotation→SO conversion loses FX/base | HIGH | conversion inherits quotation fx_rate + computes total_base | multi-currency test asserts AR delta |
+| Statement ignores credit notes | HIGH | party_statement nets posted credit notes as negative lines | credit-flow test asserts AR delta + balance |
+| HR leave: no ownership scoping | HIGH | non-approvers can only see/submit their own employee's requests | hr ownership checks (PermissionDenied) |
+| Email bodies logged at info | MEDIUM | metadata-only logging (to/subject/length) | code |
+| AI summarize: no usage budget | MEDIUM | redis daily counter, 429 ai_budget_exceeded over limit | `test_ai_budget_enforced` |
+| Quotation expiry via write-in-GET | MEDIUM | `expire_quotations` worker cron (00:05 daily); GET is read-only | expired-quote test uses the job |
+| Numbering prefix length unvalidated | MEDIUM | 1–10 char alphanumeric cap in update_numbering_prefix | validation error path |
+| ai/search docstring overstates scope | LOW | corrected to products-only keyword search | code |
