@@ -50,3 +50,64 @@ async def purge_login_counters(ctx: dict[str, Any]) -> dict[str, int]:
         await redis.aclose()
     logger.info("login_counters_purged", removed=removed)
     return {"removed": removed}
+
+
+@register_job
+async def generate_missing_descriptions(
+    ctx: dict[str, Any], org_id: str, limit: int = 25
+) -> dict[str, int]:
+    """Generate AI description drafts for active products missing descriptions."""
+    from sqlalchemy import select
+
+    from app.core.ai import AIClient
+    from app.core.config import get_settings
+    from app.core.db import SessionFactory
+    from app.modules.catalog.models import Product
+    from app.modules.core.models import AiDraft
+
+    client = AIClient(get_settings())
+    if not client.enabled:
+        return {"created": 0, "skipped": "ai_disabled"}
+
+    async with SessionFactory() as session:
+        products = (
+            await session.scalars(
+                select(Product)
+                .where(
+                    Product.org_id == org_id,
+                    Product.status == "active",
+                    (Product.description.is_(None)) | (Product.description == ""),
+                )
+                .limit(limit)
+            )
+        ).all()
+        created = 0
+        for product in products:
+            try:
+                category = None
+                result = await client.complete(
+                    system=(
+                        "You write concise, factual e-commerce product descriptions "
+                        "(2-3 sentences) for an SME ERP. No marketing fluff."
+                    ),
+                    prompt=(
+                        f"Product: {product.name}\nType: {product.type}\n"
+                        f"Category: {category or 'uncategorized'}"
+                    ),
+                )
+                session.add(
+                    AiDraft(
+                        org_id=org_id,
+                        entity_type="product",
+                        entity_id=product.id,
+                        field="description",
+                        draft_text=result.text,
+                        model=result.model,
+                    )
+                )
+                created += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ai_draft_failed", product=str(product.id), error=str(exc))
+        await session.commit()
+    logger.info("ai_drafts_created", created=created)
+    return {"created": created}

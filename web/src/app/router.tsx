@@ -17,6 +17,8 @@ import { SalesLayout } from "@/features/sales/layout"
 import { QuotesPage } from "@/features/quotes/quotes-page"
 import { NumberingPage } from "@/features/settings/numbering-page"
 import { CurrenciesPage } from "@/features/settings/currencies-page"
+import { ProductsLayout } from "@/features/products/layout"
+import { AiDraftsPage } from "@/features/ai/ai-drafts-page"
 import {
   AdjustmentsPage,
   DeliveriesPage,
@@ -43,7 +45,14 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "crm", element: <ContactsPage /> },
-      { path: "products", element: <ProductsPage /> },
+      {
+        path: "products",
+        element: <ProductsLayout />,
+        children: [
+          { index: true, element: <ProductsPage /> },
+          { path: "ai-drafts", element: <AiDraftsPage /> },
+        ],
+      },
       {
         path: "sales",
         element: <SalesLayout />,

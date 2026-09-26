@@ -202,6 +202,49 @@ async def generate_product_description(
     return {"description": result.text, "model": result.model}
 
 
+@router.post("/products/generate-missing")
+async def generate_missing_descriptions(
+    user: CurrentUser = Depends(require("catalog.product.update")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Queue AI description drafts for active products without descriptions.
+
+    The worker generates drafts into the review queue (never auto-applied)."""
+    from sqlalchemy import func
+
+    from app.core.config import get_settings
+    from app.core.errors import DomainError
+    from app.jobs.queue import enqueue
+
+    if not get_settings().ai_enabled:
+        raise DomainError(
+            "AI is disabled: OPENROUTER_API_KEY is not set", code="ai_disabled", status_code=503
+        )
+    org = await get_organization(session)
+    count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Product)
+            .where(
+                Product.org_id == org.id,
+                Product.status == "active",
+                (Product.description.is_(None)) | (Product.description == ""),
+            )
+        )
+    ) or 0
+    await write_audit(
+        session,
+        actor=user.user,
+        action="request",
+        entity_type="ai.bulk_descriptions",
+        after={"queued": int(count)},
+    )
+    await session.commit()
+    if count:
+        await enqueue("generate_missing_descriptions", org_id=str(org.id), limit=int(count))
+    return {"queued": int(count)}
+
+
 # ---------------------------------------------------------------- categories
 @router.get("/categories", response_model=CategoryPage)
 async def list_categories(

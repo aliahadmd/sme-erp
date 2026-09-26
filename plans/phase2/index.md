@@ -67,7 +67,7 @@ e-invoicing integrations, payroll, multi-org tenancy, mobile apps.
 | 6 | [plan-6.md](plan-6.md) | Credit notes & refunds | 4 | ✅ done |
 | 7 | [plan-7.md](plan-7.md) | Multi-currency with FX rates | 6 | ✅ done |
 | 8 | [plan-8.md](plan-8.md) | Email notifications + preferences | 1, 6 | ☐ todo |
-| 9 | [plan-9.md](plan-9.md) | AI: bulk descriptions, report summarizer, semantic document search (pgvector) | 1 | ☐ todo |
+| 9 | [plan-9.md](plan-9.md) | AI: bulk descriptions, report summarizer, semantic document search (pgvector) | 1 | ✅ done |
 | 10 | [plan-10.md](plan-10.md) | HR module: employees, departments, leave with approvals | 1 | ☐ todo |
 
 Plans 1–3 are the platform track; 4–8 the commercial track; 9–10 growth.

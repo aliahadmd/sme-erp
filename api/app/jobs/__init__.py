@@ -26,6 +26,7 @@ class WorkerSettings:
     functions = [
         maintenance.check_overdue_invoices,
         maintenance.purge_login_counters,
+        maintenance.generate_missing_descriptions,
         backups.backup_database,
         backups.prune_audit_logs,
         worker_heartbeat,

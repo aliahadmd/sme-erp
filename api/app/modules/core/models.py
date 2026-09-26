@@ -180,3 +180,19 @@ class DocumentSequence(Base):
     entity: Mapped[str] = mapped_column(String(50))
     year: Mapped[int] = mapped_column(Integer)
     last_number: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AiDraft(Base, TimestampMixin, UuidPk):
+    """AI-generated content awaiting human review — never auto-applied."""
+
+    __tablename__ = "ai_drafts"
+    __table_args__ = {"schema": "core"}
+
+    org_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    field: Mapped[str] = mapped_column(String(50))
+    draft_text: Mapped[str] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    # pending | accepted | discarded

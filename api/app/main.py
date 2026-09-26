@@ -69,6 +69,7 @@ def create_app() -> FastAPI:
 
     from app.modules.accounting import postings as accounting_postings
     from app.modules.accounting.router import router as accounting_router
+    from app.modules.ai.router import router as ai_router
     from app.modules.catalog.router import router as catalog_router
     from app.modules.core.router import router as core_router
     from app.modules.crm.router import router as crm_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(invoicing_router, prefix=settings.api_prefix)
     app.include_router(accounting_router, prefix=settings.api_prefix)
     app.include_router(currencies_router, prefix=settings.api_prefix)
+    app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(reporting_router, prefix=settings.api_prefix)
 
     @app.middleware("http")
