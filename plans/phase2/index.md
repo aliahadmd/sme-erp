@@ -1,6 +1,6 @@
 # Phase 2 — Production Readiness & the Complete Commercial Loop
 
-- **Status:** 📝 Draft — awaiting approval (no code until these plans are approved)
+- **Status:** ✅ Complete (2026-09-27) — all 10 plans implemented and verified
 - **Created:** 2026-09-27
 - **Predecessor:** phase 1 — complete (all 10 plans, see `phase1/index.md`)
 - **Supersedes:** `plans/phase2-draft.md` (kept as raw backlog notes)
@@ -66,7 +66,7 @@ e-invoicing integrations, payroll, multi-org tenancy, mobile apps.
 | 5 | [plan-5.md](plan-5.md) | Fulfillment UX: partial delivery/billing states in the UI, backorder visibility | — | ☐ todo |
 | 6 | [plan-6.md](plan-6.md) | Credit notes & refunds | 4 | ✅ done |
 | 7 | [plan-7.md](plan-7.md) | Multi-currency with FX rates | 6 | ✅ done |
-| 8 | [plan-8.md](plan-8.md) | Email notifications + preferences | 1, 6 | ☐ todo |
+| 8 | [plan-8.md](plan-8.md) | Email notifications + preferences | 1, 6 | ✅ done |
 | 9 | [plan-9.md](plan-9.md) | AI: bulk descriptions, report summarizer, semantic document search (pgvector) | 1 | ✅ done |
 | 10 | [plan-10.md](plan-10.md) | HR module: employees, departments, leave with approvals | 1 | ✅ done |
 
