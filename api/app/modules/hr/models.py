@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.models import Base, TimestampMixin, UuidPk, generate_uuid7
 
@@ -65,6 +65,7 @@ class LeaveRequest(Base, TimestampMixin, UuidPk):
     reason: Mapped[str | None] = mapped_column(String(300))
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     # pending | approved | rejected | cancelled
+    employee: Mapped[Employee] = relationship(lazy="joined")
     approver_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("core.users.id", ondelete="SET NULL")
     )

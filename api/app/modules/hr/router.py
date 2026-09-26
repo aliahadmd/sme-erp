@@ -298,7 +298,7 @@ async def create_leave_request(
     )
     # Notify approvers (users holding hr.leave.approve)
 
-    from app.modules.core.models import Permission, Role, RolePermission, UserRole
+    from app.modules.core.models import Permission, Role, RolePermission, User, UserRole
 
     approver_ids = (
         await session.scalars(
