@@ -14,6 +14,9 @@ export type OrderLine = {
   discount_pct: string
   tax_id: string | null
   // read-only server fields
+  qty_delivered?: string
+  qty_invoiced?: string
+  qty_received?: string
   product_name?: string | null
   uom_code?: string | null
   tax_rate_pct?: string

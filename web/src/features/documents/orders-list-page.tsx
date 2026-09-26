@@ -18,7 +18,13 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
 
-const STATUS_TABS = ["all", "draft", "confirmed", "closed", "cancelled"]
+const STATUS_TABS = ["all", "in progress", "draft", "confirmed", "delivered", "invoiced", "received", "closed", "cancelled"]
+
+function statusesFor(tab: string): string | undefined {
+  if (tab === "all") return undefined
+  if (tab === "in progress") return undefined // filtered client-side below
+  return tab
+}
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "outline",
@@ -40,11 +46,14 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
     queryKey: queryKeys.salesOrders({ status, q: appliedSearch, module }),
     queryFn: () =>
       ordersApi.list(module, {
-        status: status === "all" ? undefined : status,
+        status: statusesFor(status),
         q: appliedSearch,
         limit: 50,
       }),
   })
+  const visible = (data?.items ?? []).filter((o) =>
+    status === "in progress" ? !["closed", "cancelled"].includes(o.status) : true,
+  )
 
   const label = module === "sales" ? "Sales orders" : "Purchase orders"
 
@@ -122,7 +131,7 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
                 </TableCell>
               </TableRow>
             )}
-            {data?.items.map((order: Order) => (
+            {visible.map((order: Order) => (
               <TableRow key={order.id}>
                 <TableCell>
                   <Link

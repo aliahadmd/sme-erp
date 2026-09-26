@@ -19,6 +19,7 @@ def build_router():
             event_base="sales_order",
             label="sales order",
             is_purchase=False,
+            progress_field="qty_delivered",
         )
     )
 

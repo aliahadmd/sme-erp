@@ -371,6 +371,16 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {money(lineBase(line) + lineTax(line, taxRateFor(line)))}
+                  {Number(line.qty_delivered ?? 0) > 0 && (
+                    <div className="text-[10px] text-muted-foreground">
+                      {Number(line.qty_delivered).toFixed(2)} delivered
+                    </div>
+                  )}
+                  {Number(line.qty_invoiced ?? 0) > 0 && (
+                    <div className="text-[10px] text-muted-foreground">
+                      {Number(line.qty_invoiced).toFixed(2)} invoiced
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   {editable && (

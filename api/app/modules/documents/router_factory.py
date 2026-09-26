@@ -46,6 +46,7 @@ class OrderModuleConfig:
     event_base: str = "sales_order"
     label: str = "sales order"
     is_purchase: bool = False
+    progress_field: str = "qty_delivered"
 
 
 def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
@@ -120,6 +121,27 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             "limit": params.limit,
             "offset": params.offset,
         }
+
+    @router.get("/orders/{order_id}/outstanding", response_model=None)
+    async def order_outstanding(
+        order_id: uuid.UUID,
+        _user: CurrentUser = Depends(require(f"{cfg.perm}.read")),
+        session: AsyncSession = Depends(get_session),
+    ) -> dict[str, Any]:
+        """Per-product outstanding (not yet processed) quantities."""
+
+        from app.shared.order_progress import remaining_by_product
+
+        org = await get_organization(session)
+        order = await _get_order(session, org.id, order_id)
+        remaining = remaining_by_product(order, cfg.progress_field)
+        outstanding = {p: q for p, q in remaining.items() if q > 0}
+        payload = {
+            "order_id": str(order.id),
+            "number": order.number,
+            "outstanding": {str(p): str(q) for p, q in outstanding.items()},
+        }
+        return payload
 
     @router.get("/orders/{order_id}", response_model=cfg.schemas.OrderOut)
     async def get_order(
