@@ -33,6 +33,8 @@ class SalesOrder(Base, TimestampMixin, UuidPk):
     discount_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    fx_rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=1)
+    total_base: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column()
@@ -101,6 +103,8 @@ class Quotation(Base, TimestampMixin, UuidPk):
     discount_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    fx_rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=1)
+    total_base: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column()

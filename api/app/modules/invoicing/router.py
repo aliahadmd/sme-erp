@@ -158,9 +158,15 @@ async def create_invoice(
     # Assign while the invoice is still transient — after flush the assignment
     # would trigger a sync lazy-load (MissingGreenlet).
     invoice.lines = lines
+    from app.modules.currencies.service import resolve_rate, to_base
     from app.shared.order_engine import recompute_header
 
     recompute_header(invoice, lines)
+    rate = await resolve_rate(
+        session, org.id, body.currency or invoice.currency, invoice.invoice_date
+    )
+    invoice.fx_rate = rate
+    invoice.total_base = to_base(invoice.total, invoice.fx_rate)
     if is_credit and original is not None:
         already_credited = sum(
             (
@@ -279,6 +285,12 @@ async def post_invoice_endpoint(
                 "number": invoice.number,
                 "invoice_type": invoice.invoice_type,
                 "party_id": str(invoice.party_id),
+                "total_base": str(invoice.total_base),
+                "net_base": str(
+                    (Decimal(str(invoice.subtotal)) - Decimal(str(invoice.discount_total)))
+                    / invoice.fx_rate
+                ),
+                "tax_base": str(Decimal(str(invoice.tax_total)) / invoice.fx_rate),
                 "total": str(invoice.total),
                 "subtotal": str(invoice.subtotal),
                 "discount_total": str(invoice.discount_total),
@@ -334,6 +346,12 @@ async def void_invoice(
                 "invoice_id": str(invoice.id),
                 "number": invoice.number,
                 "invoice_type": invoice.invoice_type,
+                "total_base": str(invoice.total_base),
+                "net_base": str(
+                    (Decimal(str(invoice.subtotal)) - Decimal(str(invoice.discount_total)))
+                    / invoice.fx_rate
+                ),
+                "tax_base": str(Decimal(str(invoice.tax_total)) / invoice.fx_rate),
                 "total": str(invoice.total),
                 "subtotal": str(invoice.subtotal),
                 "tax_total": str(invoice.tax_total),
@@ -398,6 +416,17 @@ async def create_payment(
         if already_refunded + body.amount > credit_note.total:
             raise ValidationError("Refund exceeds the credit note total")
 
+    # Payment currency follows the allocated invoices (all must match);
+    # base-currency rate is 1 by definition.
+    from app.modules.currencies.service import resolve_rate
+    from app.modules.invoicing.models import Invoice
+
+    currencies = {(await session.get(Invoice, a.invoice_id)).currency for a in body.allocations}
+    if len(currencies) > 1:
+        raise ValidationError("Allocations must reference invoices of one currency")
+    payment_currency = currencies.pop() if currencies else org.base_currency
+    rate = await resolve_rate(session, org.id, payment_currency, body.payment_date or date.today())
+
     prefixes = {"in": "PAY", "out": "SPAY"}
     payment = await record_payment(
         session,
@@ -413,6 +442,8 @@ async def create_payment(
         allocations=[(a.invoice_id, a.amount) for a in body.allocations],
         actor_id=user.id,
         prefix=prefixes[body.direction],
+        currency=payment_currency,
+        fx_rate=rate,
         credit_note_id=body.credit_note_id,
     )
     await write_audit(
@@ -444,6 +475,7 @@ async def create_payment(
                 "direction": payment.direction,
                 "party_id": str(party.id),
                 "amount": str(payment.amount),
+                "amount_base": str(payment.amount_base),
                 "method": payment.method,
                 "credit_note_id": str(payment.credit_note_id) if payment.credit_note_id else None,
                 "allocations": [

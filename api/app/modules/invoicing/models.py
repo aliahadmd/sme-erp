@@ -37,6 +37,8 @@ class Invoice(Base, TimestampMixin, UuidPk):
     discount_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    fx_rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=1)
+    total_base: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     amount_paid: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
     notes: Mapped[str | None] = mapped_column(Text)
@@ -85,7 +87,10 @@ class Payment(Base, TimestampMixin, UuidPk):
     party_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm.contacts.id", ondelete="RESTRICT"))
     party_name: Mapped[str | None] = mapped_column(String(200))
     payment_date: Mapped[date] = mapped_column(Date)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    fx_rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=1)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    amount_base: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     method: Mapped[str] = mapped_column(String(20), default="bank")  # cash|bank|card|transfer|other
     reference: Mapped[str | None] = mapped_column(String(100))
     notes: Mapped[str | None] = mapped_column(Text)

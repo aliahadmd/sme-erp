@@ -182,6 +182,10 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         lines = await _build_lines(session, org.id, body.lines)
         order.lines = lines
         recompute_header(order, lines)
+        from app.modules.currencies.service import resolve_rate, to_base
+
+        order.fx_rate = await resolve_rate(session, org.id, body.currency, order.order_date)
+        order.total_base = to_base(order.total, order.fx_rate)
         session.add(order)
         await write_audit(
             session,

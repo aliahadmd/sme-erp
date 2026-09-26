@@ -177,6 +177,8 @@ async def record_payment(
     actor_id: uuid.UUID,
     prefix: str,
     credit_note_id: uuid.UUID | None = None,
+    currency: str = "USD",
+    fx_rate: Decimal = Decimal("1"),
 ) -> Payment:
     """Create a payment with allocations; updates invoice statuses in the same tx."""
     total_allocated = sum((Decimal(str(a)) for _, a in allocations), Decimal("0"))
@@ -199,7 +201,10 @@ async def record_payment(
         party_id=party_id,
         party_name=party_name,
         payment_date=payment_date,
+        currency=currency,
+        fx_rate=fx_rate,
         amount=Decimal(str(amount)),
+        amount_base=(Decimal(str(amount)) / fx_rate).quantize(Decimal("0.01")),
         method=method,
         reference=reference,
         notes=notes,

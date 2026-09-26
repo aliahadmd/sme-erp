@@ -32,9 +32,10 @@ async def _on_invoice_posted(event: Event) -> None:
         invoice_type = event.payload["invoice_type"]
         is_credit = "credit" in invoice_type
         is_ar = invoice_type.startswith("ar")
-        total = _d(event.payload["total"])
-        net = _d(event.payload["subtotal"]) - _d(event.payload["discount_total"])
-        tax = _d(event.payload["tax_total"])
+        # Journals are kept in the base currency (FX plan-7).
+        total = _d(event.payload.get("total_base") or event.payload["total"])
+        net = _d(event.payload.get("net_base") or (event.payload["subtotal"]))
+        tax = _d(event.payload.get("tax_base") or event.payload["tax_total"])
         lines = []
         if is_credit:
             # Mirror of the original posting — keeps the trial balance zero.
@@ -85,9 +86,10 @@ async def _on_invoice_voided(event: Event) -> None:
         invoice_type = event.payload["invoice_type"]
         is_credit = "credit" in invoice_type
         is_ar = invoice_type.startswith("ar")
-        total = _d(event.payload["total"])
-        net = _d(event.payload["subtotal"]) - _d(event.payload["discount_total"])
-        tax = _d(event.payload["tax_total"])
+        # Journals are kept in the base currency (FX plan-7).
+        total = _d(event.payload.get("total_base") or event.payload["total"])
+        net = _d(event.payload.get("net_base") or (event.payload["subtotal"]))
+        tax = _d(event.payload.get("tax_base") or event.payload["tax_total"])
         lines = []
         if is_credit:
             # Reversing the mirror puts the amounts back on the books.
@@ -133,16 +135,21 @@ async def _on_payment_recorded(event: Event) -> None:
     async with SessionFactory() as session:
         org_id = event.org_id
         assert org_id is not None
-        amount = _d(event.payload["amount"])
+        amount_base = _d(event.payload.get("amount_base") or event.payload["amount"])
         money_account = await resolve_payment_account(session, org_id, event.payload["method"])
         incoming = event.payload["direction"] == "in"
         lines = []
-        if incoming:
-            lines.append((money_account, amount, Decimal("0")))
-            lines.append((await resolve_account(session, org_id, "ar"), Decimal("0"), amount))
+        if event.payload.get("credit_note_id"):
+            # Refund against an AR credit note: expense-side outflow.
+            refunds = await resolve_account(session, org_id, "refunds")
+            lines.append((refunds, amount_base, Decimal("0")))
+            lines.append((money_account, Decimal("0"), amount_base))
+        elif incoming:
+            lines.append((money_account, amount_base, Decimal("0")))
+            lines.append((await resolve_account(session, org_id, "ar"), Decimal("0"), amount_base))
         else:
-            lines.append((await resolve_account(session, org_id, "ap"), amount, Decimal("0")))
-            lines.append((money_account, Decimal("0"), amount))
+            lines.append((await resolve_account(session, org_id, "ap"), amount_base, Decimal("0")))
+            lines.append((money_account, Decimal("0"), amount_base))
         await post_entry(
             session,
             org_id,
@@ -159,16 +166,21 @@ async def _on_payment_voided(event: Event) -> None:
     async with SessionFactory() as session:
         org_id = event.org_id
         assert org_id is not None
-        amount = _d(event.payload["amount"])
+        amount_base = _d(event.payload.get("amount_base") or event.payload["amount"])
         money_account = await resolve_payment_account(session, org_id, event.payload["method"])
         incoming = event.payload["direction"] == "in"
         lines = []
-        if incoming:
-            lines.append((money_account, Decimal("0"), amount))
-            lines.append((await resolve_account(session, org_id, "ar"), amount, Decimal("0")))
+        if event.payload.get("credit_note_id"):
+            # Refund reversal: back out of the refunds expense account.
+            refunds = await resolve_account(session, org_id, "refunds")
+            lines.append((refunds, Decimal("0"), amount_base))
+            lines.append((money_account, amount_base, Decimal("0")))
+        elif incoming:
+            lines.append((money_account, Decimal("0"), amount_base))
+            lines.append((await resolve_account(session, org_id, "ar"), amount_base, Decimal("0")))
         else:
-            lines.append((await resolve_account(session, org_id, "ap"), Decimal("0"), amount))
-            lines.append((money_account, amount, Decimal("0")))
+            lines.append((await resolve_account(session, org_id, "ap"), Decimal("0"), amount_base))
+            lines.append((money_account, amount_base, Decimal("0")))
         await post_entry(
             session,
             org_id,

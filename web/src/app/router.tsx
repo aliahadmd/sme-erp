@@ -16,6 +16,7 @@ import { ProductsPage } from "@/features/products/products-page"
 import { SalesLayout } from "@/features/sales/layout"
 import { QuotesPage } from "@/features/quotes/quotes-page"
 import { NumberingPage } from "@/features/settings/numbering-page"
+import { CurrenciesPage } from "@/features/settings/currencies-page"
 import {
   AdjustmentsPage,
   DeliveriesPage,
@@ -147,6 +148,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission code="catalog.tax.read">
                 <CatalogSettingsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "currencies",
+            element: (
+              <RequirePermission code="core.settings.read">
+                <CurrenciesPage />
               </RequirePermission>
             ),
           },

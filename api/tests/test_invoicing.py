@@ -545,3 +545,84 @@ async def test_credit_over_original_total_rejected(client):
         },
     )
     assert over.status_code == 409
+
+
+async def test_multi_currency_invoice_and_realized_fx(client):
+    from decimal import Decimal
+
+    admin = await _admin(client)
+    # EUR with two rates: invoice at 0.80, payment at 0.90 → realized FX loss
+    await client.post("/api/currencies", headers=_auth(admin), json={"code": "EUR", "name": "Euro"})
+    await client.put(
+        "/api/currencies/rates",
+        headers=_auth(admin),
+        json={"currency": "EUR", "rate_date": "2020-01-01", "rate": "0.80"},
+    )
+    await client.put(
+        "/api/currencies/rates",
+        headers=_auth(admin),
+        json={"currency": "EUR", "rate_date": "2030-01-01", "rate": "0.90"},
+    )
+    customer = (
+        await client.post(
+            "/api/crm/contacts",
+            headers=_auth(admin),
+            json={"name": "FX Buyer", "is_customer": True, "currency": "EUR"},
+        )
+    ).json()
+    invoice = (
+        await client.post(
+            "/api/invoicing/invoices",
+            headers=_auth(admin),
+            json={
+                "invoice_type": "ar",
+                "party_id": customer["id"],
+                "invoice_date": "2020-06-01",
+                "currency": "EUR",
+                "lines": [
+                    {"product_id": None, "description": "Work", "qty": "100", "unit_price": "1.00"}
+                ],
+            },
+        )
+    ).json()
+    assert invoice["currency"] == "EUR"
+    assert invoice["fx_rate"] == "0.80000000"
+    assert invoice["total_base"] == "125.00"  # 100 EUR / 0.8
+    posted = await client.post(
+        f"/api/invoicing/invoices/{invoice['id']}/post", headers=_auth(admin)
+    )
+    assert posted.status_code == 200
+
+    tb_mid = (await client.get("/api/accounting/trial-balance", headers=_auth(admin))).json()
+    ar_before = next(
+        Decimal(r["total_debit"]) - Decimal(r["total_credit"])
+        for r in tb_mid
+        if r["code"] == "1100"
+    )
+
+    # Pay 100 EUR when the rate is 0.90 → base 111.11 vs AR 125 → FX loss 13.89
+    payment = await client.post(
+        "/api/invoicing/payments",
+        headers=_auth(admin),
+        json={
+            "direction": "in",
+            "party_id": customer["id"],
+            "amount": "100.00",
+            "method": "bank",
+            "allocations": [{"invoice_id": invoice["id"], "amount": "100.00"}],
+        },
+    )
+    assert payment.status_code == 201, payment.text
+
+    tb = (await client.get("/api/accounting/trial-balance", headers=_auth(admin))).json()
+    ar_after = next(
+        Decimal(r["total_debit"]) - Decimal(r["total_credit"]) for r in tb if r["code"] == "1100"
+    )
+    assert ar_after == ar_before - Decimal("125.00"), "AR cleared at invoice snapshot rate"
+    total_debit = sum(Decimal(r["total_debit"]) for r in tb)
+    total_credit = sum(Decimal(r["total_credit"]) for r in tb)
+    assert total_debit == total_credit, "trial balance must stay balanced"
+    status = (
+        await client.get(f"/api/invoicing/invoices/{invoice['id']}", headers=_auth(admin))
+    ).json()["status"]
+    assert status == "paid"

@@ -79,12 +79,14 @@ class InvoiceOut(BaseModel):
     invoice_date: date
     due_date: date | None
     currency: str
+    fx_rate: Decimal = 1
     status: str
     subtotal: Decimal
     discount_total: Decimal
     tax_total: Decimal
     total: Decimal
-    amount_paid: Decimal
+    total_base: Decimal = 0
+    amount_paid: Decimal = 0
     notes: str | None
     posted_at: datetime | None
     lines: list[InvoiceLineOut] = []
@@ -107,6 +109,8 @@ class PaymentOut(BaseModel):
     party_id: uuid.UUID
     party_name: str | None
     payment_date: date
+    currency: str = "USD"
+    fx_rate: Decimal = 1
     amount: Decimal
     method: str
     reference: str | None
@@ -126,7 +130,8 @@ class StatementLine(BaseModel):
     invoice_date: date
     due_date: date | None
     total: Decimal
-    amount_paid: Decimal
+    total_base: Decimal = 0
+    amount_paid: Decimal = 0
     balance: Decimal
     status: str
 
