@@ -101,12 +101,29 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+    environment:
+      JOBS_MODE: ${JOBS_MODE:-redis}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       seaweedfs:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["sh", "-c", "uv sync --frozen && arq app.jobs.WorkerSettings"]
+    env_file: .env
+    volumes:
+      - ./api:/app
+      - uv_cache:/root/.cache/uv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   web:

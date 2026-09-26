@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 7
 
+    # --- Background jobs ---
+    # inline: jobs run synchronously at the call site (tests, dev without worker)
+    # redis:  jobs are enqueued to arq and executed by the worker service
+    jobs_mode: str = "inline"
+
     # --- AI / OpenRouter (empty key = AI features disabled) ---
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"

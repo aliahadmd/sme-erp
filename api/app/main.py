@@ -128,6 +128,12 @@ def create_app() -> FastAPI:
         # boto3 is sync — keep it off the event loop.
         await anyio.to_thread.run_sync(_head)
 
+    async def _jobs_status() -> str:
+        if settings.jobs_mode != "redis":
+            return "inline"
+        heartbeat = await app.state.redis.get("jobs:heartbeat")
+        return "ok" if heartbeat else "stalled"
+
     @app.get("/healthz")
     async def healthz() -> JSONResponse:
         checks = dict(
@@ -137,10 +143,11 @@ def create_app() -> FastAPI:
                 _check("s3", _s3_ok),
             )
         )
+        jobs = await _jobs_status()
         status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
         return JSONResponse(
             status_code=200 if status == "ok" else 503,
-            content={"status": status, "checks": checks},
+            content={"status": status, "checks": checks, "jobs": jobs},
         )
 
     @app.get("/readyz")

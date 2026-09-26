@@ -33,6 +33,9 @@ seed: ## Seed bootstrap data (admin user, roles, permissions)
 seed-demo: ## Seed a coherent demo dataset (requires services up)
 	$(COMPOSE) exec api python -m app.core.seed_demo
 
+jobs-logs: ## Follow the background worker logs
+	$(COMPOSE) logs -f --tail=100 worker
+
 shell-api: ## Shell into the api container
 	$(COMPOSE) exec api bash
 

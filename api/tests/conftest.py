@@ -19,6 +19,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:56379/0")
 os.environ.setdefault("S3_ENDPOINT", "http://localhost:18333")
 os.environ.setdefault("S3_BUCKET", "erp-dev")
 os.environ.pop("OPENROUTER_API_KEY", None)  # AI-disabled path is the deterministic default
+os.environ["JOBS_MODE"] = "inline"  # tests execute jobs synchronously
 
 import pytest_asyncio  # noqa: E402
 from alembic.config import Config  # noqa: E402
