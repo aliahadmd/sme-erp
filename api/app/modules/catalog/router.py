@@ -165,6 +165,45 @@ async def archive_product(
     return product
 
 
+@router.post("/products/{product_id}/generate-description")
+async def generate_product_description(
+    product_id: uuid.UUID,
+    user: CurrentUser = Depends(require("catalog.product.update")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Stretch demo: AI-generated product description via the OpenRouter
+    plumbing from plan-2. Degrades gracefully when no API key is configured."""
+    from app.core.ai import AIClient
+    from app.core.config import get_settings
+    from app.core.errors import DomainError
+
+    org = await get_organization(session)
+    product = await _get_product(session, org.id, product_id)
+    client = AIClient(get_settings())
+    if not client.enabled:
+        raise DomainError(
+            "AI is disabled: OPENROUTER_API_KEY is not set",
+            code="ai_disabled",
+            status_code=503,
+        )
+    category_name = product.category.name if product.category else None
+    try:
+        result = await client.complete(
+            system=(
+                "You write concise, factual e-commerce product descriptions "
+                "(2-3 sentences) for an SME ERP. No marketing fluff."
+            ),
+            prompt=(
+                f"Product: {product.name}\n"
+                f"Type: {product.type}\n"
+                f"Category: {category_name or 'uncategorized'}"
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise DomainError("AI request failed", code="ai_error", status_code=502) from exc
+    return {"description": result.text, "model": result.model}
+
+
 # ---------------------------------------------------------------- categories
 @router.get("/categories", response_model=CategoryPage)
 async def list_categories(

@@ -515,6 +515,13 @@ async def mark_notification_read(
 async def unread_count(
     user: CurrentUserDep, session: AsyncSession = Depends(get_session)
 ) -> dict[str, int]:
+    # Lazy overdue-invoice detection: deduped, so the poll is self-healing
+    # without a scheduler.
+    from app.modules.core.notification_events import notify_overdue_invoices
+
+    org = await get_organization(session)
+    await notify_overdue_invoices(session, org.id)
+    await session.commit()
     count = await session.scalar(
         select(func.count())
         .select_from(Notification)

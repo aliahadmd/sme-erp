@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router"
 
-import { RequireAuth } from "@/app/require-auth"
+import { RequireAuth, RequirePermission } from "@/app/require-auth"
+import { ForbiddenPage } from "@/app/forbidden-page"
 import { LoginPage } from "@/features/auth/login-page"
 import { DashboardPage } from "@/features/dashboard/dashboard-page"
 import { AuditPage as SettingsAuditPage } from "@/features/settings/audit-page"
@@ -66,21 +67,85 @@ export const router = createBrowserRouter([
         path: "accounting",
         element: <AccountingLayout />,
         children: [
-          { path: "accounts", element: <AccountsPage /> },
-          { path: "journal", element: <JournalPage /> },
-          { path: "trial-balance", element: <TrialBalancePage /> },
+          {
+            path: "accounts",
+            element: (
+              <RequirePermission code="accounting.account.read">
+                <AccountsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "journal",
+            element: (
+              <RequirePermission code="accounting.entry.read">
+                <JournalPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "trial-balance",
+            element: (
+              <RequirePermission code="accounting.entry.read">
+                <TrialBalancePage />
+              </RequirePermission>
+            ),
+          },
         ],
       },
-      { path: "reports", element: <ReportsPage /> },
+      {
+        path: "reports",
+        element: (
+          <RequirePermission code="reports.view">
+            <ReportsPage />
+          </RequirePermission>
+        ),
+      },
+      { path: "403", element: <ForbiddenPage /> },
       {
         path: "settings",
         element: <SettingsLayout />,
         children: [
-          { index: true, element: <SettingsUsersPage /> },
-          { path: "roles", element: <SettingsRolesPage /> },
-          { path: "organization", element: <SettingsOrganizationPage /> },
-          { path: "catalog", element: <CatalogSettingsPage /> },
-          { path: "audit", element: <SettingsAuditPage /> },
+          {
+            index: true,
+            element: (
+              <RequirePermission code="core.user.read">
+                <SettingsUsersPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "roles",
+            element: (
+              <RequirePermission code="core.role.read">
+                <SettingsRolesPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "organization",
+            element: (
+              <RequirePermission code="core.org.read">
+                <SettingsOrganizationPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "catalog",
+            element: (
+              <RequirePermission code="catalog.tax.read">
+                <CatalogSettingsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "audit",
+            element: (
+              <RequirePermission code="core.audit.read">
+                <SettingsAuditPage />
+              </RequirePermission>
+            ),
+          },
         ],
       },
     ],

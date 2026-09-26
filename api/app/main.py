@@ -80,6 +80,10 @@ def create_app() -> FastAPI:
 
     accounting_postings.register()
 
+    from app.modules.core import notification_events
+
+    notification_events.register()
+
     app.include_router(core_router, prefix=settings.api_prefix)
     app.include_router(crm_router, prefix=settings.api_prefix)
     app.include_router(catalog_router, prefix=settings.api_prefix)

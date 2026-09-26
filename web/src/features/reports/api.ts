@@ -66,8 +66,8 @@ export const reportsApi = {
 
   notifications: (unreadOnly = false) =>
     api.get<{ items: Notification[]; total: number }>(
-      `/api/core/notifications?limit=20${unreadOnly ? "&unread_only=true" : ""}`,
+      `/api/notifications?limit=20${unreadOnly ? "&unread_only=true" : ""}`,
     ),
-  unreadCount: () => api.get<{ count: number }>("/api/core/notifications/unread-count"),
-  markRead: (id: string) => api.post<Notification>(`/api/core/notifications/${id}/read`),
+  unreadCount: () => api.get<{ count: number }>("/api/notifications/unread-count"),
+  markRead: (id: string) => api.post<Notification>(`/api/notifications/${id}/read`),
 }

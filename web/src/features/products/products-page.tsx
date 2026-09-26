@@ -226,6 +226,7 @@ function ProductDialog({
   })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
 
   const uomsQuery = useQuery({ queryKey: queryKeys.permissions(), queryFn: () => catalogApi.uoms() })
   const taxesQuery = useQuery({ queryFn: () => catalogApi.taxes(), queryKey: ["catalog", "taxes"] })
@@ -342,6 +343,38 @@ function ProductDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="product-description">Description</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="product-description"
+                  value={form.description ?? ""}
+                  onChange={(e) => set({ description: e.target.value })}
+                />
+                {product && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={generating}
+                    onClick={async () => {
+                      setGenerating(true)
+                      try {
+                        const result = await catalogApi.generateDescription(product.id)
+                        set({ description: result.description })
+                        toast.success(`Generated with ${result.model}`)
+                      } catch (err) {
+                        toast.error(errorMessage(err))
+                      } finally {
+                        setGenerating(false)
+                      }
+                    }}
+                  >
+                    {generating ? "Generating…" : "✨ AI"}
+                  </Button>
+                )}
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">

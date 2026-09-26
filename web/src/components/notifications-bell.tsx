@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { queryKeys } from "@/lib/query-keys"
@@ -46,7 +45,7 @@ export function NotificationsBell() {
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+        <div className="border-b px-3 py-2 text-sm font-semibold">Notifications</div>
         <div className="max-h-72 overflow-y-auto">
           {items.length === 0 && (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">

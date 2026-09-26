@@ -61,6 +61,11 @@ export const catalogApi = {
     return api.get<Page<Product>>(`/api/catalog/products?${new URLSearchParams(clean)}`)
   },
   product: (id: string) => api.get<Product>(`/api/catalog/products/${id}`),
+  generateDescription: (id: string) =>
+    api.post<{ description: string; model: string }>(
+      `/api/catalog/products/${id}/generate-description`,
+      undefined,
+    ),
   createProduct: (body: ProductInput) => api.post<Product>("/api/catalog/products", body),
   updateProduct: (id: string, body: Partial<ProductInput>) =>
     api.patch<Product>(`/api/catalog/products/${id}`, body),

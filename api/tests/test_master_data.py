@@ -194,3 +194,19 @@ async def test_product_archive_and_rbac(client):
         "/api/catalog/products", headers=_auth(viewer_token), json={"name": "Nope"}
     )
     assert forbidden.status_code == 403
+
+
+async def test_ai_description_disabled_without_key(client):
+    token = await _admin(client)
+    product = (
+        await client.post(
+            "/api/catalog/products",
+            headers=_auth(token),
+            json={"name": "AI Widget", "sale_price": "5.00"},
+        )
+    ).json()
+    response = await client.post(
+        f"/api/catalog/products/{product['id']}/generate-description", headers=_auth(token)
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "ai_disabled"

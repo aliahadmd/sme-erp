@@ -475,7 +475,12 @@ async def post_delivery(
             actor_id=user.id,
         )
         cogs_moves.append(
-            {"product_id": str(line.product_id), "qty": str(-line.qty), "cogs": str(move.cogs)}
+            {
+                "product_id": str(line.product_id),
+                "qty": str(-line.qty),
+                "cogs": str(move.cogs),
+                "warehouse_id": str(delivery.warehouse_id),
+            }
         )
     delivery.status = "posted"
     delivery.posted_at = datetime.now(UTC)
@@ -498,6 +503,7 @@ async def post_delivery(
                 "delivery_id": str(delivery.id),
                 "number": delivery.number,
                 "warehouse_id": str(delivery.warehouse_id),
+                "actor_id": str(user.id),
                 "moves": cogs_moves,
             },
             org_id=org.id,
