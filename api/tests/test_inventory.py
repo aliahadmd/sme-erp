@@ -355,3 +355,70 @@ async def test_concurrent_deliveries_never_lose_updates(client, inv):
     row = next(r for r in stock if r["product_id"] == inv["product"])
     # Two serialized out-moves; a lost update would leave before-1
     assert float(row["qty_on_hand"]) == before - 2
+
+
+async def test_over_delivery_and_partial_remaining(client, inv):
+    admin = await _admin(client)
+    await _setup(client, admin, inv)
+
+    # SO for 5 units, confirm, deliver 2 standalone
+    so = await _confirmed_so(client, admin, inv, "5", "3.00")
+    # Stock in 10 so this test is independent of earlier tests' stock state
+    po_self = await _confirmed_po(client, admin, inv, "10", "3.00")
+    r_self = (
+        await client.post(
+            "/api/inventory/receipts", headers=_auth(admin), json={"source_po_id": po_self}
+        )
+    ).json()
+    posted_self = await client.post(
+        f"/api/inventory/receipts/{r_self['id']}/post", headers=_auth(admin)
+    )
+    assert posted_self.status_code == 200, posted_self.text
+    partial = (
+        await client.post(
+            "/api/inventory/deliveries",
+            headers=_auth(admin),
+            json={
+                "source_so_id": so,
+                "lines": [{"product_id": inv["product"], "qty": "2"}],
+            },
+        )
+    ).json()
+    posted = await client.post(
+        f"/api/inventory/deliveries/{partial['id']}/post", headers=_auth(admin)
+    )
+    assert posted.status_code == 200, posted.text
+
+    # From-SO delivery copies only the 3 remaining
+    rest = (
+        await client.post(
+            "/api/inventory/deliveries", headers=_auth(admin), json={"source_so_id": so}
+        )
+    ).json()
+    assert len(rest["lines"]) == 1
+    assert float(rest["lines"][0]["qty"]) == 3.0
+    await client.post(f"/api/inventory/deliveries/{rest['id']}/post", headers=_auth(admin))
+
+    # Order fully delivered → another from-SO delivery is rejected
+    again = await client.post(
+        "/api/inventory/deliveries", headers=_auth(admin), json={"source_so_id": so}
+    )
+    assert again.status_code == 409
+    assert "fully delivered" in again.json()["error"]["detail"]
+
+
+async def test_receipt_of_fully_received_po_rejected(client, inv):
+    admin = await _admin(client)
+    await _setup(client, admin, inv)
+    po = await _confirmed_po(client, admin, inv, "3", "2.00")
+    r1 = (
+        await client.post(
+            "/api/inventory/receipts", headers=_auth(admin), json={"source_po_id": po}
+        )
+    ).json()
+    await client.post(f"/api/inventory/receipts/{r1['id']}/post", headers=_auth(admin))
+    r2 = await client.post(
+        "/api/inventory/receipts", headers=_auth(admin), json={"source_po_id": po}
+    )
+    assert r2.status_code == 409
+    assert "fully received" in r2.json()["error"]["detail"]

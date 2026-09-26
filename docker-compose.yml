@@ -34,22 +34,32 @@ services:
 
   seaweedfs:
     image: chrislusf/seaweedfs:3.80
+    entrypoint: ["/bin/sh", "-c"]
+    # s3.json is generated from env at start — no credentials live in git.
     command:
-      - server
-      - -dir=/data
-      - -ip=seaweedfs
-      - -master.volumeSizeLimitMB=1024
-      - -volume.max=0
-      - -filer
-      - -s3
-      - -s3.port=8333
-      - -s3.config=/etc/seaweedfs/s3.json
+      - |
+        cat > /etc/seaweedfs/s3.json <<EJS
+        {
+          "identities": [
+            {
+              "name": "erp",
+              "credentials": [
+                { "accessKey": "$$S3_ACCESS_KEY", "secretKey": "$$S3_SECRET_KEY" }
+              ],
+              "actions": ["Admin", "Read", "Write", "List"]
+            }
+          ]
+        }
+        EJS
+        exec weed server -dir=/data -ip=seaweedfs -master.volumeSizeLimitMB=1024 -volume.max=0 -filer -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-erp}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-erpdevsecret}
     ports:
       - "18333:8333"
       - "19333:9333"
     volumes:
       - s3data:/data
-      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://seaweedfs:9333/cluster/status || exit 1"]
       interval: 5s
@@ -85,6 +95,12 @@ services:
     volumes:
       - ./api:/app
       - uv_cache:/root/.cache/uv
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,9 +116,16 @@ services:
     command: ["sh", "-c", "pnpm approve-builds --all && pnpm install --ignore-scripts && pnpm dev"]
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
       npm_config_store_dir: /pnpm/store
     ports:
       - "5173:5173"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:5173 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
     volumes:
       - ./web:/app
       - web_node_modules:/app/node_modules

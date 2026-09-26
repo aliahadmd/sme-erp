@@ -207,10 +207,20 @@ async def create_receipt(
         if po.status not in ("confirmed", "received"):
             raise ConflictError("Only confirmed purchase orders can be received")
         source = po
+        from app.shared.order_progress import remaining_by_product
+
+        remaining = remaining_by_product(po, "qty_received")
+        if remaining and all(q <= 0 for q in remaining.values()):
+            raise ConflictError(f"Purchase order {po.number} is fully received")
         if not lines_data:
             lines_data = [
-                {"product_id": line.product_id, "qty": line.qty, "unit_cost": line.unit_price}
+                {
+                    "product_id": line.product_id,
+                    "qty": remaining[line.product_id],
+                    "unit_cost": line.unit_price,
+                }
                 for line in po.lines
+                if line.product_id is not None and remaining[line.product_id] > 0
             ]
     if not lines_data:
         raise ValidationError("Receipt needs at least one line (or a source order)")
@@ -275,7 +285,12 @@ async def post_receipt(
     receipt.posted_at = datetime.now(UTC)
     receipt.posted_by = user.id
     if receipt.source_id:
-        await purchasing_service.mark_status(session, org.id, receipt.source_id, "received")
+        await purchasing_service.register_receipt(
+            session,
+            org.id,
+            receipt.source_id,
+            [(line.product_id, line.qty) for line in receipt.lines],
+        )
     await write_audit(
         session,
         actor=user.user,
@@ -413,8 +428,17 @@ async def create_delivery(
         if so.status not in ("confirmed", "delivered"):
             raise ConflictError("Only confirmed sales orders can be delivered")
         source = so
+        from app.shared.order_progress import remaining_by_product
+
+        remaining = remaining_by_product(so, "qty_delivered")
+        if remaining and all(q <= 0 for q in remaining.values()):
+            raise ConflictError(f"Sales order {so.number} is fully delivered")
         if not lines_data:
-            lines_data = [{"product_id": line.product_id, "qty": line.qty} for line in so.lines]
+            lines_data = [
+                {"product_id": line.product_id, "qty": remaining[line.product_id]}
+                for line in so.lines
+                if line.product_id is not None and remaining[line.product_id] > 0
+            ]
     if not lines_data:
         raise ValidationError("Delivery needs at least one line (or a source order)")
     for line in lines_data:
@@ -486,7 +510,12 @@ async def post_delivery(
     delivery.posted_at = datetime.now(UTC)
     delivery.posted_by = user.id
     if delivery.source_id:
-        await sales_service.mark_status(session, org.id, delivery.source_id, "delivered")
+        await sales_service.register_delivery(
+            session,
+            org.id,
+            delivery.source_id,
+            [(line.product_id, line.qty) for line in delivery.lines],
+        )
     await write_audit(
         session,
         actor=user.user,

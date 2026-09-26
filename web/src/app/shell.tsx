@@ -20,9 +20,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth"
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const { hasAnyPermission } = useAuth()
+  const visible = NAV_ITEMS.filter(
+    (item) => !item.anyPermission || hasAnyPermission(item.anyPermission),
+  )
   return (
     <nav className="flex flex-col gap-1 px-2">
-      {NAV_ITEMS.map((item) => (
+      {visible.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

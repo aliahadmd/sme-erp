@@ -228,7 +228,7 @@ function ProductDialog({
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
 
-  const uomsQuery = useQuery({ queryKey: queryKeys.permissions(), queryFn: () => catalogApi.uoms() })
+  const uomsQuery = useQuery({ queryKey: ["catalog", "uoms"], queryFn: () => catalogApi.uoms() })
   const taxesQuery = useQuery({ queryFn: () => catalogApi.taxes(), queryKey: ["catalog", "taxes"] })
   const categoriesQuery = useQuery({
     queryFn: () => catalogApi.categories(),

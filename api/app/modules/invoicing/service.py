@@ -23,17 +23,32 @@ async def invoice_or_404(
 
 
 async def build_lines_from_order(
-    session: AsyncSession, order: object, is_purchase: bool
+    session: AsyncSession,
+    order: object,
+    is_purchase: bool,
+    remaining: dict | None = None,
 ) -> list[InvoiceLine]:
-    """Copy snapshot lines from a sales/purchase order (qty outstanding = full in phase 1)."""
+    """Copy snapshot lines from a sales/purchase order, capped at the
+    outstanding (not-yet-invoiced) quantity per product."""
+    from decimal import Decimal
+
     lines: list[InvoiceLine] = []
-    for position, line in enumerate(order.lines):  # type: ignore[attr-defined]
+    position = 0
+    for line in order.lines:  # type: ignore[attr-defined]
+        if line.product_id is None:
+            qty = line.qty  # free-text lines have no progress tracking
+        elif remaining is not None:
+            qty = remaining.get(line.product_id, Decimal("0"))
+        else:
+            qty = line.qty
+        if Decimal(str(qty)) <= 0:
+            continue
         new_line = InvoiceLine(
             position=position,
             product_id=line.product_id,
             product_name=line.product_name,
             description=line.description,
-            qty=line.qty,
+            qty=qty,
             uom_code=line.uom_code,
             unit_price=line.unit_price,
             discount_pct=line.discount_pct,
@@ -42,6 +57,7 @@ async def build_lines_from_order(
         )
         apply_line_math(new_line)
         lines.append(new_line)
+        position += 1
     return lines
 
 

@@ -118,12 +118,22 @@ async def create_invoice(
         order = await session.get(order_model, body.source_order_id)
         if not order or order.org_id != org.id:
             raise NotFoundError("Source order not found")
-        if order.status not in ("confirmed", "delivered", "received"):
+        if order.status not in ("confirmed", "delivered", "received", "invoiced"):
             raise ConflictError("Only confirmed/processed orders can be invoiced")
+        from app.shared.order_progress import remaining_by_product
+
+        progress_field = "qty_invoiced"
+        remaining = remaining_by_product(order, progress_field)
+        if remaining and all(q <= 0 for q in remaining.values()):
+            raise ConflictError(f"Order {order.number} is fully invoiced")
         invoice.source_type = source_type
         invoice.source_id = order.id
         invoice.source_number = order.number
-        lines = await build_lines_from_order(session, order, body.invoice_type == "ap")
+        lines = await build_lines_from_order(
+            session, order, body.invoice_type == "ap", remaining=remaining
+        )
+        if not lines:
+            raise ConflictError("No outstanding quantities left to invoice")
     else:
         if not body.lines:
             raise ValidationError("Standalone invoice needs at least one line")
@@ -200,14 +210,23 @@ async def post_invoice_endpoint(
     org = await get_organization(session)
     invoice = await invoice_or_404(session, org.id, invoice_id)
     await post_invoice(session, org.id, invoice, user.id)
-    if invoice.source_id and invoice.source_type == "sales_order":
-        from app.modules.sales import service as sales_service
+    if invoice.source_id:
+        # Register invoiced quantities; the service moves the order to
+        # `invoiced` and to `closed` when receipt/delivery + invoicing complete.
+        per_product: dict = {}
+        for line in invoice.lines:
+            if line.product_id is None:
+                continue
+            per_product[line.product_id] = per_product.get(line.product_id, 0) + line.qty
+        amounts = list(per_product.items())
+        if invoice.source_type == "sales_order":
+            from app.modules.sales import service as sales_service
 
-        await sales_service.mark_status(session, org.id, invoice.source_id, "invoiced")
-    elif invoice.source_id and invoice.source_type == "purchase_order":
-        from app.modules.purchasing import service as purchasing_service
+            await sales_service.register_invoiced(session, org.id, invoice.source_id, amounts)
+        else:
+            from app.modules.purchasing import service as purchasing_service
 
-        await purchasing_service.mark_status(session, org.id, invoice.source_id, "invoiced")
+            await purchasing_service.register_invoiced(session, org.id, invoice.source_id, amounts)
     await write_audit(
         session,
         actor=user.user,

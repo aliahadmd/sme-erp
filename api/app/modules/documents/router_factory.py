@@ -86,7 +86,7 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             lines.append(line)
         return lines
 
-    @router.get("/orders", response_model=None)
+    @router.get("/orders", response_model=cfg.schemas.OrderPage)
     async def list_orders(
         params: PageParamsDep,
         status: str | None = Query(None),
@@ -115,13 +115,13 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             )
         rows, total = await paginate(session, stmt, params)
         return {
-            "items": [cfg.schemas.OrderOut.model_validate(r).model_dump(mode="json") for r in rows],
+            "items": [cfg.schemas.OrderOut.model_validate(r) for r in rows],
             "total": total,
             "limit": params.limit,
             "offset": params.offset,
         }
 
-    @router.get("/orders/{order_id}", response_model=None)
+    @router.get("/orders/{order_id}", response_model=cfg.schemas.OrderOut)
     async def get_order(
         order_id: uuid.UUID,
         _user: CurrentUser = Depends(require(f"{cfg.perm}.read")),
@@ -129,9 +129,9 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
     ) -> Any:
         org = await get_organization(session)
         order = await _get_order(session, org.id, order_id)
-        return cfg.schemas.OrderOut.model_validate(order).model_dump(mode="json")
+        return order
 
-    @router.post("/orders", status_code=201, response_model=None)
+    @router.post("/orders", status_code=201, response_model=cfg.schemas.OrderOut)
     async def create_order(
         body: cfg.schemas.OrderCreateIn,  # type: ignore[valid-type]
         user: CurrentUser = Depends(require(f"{cfg.perm}.create")),
@@ -171,9 +171,9 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         )
         await session.commit()
         await session.refresh(order)
-        return cfg.schemas.OrderOut.model_validate(order).model_dump(mode="json")
+        return order
 
-    @router.patch("/orders/{order_id}", response_model=None)
+    @router.patch("/orders/{order_id}", response_model=cfg.schemas.OrderOut)
     async def update_order(
         order_id: uuid.UUID,
         body: cfg.schemas.OrderUpdateIn,  # type: ignore[valid-type]
@@ -208,9 +208,9 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         )
         await session.commit()
         await session.refresh(order)
-        return cfg.schemas.OrderOut.model_validate(order).model_dump(mode="json")
+        return order
 
-    @router.post("/orders/{order_id}/confirm", response_model=None)
+    @router.post("/orders/{order_id}/confirm", response_model=cfg.schemas.OrderOut)
     async def confirm_order(
         order_id: uuid.UUID,
         user: CurrentUser = Depends(require(f"{cfg.perm}.confirm")),
@@ -241,9 +241,9 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             )
         )
         await session.refresh(order)
-        return cfg.schemas.OrderOut.model_validate(order).model_dump(mode="json")
+        return order
 
-    @router.post("/orders/{order_id}/cancel", response_model=None)
+    @router.post("/orders/{order_id}/cancel", response_model=cfg.schemas.OrderOut)
     async def cancel_order(
         order_id: uuid.UUID,
         user: CurrentUser = Depends(require(f"{cfg.perm}.cancel")),
@@ -263,6 +263,6 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         )
         await session.commit()
         await session.refresh(order)
-        return cfg.schemas.OrderOut.model_validate(order).model_dump(mode="json")
+        return order
 
     return router

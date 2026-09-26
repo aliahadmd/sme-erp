@@ -81,9 +81,7 @@ async def get_product(
 
 def _sku_from_name(name: str) -> str:
     letters = "".join(ch for ch in name.upper() if ch.isalnum())[:4]
-    import time
-
-    return f"{letters or 'SKU'}-{int(time.time()) % 100000:05d}"
+    return f"{letters or 'SKU'}-{uuid.uuid4().hex[:6].upper()}"
 
 
 @router.post("/products", response_model=ProductOut, status_code=201)

@@ -53,6 +53,8 @@ class OrderLineOut(BaseModel):
     line_subtotal: Decimal
     line_tax: Decimal
     line_total: Decimal
+    qty_delivered: Decimal = 0
+    qty_invoiced: Decimal = 0
 
 
 class OrderOut(BaseModel):

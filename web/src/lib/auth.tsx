@@ -32,6 +32,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   hasPermission: (code: string) => boolean
+  hasAnyPermission: (codes: string[]) => boolean
 }
 
 const AuthContext = React.createContext<AuthState | undefined>(undefined)
@@ -135,9 +136,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user],
   )
 
+  const hasAnyPermission = React.useCallback(
+    (codes: string[]) => {
+      if (!user) return false
+      if (user.is_superuser) return true
+      return codes.some((code) => user.permissions.includes(code))
+    },
+    [user],
+  )
+
   const value = React.useMemo(
-    () => ({ user, isLoading, login, logout, hasPermission }),
-    [user, isLoading, login, logout, hasPermission],
+    () => ({ user, isLoading, login, logout, hasPermission, hasAnyPermission }),
+    [user, isLoading, login, logout, hasPermission, hasAnyPermission],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -166,7 +166,8 @@ async def test_invoice_from_sales_order_marks_invoiced(client):
     posted = await client.post(f"/api/invoicing/invoices/{body['id']}/post", headers=_auth(admin))
     assert posted.status_code == 200
     so_view = (await client.get(f"/api/sales/orders/{so['id']}", headers=_auth(admin))).json()
-    assert so_view["status"] == "invoiced"
+    # fully-invoiced free-text order is complete → closed
+    assert so_view["status"] in ("invoiced", "closed")
 
 
 async def test_ap_cycle_with_bill_numbering(client):
@@ -330,3 +331,109 @@ async def test_payment_direction_must_match_invoice_type(client):
         },
     )
     assert wrong.status_code == 422
+
+
+async def test_duplicate_invoicing_of_order_rejected_and_autoclose(client):
+    admin = await _admin(client)
+    customer = (
+        await client.post(
+            "/api/crm/contacts",
+            headers=_auth(admin),
+            json={"name": "Close Buyer", "is_customer": True},
+        )
+    ).json()
+    product = (
+        await client.post(
+            "/api/catalog/products",
+            headers=_auth(admin),
+            json={
+                "name": "Close Widget",
+                "sale_price": "10.00",
+                "type": "goods",
+                "track_inventory": True,
+            },
+        )
+    ).json()
+    await client.post(
+        "/api/inventory/warehouses",
+        headers=_auth(admin),
+        json={"code": "CLOSEW", "name": "Close WH", "is_default": True},
+    )
+    supplier = (
+        await client.post(
+            "/api/crm/contacts",
+            headers=_auth(admin),
+            json={"name": "Close Seller", "is_supplier": True},
+        )
+    ).json()
+    po = (
+        await client.post(
+            "/api/purchasing/orders",
+            headers=_auth(admin),
+            json={
+                "supplier_id": supplier["id"],
+                "lines": [{"product_id": product["id"], "qty": "10", "unit_price": "1.00"}],
+            },
+        )
+    ).json()
+    await client.post(f"/api/purchasing/orders/{po['id']}/confirm", headers=_auth(admin))
+    receipt = (
+        await client.post(
+            "/api/inventory/receipts", headers=_auth(admin), json={"source_po_id": po["id"]}
+        )
+    ).json()
+    await client.post(f"/api/inventory/receipts/{receipt['id']}/post", headers=_auth(admin))
+
+    so = (
+        await client.post(
+            "/api/sales/orders",
+            headers=_auth(admin),
+            json={
+                "customer_id": customer["id"],
+                "lines": [{"product_id": product["id"], "qty": "4"}],
+            },
+        )
+    ).json()
+    await client.post(f"/api/sales/orders/{so['id']}/confirm", headers=_auth(admin))
+    dlv = (
+        await client.post(
+            "/api/inventory/deliveries", headers=_auth(admin), json={"source_so_id": so["id"]}
+        )
+    ).json()
+    await client.post(f"/api/inventory/deliveries/{dlv['id']}/post", headers=_auth(admin))
+
+    inv1 = (
+        await client.post(
+            "/api/invoicing/invoices",
+            headers=_auth(admin),
+            json={
+                "invoice_type": "ar",
+                "party_id": customer["id"],
+                "source_order_id": so["id"],
+            },
+        )
+    ).json()
+    await client.post(f"/api/invoicing/invoices/{inv1['id']}/post", headers=_auth(admin))
+
+    # Fully invoiced already → second invoice from the same order is rejected
+    inv2 = await client.post(
+        "/api/invoicing/invoices",
+        headers=_auth(admin),
+        json={
+            "invoice_type": "ar",
+            "party_id": customer["id"],
+            "source_order_id": so["id"],
+        },
+    )
+    assert inv2.status_code == 409
+    # closed orders reject invoicing outright; partially-invoiced ones report remaining
+    assert (
+        "fully invoiced" in inv2.json()["error"]["detail"]
+        or "confirmed/processed" in (inv2.json()["error"]["detail"])
+    )
+
+    # Fully delivered + fully invoiced → order auto-closed
+    so_view = (await client.get(f"/api/sales/orders/{so['id']}", headers=_auth(admin))).json()
+    assert so_view["status"] == "closed"
+    po_view = (await client.get(f"/api/purchasing/orders/{po['id']}", headers=_auth(admin))).json()
+    assert po_view["status"] == "received"  # billed via standalone, not the PO — stays received

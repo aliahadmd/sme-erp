@@ -71,6 +71,8 @@ class SalesOrderLine(Base):
         ForeignKey("catalog.taxes.id", ondelete="SET NULL")
     )
     tax_rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # snapshot
+    qty_delivered: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
+    qty_invoiced: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
 
     line_subtotal: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     line_tax: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
