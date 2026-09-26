@@ -133,7 +133,32 @@ async def _on_delivery_posted(event: Event) -> None:
     logger.info("low_stock_notifications_processed")
 
 
+async def _queue_party_email(event: Event, subject: str, body: str) -> None:
+    """Queue a customer-facing email using the party's first email address."""
+    from app.core.db import SessionFactory
+    from app.jobs.queue import enqueue
+    from app.modules.crm.models import Contact
+
+    party_id = event.payload.get("party_id")
+    if not party_id:
+        return
+    async with SessionFactory() as session:
+        contact = await session.get(Contact, uuid.UUID(party_id))
+        if not contact or not contact.emails:
+            return
+        to = contact.emails[0].get("value") if isinstance(contact.emails[0], dict) else None
+        if not to:
+            return
+    await enqueue("send_email", to=to, subject=subject, body=body)
+
+
 async def _on_invoice_posted(event: Event) -> None:
+    label = "Credit note" if "credit" in event.payload["invoice_type"] else "Invoice"
+    await _queue_party_email(
+        event,
+        subject=f"{label} {event.payload['number']} — {event.payload['total']}",
+        body="Please find your invoice attached.",
+    )
     async with SessionFactory() as session:
         org_id = event.org_id
         assert org_id is not None

@@ -567,6 +567,31 @@ async def update_numbering_prefix(
     return {"entity": entity, "prefix": prefix}
 
 
+# ------------------------------------------------------ email preferences
+@router.get("/email-preferences")
+async def get_email_preferences(user: CurrentUserDep) -> dict:
+    prefs = user.user.email_prefs or {}
+    defaults = {"invoice_sent": True, "payment_received": True, "overdue_reminder": True}
+    return {**defaults, **prefs}
+
+
+@router.put("/email-preferences")
+async def put_email_preferences(
+    body: dict,
+    user: CurrentUserDep,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    target = await session.get(User, user.id)
+    if not target:
+        raise NotFoundError("User not found")
+    allowed = {"invoice_sent", "payment_received", "overdue_reminder"}
+    current = target.email_prefs or {}
+    updates = {k: bool(v) for k, v in body.items() if k in allowed}
+    target.email_prefs = {**current, **updates}
+    await session.commit()
+    return target.email_prefs or {}
+
+
 # ---------------------------------------------------------------- audit log
 @router.get("/audit-logs", response_model=Page[AuditLogOut])
 async def list_audit_logs(

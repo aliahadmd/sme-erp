@@ -67,6 +67,7 @@ class User(Base, TimestampMixin, UuidPk):
     default_branch_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("core.branches.id", ondelete="SET NULL")
     )
+    email_prefs: Mapped[dict] = mapped_column(JSONB, default=dict)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     roles: Mapped[list["Role"]] = relationship(secondary="core.user_roles", lazy="selectin")

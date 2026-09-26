@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 7
 
+    # --- Email (empty host = emails are logged, not sent) ---
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    email_from: str = "erp@example.com"
+
     # --- Background jobs ---
     # inline: jobs run synchronously at the call site (tests, dev without worker)
     # redis:  jobs are enqueued to arq and executed by the worker service

@@ -364,6 +364,45 @@ async def void_invoice(
     return invoice
 
 
+@router.post("/invoices/{invoice_id}/send-email")
+async def email_invoice(
+    invoice_id: uuid.UUID,
+    user: CurrentUser = Depends(require("invoicing.invoice.read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Queue the invoice email to the customer's billing contact."""
+    from app.jobs.queue import enqueue
+
+    org = await get_organization(session)
+    invoice = await invoice_or_404(session, org.id, invoice_id)
+    if invoice.status == "draft":
+        raise ValidationError("Post the invoice before emailing it")
+    if not invoice.party_id:
+        raise NotFoundError("Invoice has no customer")
+    party = await session.get(Contact, invoice.party_id)
+    to = None
+    if party and party.emails:
+        to = party.emails[0].get("value")
+    if not to:
+        raise ValidationError("Customer has no email address")
+    await enqueue(
+        "send_email",
+        to=to,
+        subject=f"Invoice {invoice.number} — {invoice.total}",
+        body="Please find your invoice attached.",
+    )
+    await write_audit(
+        session,
+        actor=user.user,
+        action="email",
+        entity_type="invoicing.invoice",
+        entity_id=invoice.id,
+        after={"to": to},
+    )
+    await session.commit()
+    return {"status": "queued", "to": to}
+
+
 # ------------------------------------------------------------------ payments
 @router.get("/payments", response_model=inv.PaymentPage)
 async def list_payments(

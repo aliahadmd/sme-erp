@@ -1,4 +1,5 @@
 import { LogOut, Menu } from "lucide-react"
+import { useState } from "react"
 import { NavLink, Outlet } from "react-router"
 import { toast } from "sonner"
 
@@ -16,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
+import { EmailPreferencesDialog } from "@/features/settings/email-preferences"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth"
 
@@ -61,6 +63,7 @@ function Brand() {
 
 function UserMenu() {
   const { user, logout } = useAuth()
+  const [prefsOpen, setPrefsOpen] = useState(false)
   if (!user) return null
   const initials = user.full_name
     .split(" ")
@@ -70,6 +73,8 @@ function UserMenu() {
     .toUpperCase()
 
   return (
+    <>
+    <EmailPreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
@@ -87,6 +92,10 @@ function UserMenu() {
           <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setPrefsOpen(true)}>
+          Email preferences
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {
             void logout().then(() => toast.success("Signed out"))
@@ -96,6 +105,7 @@ function UserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   )
 }
 
