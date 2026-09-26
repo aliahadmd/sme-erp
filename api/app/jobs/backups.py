@@ -78,7 +78,7 @@ async def backup_database(ctx: dict[str, Any]) -> dict[str, str]:
 @register_job
 async def prune_audit_logs(ctx: dict[str, Any]) -> dict[str, int]:
     """Delete audit rows older than AUDIT_RETENTION_DAYS (default 365)."""
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
     from sqlalchemy import delete, select
 

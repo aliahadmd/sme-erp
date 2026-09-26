@@ -13,6 +13,9 @@ import { UsersPage as SettingsUsersPage } from "@/features/settings/users-page"
 import { CatalogSettingsPage } from "@/features/products/catalog-settings-page"
 import { ContactsPage } from "@/features/contacts/contacts-page"
 import { ProductsPage } from "@/features/products/products-page"
+import { SalesLayout } from "@/features/sales/layout"
+import { QuotesPage } from "@/features/quotes/quotes-page"
+import { NumberingPage } from "@/features/settings/numbering-page"
 import {
   AdjustmentsPage,
   DeliveriesPage,
@@ -40,9 +43,16 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: "crm", element: <ContactsPage /> },
       { path: "products", element: <ProductsPage /> },
-      { path: "sales", element: <OrdersListPage module="sales" /> },
-      { path: "sales/new", element: <OrderEditorRoute module="sales" /> },
-      { path: "sales/:id", element: <OrderEditorRoute module="sales" /> },
+      {
+        path: "sales",
+        element: <SalesLayout />,
+        children: [
+          { index: true, element: <OrdersListPage module="sales" /> },
+          { path: "orders/new", element: <OrderEditorRoute module="sales" /> },
+          { path: "orders/:id", element: <OrderEditorRoute module="sales" /> },
+          { path: "quotations", element: <QuotesPage /> },
+        ],
+      },
       { path: "purchasing", element: <OrdersListPage module="purchasing" /> },
       { path: "purchasing/new", element: <OrderEditorRoute module="purchasing" /> },
       { path: "purchasing/:id", element: <OrderEditorRoute module="purchasing" /> },
@@ -137,6 +147,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission code="catalog.tax.read">
                 <CatalogSettingsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: "numbering",
+            element: (
+              <RequirePermission code="core.settings.read">
+                <NumberingPage />
               </RequirePermission>
             ),
           },

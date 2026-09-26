@@ -158,8 +158,12 @@ DEFAULT_SETTINGS: dict[str, dict] = {
     "company.info": {"legal_name": "", "tax_id": "", "email": "", "phone": ""},
     "numbering.prefixes": {
         "contact": "C",
+        "quotation": "QT",
         "sales_order": "SO",
         "purchase_order": "PO",
+        "receipt": "RCV",
+        "delivery": "DLV",
+        "adjustment": "ADJ",
         "ar_invoice": "INV",
         "ap_invoice": "BILL",
         "customer_payment": "PAY",

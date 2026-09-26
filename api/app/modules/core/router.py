@@ -495,6 +495,78 @@ async def put_setting(
     return setting
 
 
+# --------------------------------------------------------------- numbering
+@router.get("/numbering", dependencies=[Depends(require("core.settings.read"))])
+async def list_numbering(session: AsyncSession = Depends(get_session)) -> list[dict]:
+    """All known numbering entities: current prefix + next number preview."""
+    from sqlalchemy import text as _text
+
+    from app.modules.core.service import (
+        DEFAULT_SETTINGS,
+        get_organization,
+        get_setting,
+    )
+
+    org = await get_organization(session)
+    overrides = await get_setting(session, org.id, "numbering.prefixes") or {}
+    out = []
+    for entity, default_prefix in DEFAULT_SETTINGS["numbering.prefixes"].items():
+        prefix = overrides.get(entity, default_prefix)
+        row = (
+            await session.execute(
+                _text(
+                    "SELECT last_number FROM core.document_sequences "
+                    "WHERE org_id = :org AND entity = :entity"
+                ),
+                {"org": str(org.id), "entity": entity},
+            )
+        ).scalar()
+        year = datetime.now(UTC).year
+        out.append(
+            {
+                "entity": entity,
+                "prefix": prefix,
+                "next_number": f"{prefix}-{year}-{(row or 0) + 1:04d}",
+            }
+        )
+    return out
+
+
+@router.put("/numbering/{entity}")
+async def update_numbering_prefix(
+    entity: str,
+    body: SettingIn,
+    actor: CurrentUser = Depends(require("core.settings.update")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update the prefix for a numbering entity (stored in numbering.prefixes)."""
+    from app.modules.core.service import (
+        DEFAULT_SETTINGS,
+        get_organization,
+        get_setting,
+        set_setting,
+    )
+
+    prefix = str(body.value.get("prefix", "")).strip()
+    if not prefix or not prefix.replace("-", "").replace("_", "").isalnum():
+        raise ValidationError("Prefix must be alphanumeric (dashes allowed)")
+    if entity not in DEFAULT_SETTINGS["numbering.prefixes"]:
+        raise NotFoundError(f"Unknown numbering entity: {entity}")
+    org = await get_organization(session)
+    overrides = (await get_setting(session, org.id, "numbering.prefixes")) or {}
+    await set_setting(session, org.id, "numbering.prefixes", {**overrides, entity: prefix})
+    await write_audit(
+        session,
+        actor=actor.user,
+        action="update",
+        entity_type="core.numbering",
+        entity_id=entity,
+        after={"prefix": prefix},
+    )
+    await session.commit()
+    return {"entity": entity, "prefix": prefix}
+
+
 # ---------------------------------------------------------------- audit log
 @router.get("/audit-logs", response_model=Page[AuditLogOut])
 async def list_audit_logs(
