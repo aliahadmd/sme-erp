@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router"
 import { toast } from "sonner"
 
 import { NAV_ITEMS } from "@/app/nav-items"
+import { NotificationsBell } from "@/components/notifications-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -126,6 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
           <div className="flex-1" />
+          <NotificationsBell />
           <ThemeToggle />
           <UserMenu />
         </header>

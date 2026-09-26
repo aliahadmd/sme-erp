@@ -4,6 +4,7 @@
  */
 export const queryKeys = {
   me: () => ["auth", "me"] as const,
+  dashboard: () => ["reports", "dashboard"] as const,
   users: (params: Record<string, unknown> = {}) => ["core", "users", params] as const,
   roles: () => ["core", "roles"] as const,
   permissions: () => ["core", "permissions"] as const,

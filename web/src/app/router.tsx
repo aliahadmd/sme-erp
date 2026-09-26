@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router"
 
-import { PlaceholderPage } from "@/app/placeholder-page"
 import { RequireAuth } from "@/app/require-auth"
 import { LoginPage } from "@/features/auth/login-page"
 import { DashboardPage } from "@/features/dashboard/dashboard-page"
@@ -25,6 +24,7 @@ import { PaymentsPage } from "@/features/invoicing/payments-page"
 import { AccountingLayout } from "@/features/accounting/layout"
 import { AccountsPage } from "@/features/accounting/accounts-page"
 import { JournalPage, TrialBalancePage } from "@/features/accounting/journal-and-trial-page"
+import { ReportsPage } from "@/features/reports/reports-page"
 import { OrderEditorRoute } from "@/features/documents/order-editor-page"
 import { OrdersListPage } from "@/features/documents/orders-list-page"
 
@@ -71,7 +71,7 @@ export const router = createBrowserRouter([
           { path: "trial-balance", element: <TrialBalancePage /> },
         ],
       },
-      { path: "reports", element: <PlaceholderPage title="Reports" plan={10} /> },
+      { path: "reports", element: <ReportsPage /> },
       {
         path: "settings",
         element: <SettingsLayout />,

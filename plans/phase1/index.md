@@ -1,6 +1,6 @@
 # Phase 1 — ERP Foundation & Core Business Flow
 
-- **Status:** 📝 Draft — awaiting approval (no code until these plans are approved)
+- **Status:** ✅ Complete (2026-09-26) — all 10 plans implemented and verified
 - **Created:** 2026-09-26
 - **Product:** General-purpose SME ERP, self-hosted, single application, single database
 
@@ -138,8 +138,8 @@ update the Status column here as work completes.
 | 6 | [plan-6.md](plan-6.md) | Sales & Purchasing: SO/PO with numbering, state machines, line editors | 5 | ✅ done |
 | 7 | [plan-7.md](plan-7.md) | Inventory: warehouses, stock moves, receipts/deliveries, avg costing | 6 | ✅ done |
 | 8 | [plan-8.md](plan-8.md) | Invoicing & payments: AR/AP invoices, payments, allocations, statements | 7 | ✅ done |
-| 9 | [plan-9.md](plan-9.md) | Basic accounting: CoA, auto-posted journals, ledger, trial balance | 8 | ☐ todo |
-| 10 | [plan-10.md](plan-10.md) | Dashboard, reports, audit UI, demo seed, end-to-end acceptance | 4–9 | ☐ todo |
+| 9 | [plan-9.md](plan-9.md) | Basic accounting: CoA, auto-posted journals, ledger, trial balance | 8 | ✅ done |
+| 10 | [plan-10.md](plan-10.md) | Dashboard, reports, audit UI, demo seed, end-to-end acceptance | 4–9 | ✅ done |
 
 ## 8. Definition of done (phase-level acceptance walkthrough)
 

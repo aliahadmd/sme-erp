@@ -69,4 +69,24 @@ services — no code changes.
 ## Implementation plans
 
 See [`plans/phase1/index.md`](plans/phase1/index.md) for the phase-1 plan set,
-execution order, and status.
+execution order, and status; [`plans/phase2-draft.md`](plans/phase2-draft.md)
+for the deferred backlog.
+
+## Demo data
+
+```bash
+make seed-demo   # contacts, products, full buy/sell cycles with payments
+```
+
+## Adding a module (the architecture contract)
+
+1. `api/app/modules/<name>/` with `models.py` (own PostgreSQL schema),
+   `schemas.py`, `service.py`, `router.py`; import models in `alembic/env.py`.
+2. Cross-module reads go through the owning module's service functions;
+   reactions (audit, notifications, postings) subscribe to events
+   (see `app/modules/accounting/postings.py` for the pattern).
+3. Frontend: `web/src/features/<name>/` with `api.ts` + pages; add the nav
+   entry in `src/app/nav-items.ts` and routes in `src/app/router.tsx`.
+4. Add tests under `api/tests/`, regenerate web types with `pnpm gen:api`,
+   and run `make verify`.
+

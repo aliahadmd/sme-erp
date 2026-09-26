@@ -30,6 +30,9 @@ migrate: ## Apply database migrations (in api container)
 seed: ## Seed bootstrap data (admin user, roles, permissions)
 	$(COMPOSE) exec api python -m app.core.seed
 
+seed-demo: ## Seed a coherent demo dataset (requires services up)
+	$(COMPOSE) exec api python -m app.core.seed_demo
+
 shell-api: ## Shell into the api container
 	$(COMPOSE) exec api bash
 
