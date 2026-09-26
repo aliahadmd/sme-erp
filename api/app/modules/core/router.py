@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
-from app.core.errors import AuthenticationError, NotFoundError, ValidationError
+from app.core.errors import (
+    AuthenticationError,
+    DomainError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.core.security import (
     REFRESH_TOKEN,
     create_access_token,
@@ -84,6 +90,10 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
 
 
 # --------------------------------------------------------------------- auth
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW_SECONDS = 300
+
+
 @router.post("/auth/login", response_model=TokenOut)
 async def login(
     body: LoginIn,
@@ -91,7 +101,23 @@ async def login(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> TokenOut:
-    user = await authenticate(session, body.email, body.password)
+    # Brute-force guard: per (ip, email) failure counter in redis.
+    fail_key = f"login:fail:{client_ip(request) or 'unknown'}:{body.email.lower()}"
+    redis = request.app.state.redis
+    attempts = int(await redis.get(fail_key) or 0)
+    if attempts >= LOGIN_MAX_FAILURES:
+        raise DomainError(
+            "Too many failed login attempts — try again later",
+            code="rate_limited",
+            status_code=429,
+        )
+    try:
+        user = await authenticate(session, body.email, body.password)
+    except AuthenticationError:
+        await redis.incr(fail_key)
+        await redis.expire(fail_key, LOGIN_WINDOW_SECONDS)
+        raise
+    await redis.delete(fail_key)
     await write_audit(
         session,
         actor=user,
@@ -271,6 +297,9 @@ async def create_user_endpoint(
     user: CurrentUser = Depends(require("core.user.create")),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
+    # Escalation guard: only a superuser may mint another superuser.
+    if body.is_superuser and not user.is_superuser:
+        raise PermissionDeniedError("Only a superuser can create a superuser account")
     role_ids = await _resolve_role_ids(session, body.role_codes)
     new_user = await create_user(
         session,
@@ -304,6 +333,23 @@ async def update_user_endpoint(
     target = await session.get(User, user_id)
     if not target:
         raise NotFoundError("User not found")
+    if target.is_superuser and body.is_active is False:
+        # Never lock out the last active superuser.
+        other_active_supers = len(
+            (
+                await session.scalars(
+                    select(User.id).where(
+                        User.is_superuser.is_(True),
+                        User.is_active.is_(True),
+                        User.id != target.id,
+                    )
+                )
+            ).all()
+        )
+        if other_active_supers == 0:
+            raise ValidationError("Cannot deactivate the last active superuser")
+    if target.id == actor.id and body.is_active is False:
+        raise ValidationError("You cannot deactivate your own account")
     before = snapshot(target, USER_SNAPSHOT_FIELDS)
     data = body.model_dump(exclude_unset=True)
     role_codes = data.pop("role_codes", None)

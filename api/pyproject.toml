@@ -42,6 +42,7 @@ extend-immutable-calls = [
   "fastapi.Body",
   "fastapi.Security",
   "app.modules.core.deps.require",
+  "app.modules.core.deps.require_superuser",
 ]
 
 [tool.pytest.ini_options]

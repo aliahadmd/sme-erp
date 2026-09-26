@@ -36,3 +36,28 @@ def test_refresh_token_type_enforced():
 def test_garbage_token_rejected():
     with pytest.raises(AuthenticationError):
         decode_token("not-a-jwt")
+
+
+def test_production_rejects_default_jwt_secret():
+    import pytest
+
+    from app.core.config import Settings
+
+    with pytest.raises(Exception, match="JWT_SECRET"):
+        Settings(
+            environment="staging",
+            jwt_secret="dev-secret-change-me",
+            database_url="postgresql+asyncpg://x:x@localhost/x",
+            redis_url="redis://localhost:6379/0",
+        )
+
+
+def test_cors_origins_accept_comma_separated():
+    from app.core.config import Settings
+
+    settings = Settings(
+        cors_origins="http://a.example,http://b.example",
+        database_url="postgresql+asyncpg://x:x@localhost/x",
+        redis_url="redis://localhost:6379/0",
+    )
+    assert settings.cors_origins == ["http://a.example", "http://b.example"]

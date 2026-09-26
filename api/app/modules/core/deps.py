@@ -63,6 +63,14 @@ def require(permission: str):
     return checker
 
 
+async def require_superuser(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    if not user.is_superuser:
+        raise PermissionDeniedError("Superuser only")
+    return user
+
+
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 

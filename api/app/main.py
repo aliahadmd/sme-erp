@@ -9,7 +9,7 @@ import anyio
 import boto3
 import structlog
 from botocore.config import Config
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -162,7 +162,12 @@ def create_app() -> FastAPI:
     class AIEchoIn(BaseModel):
         prompt: str = Field(min_length=1, max_length=4000)
 
-    @app.post(f"{settings.api_prefix}/ai/echo")
+    from app.modules.core.deps import require_superuser
+
+    @app.post(
+        f"{settings.api_prefix}/ai/echo",
+        dependencies=[Depends(require_superuser)],
+    )
     async def ai_echo(body: AIEchoIn) -> dict[str, Any]:
         client = AIClient(get_settings())
         if not client.enabled:

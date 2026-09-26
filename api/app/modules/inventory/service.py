@@ -22,15 +22,20 @@ async def allow_negative(session: AsyncSession, org_id: uuid.UUID) -> bool:
 
 
 async def get_stock_row(
-    session: AsyncSession, org_id: uuid.UUID, product_id: uuid.UUID, warehouse_id: uuid.UUID
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    product_id: uuid.UUID,
+    warehouse_id: uuid.UUID,
+    for_update: bool = False,
 ) -> Stock | None:
-    result = await session.scalars(
-        select(Stock).where(
-            Stock.org_id == org_id,
-            Stock.product_id == product_id,
-            Stock.warehouse_id == warehouse_id,
-        )
+    stmt = select(Stock).where(
+        Stock.org_id == org_id,
+        Stock.product_id == product_id,
+        Stock.warehouse_id == warehouse_id,
     )
+    if for_update:
+        stmt = stmt.with_for_update()
+    result = await session.scalars(stmt)
     return result.first()
 
 
@@ -62,7 +67,9 @@ async def post_move(
     if qty == 0:
         raise ConflictError("Move quantity cannot be zero")
 
-    row = await get_stock_row(session, org_id, product_id, warehouse_id)
+    # Lock the stock row: concurrent postings for the same product/warehouse
+    # must serialize or the read-modify-write loses updates.
+    row = await get_stock_row(session, org_id, product_id, warehouse_id, for_update=True)
     on_hand = row.qty_on_hand if row else Decimal("0")
     avg = row.avg_cost if row else Decimal("0")
 

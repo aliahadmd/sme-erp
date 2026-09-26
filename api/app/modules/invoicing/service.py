@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
@@ -159,7 +160,11 @@ async def record_payment(
     await session.flush()
 
     for invoice_id, alloc_amount in allocations:
-        invoice = await session.get(Invoice, invoice_id)
+        # Lock the invoice row: concurrent payments must serialize or the
+        # amount_paid read-modify-write over-allocates.
+        invoice = (
+            await session.scalars(select(Invoice).where(Invoice.id == invoice_id).with_for_update())
+        ).first()
         if not invoice or invoice.org_id != org_id:
             raise ValidationError("Unknown invoice in allocations")
         expected_type = "ar" if direction == "in" else "ap"

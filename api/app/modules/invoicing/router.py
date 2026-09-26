@@ -392,7 +392,11 @@ async def void_payment(
     if payment.status == "void":
         raise ConflictError("Payment is already void")
     for allocation in payment.allocations:
-        invoice = await session.get(Invoice, allocation.invoice_id)
+        invoice = (
+            await session.scalars(
+                select(Invoice).where(Invoice.id == allocation.invoice_id).with_for_update()
+            )
+        ).first()
         if invoice:
             await apply_allocation_to_invoice(invoice, allocation.amount, sign=-1)
     payment.status = "void"

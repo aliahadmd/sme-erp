@@ -144,3 +144,110 @@ async def test_unknown_setting_404(client):
 async def test_login_validation(client, email, password):
     response = await client.post("/api/auth/login", json={"email": email, "password": password})
     assert response.status_code == 422
+
+
+async def test_superuser_escalation_blocked(client):
+    # Grant a clerk user-create rights only
+    admin_token = await _login(client)
+    role = await client.post(
+        "/api/roles",
+        headers=_auth(admin_token),
+        json={"code": "clerk_hr", "name": "Clerk", "permission_codes": ["core.user.create"]},
+    )
+    assert role.status_code == 201, role.text
+    clerk = await client.post(
+        "/api/users",
+        headers=_auth(admin_token),
+        json={
+            "email": "clerk@example.com",
+            "password": "password123",
+            "full_name": "Clerk",
+            "role_codes": ["clerk_hr"],
+        },
+    )
+    assert clerk.status_code == 201
+    clerk_token = (
+        await client.post(
+            "/api/auth/login", json={"email": "clerk@example.com", "password": "password123"}
+        )
+    ).json()["access_token"]
+
+    # Clerk can create normal users…
+    normal = await client.post(
+        "/api/users",
+        headers=_auth(clerk_token),
+        json={"email": "normal@example.com", "password": "password123", "full_name": "N"},
+    )
+    assert normal.status_code == 201
+
+    # …but cannot mint a superuser (privilege escalation)
+    escalated = await client.post(
+        "/api/users",
+        headers=_auth(clerk_token),
+        json={
+            "email": "evil-super@example.com",
+            "password": "password123",
+            "full_name": "Evil",
+            "is_superuser": True,
+        },
+    )
+    assert escalated.status_code == 403
+
+
+async def test_self_deactivation_and_last_superuser_guarded(client):
+    admin = await _login(client)
+    me = (await client.get("/api/auth/me", headers=_auth(admin))).json()
+
+    # Cannot deactivate yourself
+    self_off = await client.patch(
+        f"/api/users/{me['id']}", headers=_auth(admin), json={"is_active": False}
+    )
+    assert self_off.status_code == 422
+
+    # Create a second superuser, deactivate it — fine while another exists
+    second = (
+        await client.post(
+            "/api/users",
+            headers=_auth(admin),
+            json={
+                "email": "super2@example.com",
+                "password": "password123",
+                "full_name": "S2",
+                "is_superuser": True,
+            },
+        )
+    ).json()
+    off = await client.patch(
+        f"/api/users/{second['id']}", headers=_auth(admin), json={"is_active": False}
+    )
+    assert off.status_code == 200
+
+    # Admin is now the last active superuser — deactivation must be blocked
+    last = await client.patch(
+        f"/api/users/{me['id']}", headers=_auth(admin), json={"is_active": False}
+    )
+    assert last.status_code == 422
+    assert "last active superuser" in last.json()["error"]["detail"]
+
+
+async def test_login_rate_limited_after_repeated_failures(client):
+    # Unique email per run — redis persists between runs, so a fixed address
+    # would inherit its old failure counter.
+    import uuid as _uuid
+
+    email = f"ratelimit-{_uuid.uuid4().hex[:8]}@example.com"
+    for _ in range(10):
+        response = await client.post(
+            "/api/auth/login", json={"email": email, "password": "wrong-password"}
+        )
+        assert response.status_code == 401
+    blocked = await client.post(
+        "/api/auth/login", json={"email": email, "password": "wrong-password"}
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "rate_limited"
+    # Even the correct password is blocked while the window is active
+    still_blocked = await client.post(
+        "/api/auth/login", json={"email": email, "password": "admin123"}
+    )
+    assert still_blocked.status_code == 429

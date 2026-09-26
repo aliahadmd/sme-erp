@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +37,27 @@ class Settings(BaseSettings):
     admin_full_name: str = "Admin"
 
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value: object) -> object:
+        # Accept "http://a,http://b" as well as JSON-array syntax.
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def _production_safety(self) -> "Settings":
+        """Fail fast on insecure defaults outside dev — the app must not boot
+        with a known/forgotten default secret in staging or production."""
+        if self.environment != "dev" and (
+            self.jwt_secret == "dev-secret-change-me" or len(self.jwt_secret) < 32
+        ):
+            raise ValueError(
+                "JWT_SECRET must be overridden with at least 32 characters "
+                "when ENVIRONMENT is not 'dev'"
+            )
+        return self
 
     @property
     def ai_enabled(self) -> bool:

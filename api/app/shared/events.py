@@ -12,6 +12,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.core.logging import get_logger
+
 
 @dataclass(frozen=True)
 class Event:
@@ -34,8 +36,22 @@ def subscribers(event_name: str) -> list[Handler]:
 
 
 async def publish(event: Event) -> None:
+    """Dispatch to subscribers with per-handler error isolation.
+
+    Handlers run AFTER the publishing transaction committed — a failing
+    handler must never surface as a failed request for work that already
+    happened. Failures are logged and remaining handlers still run.
+    """
+    logger = get_logger("app.events")
     for handler in subscribers(event.name):
-        await handler(event)
+        try:
+            await handler(event)
+        except Exception:
+            logger.exception(
+                "event_handler_failed",
+                event_name=event.name,
+                handler=getattr(handler, "__qualname__", str(handler)),
+            )
 
 
 def clear_subscribers() -> None:

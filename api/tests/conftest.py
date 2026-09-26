@@ -58,7 +58,7 @@ async def _database():
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         await seed(session)
-    await engine.dispose()
+    _shared_engine = engine  # noqa: F841
     yield
 
 

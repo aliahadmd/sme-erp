@@ -33,3 +33,20 @@ async def test_event_bus_dispatches_to_subscribers():
     assert len(seen) == 1
     assert seen[0].payload == {"x": 1}
     clear_subscribers()
+
+
+async def test_event_bus_isolates_failing_handlers():
+    clear_subscribers()
+    seen: list[str] = []
+
+    async def bad(_event: Event) -> None:
+        raise RuntimeError("handler blew up")
+
+    async def good(_event: Event) -> None:
+        seen.append("good")
+
+    subscribe("test.isolation", bad)
+    subscribe("test.isolation", good)
+    await publish(Event(name="test.isolation"))
+    assert seen == ["good"], "failing handler must not block the others"
+    clear_subscribers()

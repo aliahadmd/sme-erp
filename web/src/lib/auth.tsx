@@ -36,14 +36,32 @@ type AuthState = {
 
 const AuthContext = React.createContext<AuthState | undefined>(undefined)
 
-async function requestRefresh(): Promise<boolean> {
+let refreshInFlight: Promise<boolean> | null = null
+
+async function doRefresh(): Promise<boolean> {
   try {
-    const result = await api.post<{ access_token: string }>("/api/auth/refresh")
+    // retry: false is critical — a 401 from the refresh call itself must not
+    // re-enter the refresh flow (that recursion caused infinite request storms).
+    const result = await api.post<{ access_token: string }>("/api/auth/refresh", undefined, {
+      retry: false,
+    })
     accessToken = result.access_token
     return true
   } catch {
+    accessToken = null
     return false
   }
+}
+
+/** Single-flight: parallel 401s share one refresh instead of racing the
+ * rotating refresh cookie against itself. */
+function requestRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

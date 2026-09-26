@@ -63,7 +63,12 @@ export async function apiFetch<T>(
     credentials: "include",
   })
 
-  if (response.status === 401 && retry && tokenProvider.refresh) {
+  if (
+    response.status === 401 &&
+    retry &&
+    !path.startsWith("/api/auth/") &&
+    tokenProvider.refresh
+  ) {
     const refreshed = await tokenProvider.refresh()
     if (refreshed) {
       return apiFetch<T>(path, { ...options, retry: false })
@@ -96,8 +101,12 @@ export async function apiFetch<T>(
 
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
+  post: <T>(path: string, body?: unknown, options?: { retry?: boolean }) =>
+    apiFetch<T>(path, {
+      method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+      ...options,
+    }),
   patch: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
   put: <T>(path: string, body?: unknown) =>

@@ -277,3 +277,81 @@ async def test_warehouse_rbac(client, inv):
         json={"lines": [{"product_id": inv["product"], "qty": "1", "unit_cost": "1"}]},
     )
     assert forbidden.status_code == 403
+
+
+async def test_concurrent_deliveries_never_lose_updates(client, inv):
+    """Two parallel postings for the same stock row must serialize (FOR UPDATE),
+    not both read the same on-hand and lose an update."""
+    import asyncio
+    import uuid
+    from datetime import UTC, datetime
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from tests.conftest import TEST_DATABASE_URL
+
+    admin = await _admin(client)
+    await _setup(client, admin, inv)
+
+    # Stock in: 4 units
+    po = await _confirmed_po(client, admin, inv, "4", "1.00")
+    receipt = (
+        await client.post(
+            "/api/inventory/receipts", headers=_auth(admin), json={"source_po_id": po}
+        )
+    ).json()
+    await client.post(f"/api/inventory/receipts/{receipt['id']}/post", headers=_auth(admin))
+
+    # Two confirmed SOs of 1 unit each; post both deliveries concurrently
+    so1 = await _confirmed_so(client, admin, inv, "1", "5.00")
+    so2 = await _confirmed_so(client, admin, inv, "1", "5.00")
+    d1 = (
+        await client.post(
+            "/api/inventory/deliveries", headers=_auth(admin), json={"source_so_id": so1}
+        )
+    ).json()
+    d2 = (
+        await client.post(
+            "/api/inventory/deliveries", headers=_auth(admin), json={"source_so_id": so2}
+        )
+    ).json()
+
+    engine = create_async_engine(TEST_DATABASE_URL)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def post_via_service(delivery_id: str) -> None:
+        from app.modules.inventory.models import Delivery
+        from app.modules.inventory.service import post_move
+
+        async with factory() as session:
+            delivery = await session.get(Delivery, uuid.UUID(delivery_id))
+            for line in delivery.lines:
+                await post_move(
+                    session,
+                    org_id=delivery.org_id,
+                    product_id=line.product_id,
+                    warehouse_id=delivery.warehouse_id,
+                    qty=-line.qty,
+                    move_type="delivery",
+                    ref_type="delivery",
+                    ref_id=delivery.id,
+                    ref_number=delivery.number,
+                )
+            delivery.status = "posted"
+            delivery.posted_at = datetime.now(UTC)
+            await session.commit()
+
+    stock_before = (await client.get("/api/inventory/stock", headers=_auth(admin))).json()
+    before = float(
+        next(r for r in stock_before if r["product_id"] == inv["product"])["qty_on_hand"]
+    )
+
+    try:
+        await asyncio.gather(post_via_service(d1["id"]), post_via_service(d2["id"]))
+    finally:
+        await engine.dispose()
+
+    stock = (await client.get("/api/inventory/stock", headers=_auth(admin))).json()
+    row = next(r for r in stock if r["product_id"] == inv["product"])
+    # Two serialized out-moves; a lost update would leave before-1
+    assert float(row["qty_on_hand"]) == before - 2
