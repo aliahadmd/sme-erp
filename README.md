@@ -66,6 +66,21 @@ In development the database, Redis, and S3 run as local containers; for
 deployment their host/credential variables can simply be pointed at external
 services — no code changes.
 
+## Production deployment
+
+```bash
+# local smoke of the production stack (builds images, runs checks, tears down):
+PROXY_PORT=8080 ADMIN_EMAIL=... ADMIN_PASSWORD=... make deploy-check
+
+# real deployment: create a Dokploy "Compose" service from docker-compose.prod.yml,
+# paste the .env values (ENVIRONMENT=prod, JWT_SECRET, POSTGRES_*, S3_*, ADMIN_*, ...),
+# point the domain at the web container (port 8080) — HTTPS is terminated by Dokploy.
+```
+
+`docker-compose.prod.yml` runs: api (migrations + uvicorn, non-root), worker (arq),
+web (nginx serving the built SPA + proxying `/api`), postgres, redis, seaweedfs.
+The SPA is served and the API reached on ONE origin — no CORS setup needed.
+
 ## Implementation plans
 
 See [`plans/phase1/index.md`](plans/phase1/index.md) for the phase-1 plan set,

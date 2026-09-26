@@ -41,12 +41,13 @@ class Settings(BaseSettings):
     admin_password: str = "admin123"
     admin_full_name: str = "Admin"
 
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # Accepts a comma-separated string from the environment (also "" → []);
+    # normalized to a list by the validator.
+    cors_origins: str | list[str] = "http://localhost:5173"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors_origins(cls, value: object) -> object:
-        # Accept "http://a,http://b" as well as JSON-array syntax.
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value

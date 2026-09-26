@@ -33,6 +33,11 @@ seed: ## Seed bootstrap data (admin user, roles, permissions)
 seed-demo: ## Seed a coherent demo dataset (requires services up)
 	$(COMPOSE) exec api python -m app.core.seed_demo
 
+deploy-check: ## Build the prod compose locally and run the smoke script
+	ENVIRONMENT=prod docker compose -f docker-compose.prod.yml up -d --build
+	./docker/deploy-smoke.sh
+	docker compose -f docker-compose.prod.yml down
+
 jobs-logs: ## Follow the background worker logs
 	$(COMPOSE) logs -f --tail=100 worker
 
