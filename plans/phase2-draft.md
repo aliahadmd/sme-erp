@@ -1,4 +1,7 @@
-# Phase 2 — Draft Backlog
+# Phase 2 — Draft Backlog (SUPERSEDED)
+
+> **Superseded by [`plans/phase2/index.md`](phase2/index.md)** — these raw notes
+> were expanded into the 10 executable phase-2 plans. Kept for reference.
 
 Deferred from phase 1 (see `phase1/index.md §6`). Rough priority order; refine
 into `phase2/plan-*.md` files before starting.
