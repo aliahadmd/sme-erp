@@ -590,29 +590,38 @@ async def party_statement(
             .where(
                 Invoice.org_id == org.id,
                 Invoice.party_id == party_id,
-                Invoice.status.in_(("posted", "partial")),
+                # Invoices carry what is owed; posted credit notes reduce it.
+                (
+                    (Invoice.status.in_(("posted", "partial")))
+                    | ((Invoice.status == "paid") & (Invoice.invoice_type.endswith("_credit")))
+                ),
             )
             .order_by(Invoice.invoice_date)
         )
     ).all()
-    lines = [
-        inv.StatementLine(
-            invoice_id=invoice.id,
-            number=invoice.number,
-            invoice_date=invoice.invoice_date,
-            due_date=invoice.due_date,
-            total=invoice.total,
-            amount_paid=invoice.amount_paid,
-            balance=Decimal(str(invoice.total)) - Decimal(str(invoice.amount_paid)),
-            status=invoice.status,
+    lines = []
+    open_balance = Decimal("0.00")
+    for invoice in invoices:
+        if invoice.invoice_type.endswith("_credit"):
+            balance = -Decimal(str(invoice.total))
+        else:
+            balance = Decimal(str(invoice.total)) - Decimal(str(invoice.amount_paid))
+        open_balance += balance
+        lines.append(
+            inv.StatementLine(
+                invoice_id=invoice.id,
+                number=invoice.number,
+                invoice_date=invoice.invoice_date,
+                due_date=invoice.due_date,
+                total=invoice.total,
+                amount_paid=invoice.amount_paid,
+                balance=balance,
+                status=invoice.status,
+            )
         )
-        for invoice in invoices
-    ]
     return inv.StatementOut(
         party_id=party_id,
         party_name=party.name,
-        open_balance=sum((line.balance for line in lines), Decimal("0.00")).quantize(
-            Decimal("0.01")
-        ),
+        open_balance=open_balance.quantize(Decimal("0.01")),
         invoices=lines,
     )

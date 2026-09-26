@@ -151,15 +151,6 @@ async def list_quotations(
         like = f"%{q.lower()}%"
         stmt = stmt.where(or_(Quotation.number.ilike(like), Quotation.customer_name.ilike(like)))
     rows, total = await paginate(session, stmt, params)
-    # Lazy expiry pass on the visible page
-    today = date.today()
-    changed = False
-    for quote in rows:
-        check_expiry(quote, today)
-        if quote.status == "expired":
-            changed = True
-    if changed:
-        await session.commit()
     return {
         "items": [QuoteOut.model_validate(r).model_dump(mode="json") for r in rows],
         "total": total,
@@ -176,9 +167,6 @@ async def get_quotation(
 ) -> dict:
     org = await get_organization(session)
     quote = await _quote_or_404(session, org.id, quote_id)
-    check_expiry(quote, date.today())
-    if quote.status == "expired":
-        await session.commit()
     return QuoteOut.model_validate(quote).model_dump(mode="json")
 
 
@@ -209,6 +197,10 @@ async def create_quotation(
     lines = await _build_lines(session, org.id, body.lines)
     quotation.lines = lines
     recompute(quotation)
+    from app.modules.currencies.service import resolve_rate, to_base
+
+    quotation.fx_rate = await resolve_rate(session, org.id, body.currency, quotation.quote_date)
+    quotation.total_base = to_base(quotation.total, quotation.fx_rate)
     session.add(quotation)
     await write_audit(
         session,
@@ -360,6 +352,7 @@ async def convert_quotation(
         customer_name=quotation.customer_name,
         order_date=date.today(),
         currency=quotation.currency,
+        fx_rate=quotation.fx_rate,
         notes=f"From {quotation.number}" + (f" — {quotation.notes}" if quotation.notes else ""),
         created_by=user.id,
         status="draft",
@@ -382,9 +375,11 @@ async def convert_quotation(
                 line_total=line.line_total,
             )
         )
+    from app.modules.currencies.service import to_base
     from app.shared.order_engine import recompute_header
 
     recompute_header(order, order.lines)
+    order.total_base = to_base(order.total, order.fx_rate)
     session.add(order)
     await session.flush()
     quotation.status = "converted"

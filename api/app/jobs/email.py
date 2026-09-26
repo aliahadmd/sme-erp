@@ -34,8 +34,8 @@ def _send_smtp(to: str, subject: str, body: str) -> None:
 async def send_email(ctx: dict[str, Any], to: str, subject: str, body: str) -> dict[str, str]:
     settings = get_settings()
     if not settings.smtp_host:
-        logger.info("email_logged_not_sent", to=to, subject=subject, body=body[:200])
+        logger.info("email_logged_not_sent", to=to, subject=subject, length=len(body))
         return {"status": "logged"}
     _send_smtp(to, subject, body)
-    logger.info("email_sent", to=to, subject=subject)
+    logger.info("email_sent", to=to, subject=subject, length=len(body))
     return {"status": "sent"}

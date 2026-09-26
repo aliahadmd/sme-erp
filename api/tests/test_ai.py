@@ -88,3 +88,40 @@ async def test_draft_review_lifecycle(client):
         await client.get(f"/api/catalog/products/{product['id']}", headers=_auth(admin))
     ).json()
     assert product_after["description"] == "A great widget."
+
+
+async def test_ai_budget_enforced(client):
+    """Without a key each call is ai_disabled(503); the budget guard still
+    limits daily usage — third call exceeds the limit of 2."""
+    import os
+    from datetime import date
+
+    admin = await _admin(client)
+    headers = _auth(admin)
+    key = f"ai:budget:{date.today().isoformat()}"
+
+    # start from a clean budget counter (redis persists across runs)
+    from redis.asyncio import from_url as aioredis_from_url
+
+    from app.core.config import get_settings
+
+    r = aioredis_from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        await r.delete(key)
+    finally:
+        await r.aclose()
+
+    os.environ["AI_DAILY_REQUEST_LIMIT"] = "2"
+    try:
+        statuses = []
+        for i in range(3):
+            response = await client.post(
+                "/api/ai/summarize",
+                headers=headers,
+                json={"report": "sales", "payload": {"i": i}},
+            )
+            statuses.append(response.status_code)
+        # calls 1-2: ai_disabled(503) — no key configured; call 3: budget(429)
+        assert statuses == [503, 503, 429]
+    finally:
+        os.environ.pop("AI_DAILY_REQUEST_LIMIT", None)

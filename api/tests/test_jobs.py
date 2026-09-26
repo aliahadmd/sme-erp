@@ -12,8 +12,14 @@ async def test_worker_settings_wiring():
     from app.jobs import WorkerSettings
 
     names = [f.__name__ for f in WorkerSettings.functions]
-    assert set(names) >= {"check_overdue_invoices", "purge_login_counters", "worker_heartbeat"}
-    assert len(WorkerSettings.cron_jobs) == 5  # overdue, counters, backup, retention, heartbeat
+    assert set(names) >= {
+        "check_overdue_invoices",
+        "purge_login_counters",
+        "generate_missing_descriptions",
+        "expire_quotations",
+        "worker_heartbeat",
+    }
+    assert len(WorkerSettings.cron_jobs) == 6  # overdue, counters, backup, retention, heartbeat
 
 
 async def test_inline_enqueue_runs_job(client):

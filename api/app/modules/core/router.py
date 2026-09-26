@@ -548,8 +548,8 @@ async def update_numbering_prefix(
     )
 
     prefix = str(body.value.get("prefix", "")).strip()
-    if not prefix or not prefix.replace("-", "").replace("_", "").isalnum():
-        raise ValidationError("Prefix must be alphanumeric (dashes allowed)")
+    if not prefix or len(prefix) > 10 or not prefix.replace("-", "").replace("_", "").isalnum():
+        raise ValidationError("Prefix must be 1-10 characters, alphanumeric with dashes allowed")
     if entity not in DEFAULT_SETTINGS["numbering.prefixes"]:
         raise NotFoundError(f"Unknown numbering entity: {entity}")
     org = await get_organization(session)

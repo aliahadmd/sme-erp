@@ -5,9 +5,11 @@ automatically. Search uses pgvector embeddings when present and falls back to
 ILIKE keyword matching otherwise (and when AI is disabled entirely).
 """
 
+import os
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +34,19 @@ def _ai_client() -> AIClient:
     return client
 
 
+async def _check_budget(request: Request) -> None:
+    """Daily AI request budget (per deployment). Exceeding it returns 429."""
+    limit = int(os.environ.get("AI_DAILY_REQUEST_LIMIT", "200"))
+    key = f"ai:budget:{date.today().isoformat()}"
+    count = await request.app.state.redis.incr(key)
+    if count == 1:
+        await request.app.state.redis.expire(key, 60 * 60 * 48)
+    if count > limit:
+        raise DomainError(
+            "AI daily request budget exceeded", code="ai_budget_exceeded", status_code=429
+        )
+
+
 # ---------------------------------------------------------------- summaries
 class SummarizeIn(BaseModel):
     report: str  # dashboard | sales | purchases | aging | tax
@@ -41,8 +56,10 @@ class SummarizeIn(BaseModel):
 @router.post("/summarize")
 async def summarize_report(
     body: SummarizeIn,
+    request: Request,
     _user: CurrentUser = Depends(require("reports.view")),
 ) -> dict:
+    await _check_budget(request)
     client = _ai_client()
     try:
         result = await client.complete(
@@ -133,8 +150,8 @@ async def semantic_search(
     _user: CurrentUser = Depends(require("reports.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    """Search products/contacts. Uses pgvector embeddings when the row has one,
-    otherwise falls back to ILIKE keyword matching."""
+    """Keyword search over active products (embeddings-based semantic search
+    is planned; this is the deterministic fallback)."""
     org = await get_organization(session)
     like = f"%{q.lower()}%"
     from app.modules.catalog.models import Product

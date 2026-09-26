@@ -27,6 +27,7 @@ class WorkerSettings:
         maintenance.check_overdue_invoices,
         maintenance.purge_login_counters,
         maintenance.generate_missing_descriptions,
+        maintenance.expire_quotations,
         backups.backup_database,
         backups.prune_audit_logs,
         worker_heartbeat,
@@ -35,6 +36,7 @@ class WorkerSettings:
         cron(maintenance.check_overdue_invoices, hour=7, minute=0, unique=True),
         cron(maintenance.purge_login_counters, minute={0, 10, 20, 30, 40, 50}, unique=True),
         cron(backups.backup_database, hour=2, minute=30, unique=True),
+        cron(maintenance.expire_quotations, hour=0, minute=5, unique=True),
         cron(backups.prune_audit_logs, hour=3, minute=15, unique=True),
         cron(worker_heartbeat, minute=set(range(60)), unique=True),
     ]

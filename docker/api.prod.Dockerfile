@@ -20,6 +20,8 @@ COPY --from=deps /app/.venv /app/.venv
 COPY api/alembic.ini api/pyproject.toml api/uv.lock ./
 COPY api/app ./app
 COPY api/alembic ./alembic
+# Backup job writes dumps here — must exist and be writable by appuser.
+RUN install -d -o appuser -g app /app/dumps
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1

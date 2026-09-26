@@ -111,3 +111,33 @@ async def generate_missing_descriptions(
         await session.commit()
     logger.info("ai_drafts_created", created=created)
     return {"created": created}
+
+
+@register_job
+async def expire_quotations(ctx: dict[str, Any]) -> dict[str, int]:
+    """Mark sent quotations past their valid_until date as expired."""
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from app.core.db import SessionFactory
+    from app.modules.sales.models import Quotation
+
+    expired = 0
+    async with SessionFactory() as session:
+        quotes = (
+            await session.scalars(
+                select(Quotation).where(
+                    Quotation.org_id.is_not(None),
+                    Quotation.status == "sent",
+                    Quotation.valid_until.is_not(None),
+                    Quotation.valid_until < date.today(),
+                )
+            )
+        ).all()
+        for quote in quotes:
+            quote.status = "expired"
+            expired += 1
+        await session.commit()
+    logger.info("quotations_expired", count=expired)
+    return {"expired": expired}

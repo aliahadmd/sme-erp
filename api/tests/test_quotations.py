@@ -121,7 +121,10 @@ async def test_expired_quote_cannot_be_accepted(client):
         )
     ).json()
     await client.post(f"/api/sales/quotations/{quote['id']}/send", headers=_auth(token))
-    # Reading the quote triggers lazy expiry
+    # Expiry runs as a scheduled job (cron in production)
+    from app.jobs.maintenance import expire_quotations
+
+    await expire_quotations({})
     viewed = (await client.get(f"/api/sales/quotations/{quote['id']}", headers=_auth(token))).json()
     assert viewed["status"] == "expired"
     accept = await client.post(f"/api/sales/quotations/{quote['id']}/accept", headers=_auth(token))

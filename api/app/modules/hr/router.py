@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.core.deps import CurrentUser, require
+from app.modules.core.models import Permission, Role, RolePermission, User, UserRole
 from app.modules.core.service import get_organization, notify, write_audit
 from app.modules.hr.models import (
     Department,
@@ -221,10 +222,30 @@ class LeaveRequestOut(BaseModel):
     decided_at: date | None
 
 
+async def _has_permission(session: AsyncSession, user_id: uuid.UUID, code: str) -> bool:
+    """Superusers pass everything; otherwise the user's roles must carry the code."""
+    if (
+        await session.scalars(
+            select(User.id).where(User.id == user_id, User.is_superuser.is_(True))
+        )
+    ).first():
+        return True
+    return (
+        await session.scalars(
+            select(UserRole.user_id)
+            .join(Role, Role.id == UserRole.role_id)
+            .join(RolePermission, RolePermission.role_id == Role.id)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(UserRole.user_id == user_id, Permission.code == code)
+            .distinct()
+        )
+    ).first() is not None
+
+
 @router.get("/leave-requests", response_model=list[LeaveRequestOut])
 async def list_leave_requests(
     status: str | None = None,
-    _user: CurrentUser = Depends(require("hr.leave.request")),
+    user: CurrentUser = Depends(require("hr.leave.request")),
     session: AsyncSession = Depends(get_session),
 ) -> list[LeaveRequest]:
     org = await get_organization(session)
@@ -235,6 +256,16 @@ async def list_leave_requests(
     )
     if status:
         stmt = stmt.where(LeaveRequest.status == status)
+    # Non-approvers only see requests for their own employee record.
+    if not user.is_superuser and not await _has_permission(session, user.id, "hr.leave.approve"):
+        own = (
+            await session.scalars(
+                select(Employee).where(Employee.org_id == org.id, Employee.user_id == user.id)
+            )
+        ).first()
+        if own is None:
+            return []
+        stmt = stmt.where(LeaveRequest.employee_id == own.id)
     return list((await session.scalars(stmt)).all())
 
 
@@ -246,6 +277,17 @@ async def create_leave_request(
 ) -> LeaveRequest:
     org = await get_organization(session)
     employee = await _employee_or_404(session, org.id, body.employee_id)
+    # Ownership: employees may only request for themselves; approvers for anyone.
+    if not user.is_superuser and not await _has_permission(session, user.id, "hr.leave.approve"):
+        own = (
+            await session.scalars(
+                select(Employee).where(Employee.org_id == org.id, Employee.user_id == user.id)
+            )
+        ).first()
+        if own is None or own.id != employee.id:
+            raise PermissionDeniedError(
+                "You can only submit leave requests for your own employee record"
+            )
     if body.date_to < body.date_from:
         raise ValidationError("date_to must be on or after date_from")
     days = Decimal(str((body.date_to - body.date_from).days + 1))
