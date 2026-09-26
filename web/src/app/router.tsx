@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router"
 
 import { RequireAuth, RequirePermission } from "@/app/require-auth"
+import { ErrorPage } from "@/app/error-page"
 import { ForbiddenPage } from "@/app/forbidden-page"
 import { LoginPage } from "@/features/auth/login-page"
 import { DashboardPage } from "@/features/dashboard/dashboard-page"
@@ -30,9 +31,10 @@ import { OrderEditorRoute } from "@/features/documents/order-editor-page"
 import { OrdersListPage } from "@/features/documents/orders-list-page"
 
 export const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
+  { path: "/login", element: <LoginPage />, ErrorBoundary: ErrorPage },
   {
     path: "/",
+    ErrorBoundary: ErrorPage,
     element: <RequireAuth />,
     children: [
       { index: true, element: <DashboardPage /> },
