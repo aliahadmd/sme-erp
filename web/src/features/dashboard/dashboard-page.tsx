@@ -60,14 +60,23 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Sales this month" value={Number(data?.sales_mtd ?? 0).toFixed(2)} to="/invoicing/ar" />
-        <KpiCard label="Open receivables" value={Number(data?.open_ar ?? 0).toFixed(2)} to="/invoicing/ar" />
-        <KpiCard label="Open payables" value={Number(data?.open_ap ?? 0).toFixed(2)} to="/invoicing/ap" />
-        <KpiCard
-          label="Low stock items"
-          value={String(data?.low_stock_count ?? 0)}
-          to="/inventory?low=1"
-        />
+        {[
+          { label: "Sales this month", value: Number(data?.sales_mtd ?? 0).toFixed(2), to: "/invoicing/ar" },
+          { label: "Open receivables", value: Number(data?.open_ar ?? 0).toFixed(2), to: "/invoicing/ar" },
+          { label: "Open payables", value: Number(data?.open_ap ?? 0).toFixed(2), to: "/invoicing/ap" },
+          { label: "Low stock items", value: String(data?.low_stock_count ?? 0), to: "/inventory?low=1" },
+        ].map((kpi, i) => (
+          <div
+            key={kpi.label}
+            className="stagger-item"
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
+            <Link to={kpi.to ?? "#"} className="block rounded-lg border p-4 transition-colors hover:bg-muted/40">
+              <div className="text-sm text-muted-foreground">{kpi.label}</div>
+              <div className="mt-2 text-2xl font-semibold">{kpi.value}</div>
+            </Link>
+          </div>
+        ))}
       </div>
 
       <div className="rounded-lg border p-4">

@@ -1,5 +1,6 @@
 import { LogOut, Menu } from "lucide-react"
 import { useState } from "react"
+import { useLocation } from "react-router"
 import { NavLink, Outlet } from "react-router"
 import { toast } from "sonner"
 
@@ -110,6 +111,7 @@ function UserMenu() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
   return (
     <div className="flex min-h-svh">
       {/* Desktop sidebar */}
@@ -145,7 +147,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ThemeToggle />
           <UserMenu />
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6">
+          <div key={location.pathname} className="page-enter">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   )

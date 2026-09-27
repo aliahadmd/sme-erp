@@ -131,3 +131,62 @@
     @apply font-sans;
     }
 }
+/* ---------------------------------------------------------------------------
+   Motion design tokens (emil-skills design engineering)
+   Strong custom curves — built-in CSS easings are too weak for UI work.
+--------------------------------------------------------------------------- */
+:root {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* One-time entrance for page content and card groups. Fast, subtle,
+   never blocks interaction. */
+@keyframes enter-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: enter-fade-rise 200ms var(--ease-out-strong) both;
+}
+
+.stagger-item {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: enter-fade-rise 300ms var(--ease-out-strong) forwards;
+}
+
+/* Reduced motion: keep opacity/color transitions that aid comprehension,
+   drop movement and position changes. Fewer and gentler — not zero. */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .stagger-item {
+    animation: fade-only 150ms ease both;
+    transform: none;
+  }
+
+  @keyframes fade-only {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+}
