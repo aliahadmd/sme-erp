@@ -1,0 +1,20 @@
+# Build context is the repo root. Keep host-only artifacts out of images:
+# the host's macOS .venv / node_modules must never overwrite the Linux ones.
+**/node_modules
+**/.venv
+**/dist
+**/.vite
+**/*.tsbuildinfo
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.DS_Store
+.git
+.env
+.env.*
+dumps
+plans
+.v2c
+.video_agent

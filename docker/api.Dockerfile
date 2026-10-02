@@ -1,6 +1,7 @@
-# Dev image: uv-managed Python 3.12 with dependencies baked in.
-# Source code is bind-mounted by docker-compose.yml; the venv survives the
-# bind mount via the `api_venv` named volume.
+# Dev image: uv-managed Python 3.12 with dependencies AND source baked in.
+# No bind mounts (Docker Desktop cannot share the SSD volume this repo lives
+# on) — `make up` rebuilds the image; for live reload run `make dev-api` on
+# the host instead.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -12,9 +13,9 @@ WORKDIR /app
 COPY api/pyproject.toml api/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
 
+COPY api/ .
+
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 
-# docker-compose overrides this with "uv sync --frozen && uvicorn ..." so the
-# venv always matches the mounted lockfile.
-CMD ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
