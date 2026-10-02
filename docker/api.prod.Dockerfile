@@ -5,7 +5,9 @@ WORKDIR /app
 COPY api/pyproject.toml api/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.12-slim AS runtime
+# Pinned to bookworm: the deps stage (uv bookworm image) and the PGDG apt repo
+# below must match the runtime Debian release.
+FROM python:3.12-slim-bookworm AS runtime
 # pg_dump (PGDG, server-matching v17) for the backup job.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates gnupg \

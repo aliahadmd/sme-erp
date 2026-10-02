@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull-based deploy for a single-server demo host.
 #
-#   deploy/deploy.sh            redeploy only if origin/main moved (cron: every minute)
+#   deploy/deploy.sh            deploy origin/main if not deployed yet (cron: every minute)
 #   deploy/deploy.sh --force    redeploy now
 #
 # First run generates .env with random secrets (never committed; later runs
@@ -56,12 +56,18 @@ EOF
 fi
 
 git fetch --quiet origin "$BRANCH"
-if [[ "${1:-}" != "--force" && -z "${FORCE:-}" && "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$BRANCH")" ]]; then
-  exit 0  # nothing new
+target=$(git rev-parse "origin/$BRANCH")
+deployed=$(cat .deployed-sha 2>/dev/null || true)
+failed=$(cat .deploy-failed-sha 2>/dev/null || true)
+if [[ "${1:-}" != "--force" && -z "${FORCE:-}" && ( "$target" == "$deployed" || "$target" == "$failed" ) ]]; then
+  exit 0  # already deployed — or this exact commit already failed (push a fix or --force)
 fi
 
-log "deploying $(git rev-parse --short "origin/$BRANCH")"
-git reset --quiet --hard "origin/$BRANCH"
+# A failed build is remembered so cron does not rebuild it every minute.
+trap 'echo "$target" > .deploy-failed-sha; log "deploy FAILED for ${target:0:7}"' ERR
+
+log "deploying ${target:0:7}"
+git reset --quiet --hard "$target"
 "${COMPOSE[@]}" up -d --build --remove-orphans
 
 # The api seeds org/roles/admin at start; demo hosts also get role users + data.
@@ -77,4 +83,6 @@ if grep -q '^DEMO_SEED=true' .env; then
 fi
 
 docker image prune -f >/dev/null  # drop superseded build layers
+echo "$target" > .deployed-sha
+rm -f .deploy-failed-sha
 log "deployed — http://127.0.0.1:$(grep '^PROXY_PORT=' .env | cut -d= -f2)"
