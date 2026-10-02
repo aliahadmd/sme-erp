@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     admin_email: str = "admin@example.com"
     admin_password: str = "admin123"
     admin_full_name: str = "Admin"
+    # Demo deployments may seed the per-role test users outside dev.
+    allow_test_users: bool = False
 
     # Accepts a comma-separated string from the environment (also "" → []);
     # normalized to a list by the validator.

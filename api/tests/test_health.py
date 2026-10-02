@@ -1,12 +1,16 @@
 """Every plan lands with tests — these prove the foundation endpoints."""
 
 
-async def test_healthz_all_dependencies_ok(client):
+async def test_healthz_reports_dependencies(client):
     response = await client.get("/healthz")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["status"] == "ok"
-    assert body["checks"] == {"postgres": "ok", "redis": "ok", "s3": "ok"}
+    assert body["checks"]["postgres"] == "ok"
+    assert body["checks"]["redis"] == "ok"
+    # S3 only backs backups: when it is unreachable (e.g. CI has no S3
+    # service) health degrades but stays 200.
+    assert body["checks"]["s3"] in ("ok", "down")
+    assert body["status"] == ("ok" if body["checks"]["s3"] == "ok" else "degraded")
 
 
 async def test_meta(client):

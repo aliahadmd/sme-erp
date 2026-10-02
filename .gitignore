@@ -27,3 +27,6 @@ dist/
 
 # --- misc ---
 *.log
+
+# --- deploy ---
+.deploy.lock

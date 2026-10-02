@@ -90,24 +90,34 @@ services — no code changes.
 
 - `.github/workflows/ci.yml` — ruff + pytest (with pgvector/redis services) and
   web typecheck/lint/vitest/build on every push.
-- `.github/workflows/images.yml` — publishes api/web images to GHCR from main.
 - Backups: prod worker cron `backup_database` (02:30, GFS retention) and
   `prune_audit_logs` (03:15, `AUDIT_RETENTION_DAYS`); dev: `make backup`.
 
-## Production deployment
+## Production deployment (single demo server + Cloudflare Tunnel)
+
+Everything runs in Docker; **the only published port is the web container on
+`127.0.0.1:$PROXY_PORT`** (loopback — never `0.0.0.0`, Docker bypasses host
+firewalls). postgres/redis/seaweedfs/api/worker stay on the project's internal
+network. A host `cloudflared` tunnel routes a public hostname to that port.
 
 ```bash
-# local smoke of the production stack (builds images, runs checks, tears down):
-PROXY_PORT=8080 ADMIN_EMAIL=... ADMIN_PASSWORD=... make deploy-check
-
-# real deployment: create a Dokploy "Compose" service from docker-compose.prod.yml,
-# paste the .env values (ENVIRONMENT=prod, JWT_SECRET, POSTGRES_*, S3_*, ADMIN_*, ...),
-# point the domain at the web container (port 8080) — HTTPS is terminated by Dokploy.
+# one-time on the server
+git clone https://github.com/aliahadmd/sme-erp.git /opt/apps/sme-erp
+/opt/apps/sme-erp/deploy/deploy.sh          # generates .env, builds, starts, seeds demo
+( crontab -l; echo '* * * * * /opt/apps/sme-erp/deploy/deploy.sh >> /var/log/sme-erp-deploy.log 2>&1' ) | crontab -
+# Cloudflare dashboard → tunnel → public hostname → http://localhost:30001
 ```
 
-`docker-compose.prod.yml` runs: api (migrations + uvicorn, non-root), worker (arq),
-web (nginx serving the built SPA + proxying `/api`), postgres, redis, seaweedfs.
-The SPA is served and the API reached on ONE origin — no CORS setup needed.
+**Continuous deployment is pull-based:** cron runs `deploy/deploy.sh` every
+minute; it redeploys only when `origin/main` moved (`git reset --hard` +
+`docker compose up -d --build`). No SSH keys in GitHub, no inbound access.
+Server secrets live in the generated, git-ignored `.env` (`chmod 600`);
+deploys never rewrite it. Force a redeploy with `deploy/deploy.sh --force`.
+
+`docker-compose.prod.yml` runs: api (migrations + idempotent seed + uvicorn,
+non-root), worker (arq), web (nginx serving the built SPA + proxying `/api`),
+postgres, redis, seaweedfs. One origin — no CORS setup needed. Local smoke test
+of the same stack: `PROXY_PORT=8080 ADMIN_EMAIL=... ADMIN_PASSWORD=... make deploy-check`.
 
 ## Implementation plans
 

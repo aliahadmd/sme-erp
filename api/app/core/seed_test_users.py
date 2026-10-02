@@ -1,8 +1,8 @@
 """Dev-only test accounts — one user per system role, plus edge cases.
 
 Usage: `make seed-users` (after `make seed`). Idempotent: existing users are
-left untouched. Refuses to run unless ENVIRONMENT=dev — these passwords are
-public by design and must never exist in staging or production.
+left untouched. Refuses to run unless ENVIRONMENT=dev or ALLOW_TEST_USERS=true
+(demo deployments — set TEST_USER_PASSWORD there; never on real production).
 
 Accounts (all use TEST_USER_PASSWORD, default below):
 
@@ -141,8 +141,8 @@ async def seed_test_users(session) -> list[str]:  # noqa: ANN001
 async def main() -> None:
     settings = get_settings()
     setup_logging(settings.environment)
-    if settings.environment != "dev":
-        raise SystemExit("seed_test_users only runs with ENVIRONMENT=dev")
+    if settings.environment != "dev" and not settings.allow_test_users:
+        raise SystemExit("seed_test_users only runs with ENVIRONMENT=dev or ALLOW_TEST_USERS=true")
     engine = create_async_engine(settings.database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
