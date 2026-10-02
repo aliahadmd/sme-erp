@@ -31,6 +31,8 @@ export type LeaveRequest = {
 
 export const hrApi = {
   employees: () => api.get<Employee[]>("/api/hr/employees"),
+  /** The signed-in user's own employee record (404 when none is linked). */
+  myEmployee: () => api.get<Employee>("/api/hr/employees/me"),
   createEmployee: (body: {
     full_name: string
     work_email?: string
@@ -57,4 +59,6 @@ export const hrApi = {
     reason?: string
   }) => api.post<LeaveRequest>("/api/hr/leave-requests", body),
   approveLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/approve`, undefined),
+  rejectLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/reject`, undefined),
+  cancelLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/cancel`, undefined),
 }

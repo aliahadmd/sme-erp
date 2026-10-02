@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.core.deps import CurrentUser, require
 from app.modules.core.models import Organization
 from app.modules.core.service import get_organization, write_audit
@@ -20,6 +20,7 @@ from app.modules.crm.schemas import (
     ContactUpdateIn,
 )
 from app.shared.numbering import next_number
+from app.shared.order_engine import order_number_prefix
 from app.shared.pagination import PageParamsDep, paginate
 
 router = APIRouter(prefix="/crm")
@@ -87,8 +88,11 @@ async def create_contact(
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     org = await get_organization(session)
-    code = await next_number(session, org.id, "contact", "C")
-    contact = Contact(org_id=org.id, code=code, **body.model_dump())
+    prefix = await order_number_prefix(session, org.id, "contact", "C")
+    code = await next_number(session, org.id, "contact", prefix)
+    data = body.model_dump()
+    data["currency"] = data.get("currency") or org.base_currency
+    contact = Contact(org_id=org.id, code=code, **data)
     session.add(contact)
     await write_audit(
         session,
@@ -113,6 +117,8 @@ async def update_contact(
     org = await get_organization(session)
     contact = await _get_contact(session, org.id, contact_id)
     data = body.model_dump(exclude_unset=True)
+    if "currency" in data and not data["currency"]:
+        data.pop("currency")  # not nullable — omit rather than clear
     if data.get("is_customer") is False and data.get("is_supplier") is False:
         raise ValidationError("Contact must be a customer and/or a supplier")
     for field, value in data.items():
@@ -152,17 +158,38 @@ async def archive_contact(
     return contact
 
 
+async def _is_referenced(session: AsyncSession, contact_id: uuid.UUID) -> bool:
+    from app.modules.invoicing.models import Invoice, Payment
+    from app.modules.purchasing.models import PurchaseOrder
+    from app.modules.sales.models import Quotation, SalesOrder
+
+    checks = (
+        (SalesOrder, SalesOrder.customer_id),
+        (Quotation, Quotation.customer_id),
+        (PurchaseOrder, PurchaseOrder.supplier_id),
+        (Invoice, Invoice.party_id),
+        (Payment, Payment.party_id),
+    )
+    for model, column in checks:
+        if await session.scalar(select(model.id).where(column == contact_id).limit(1)):
+            return True
+    return False
+
+
 @router.delete("/contacts/{contact_id}", status_code=204)
 async def delete_contact(
     contact_id: uuid.UUID,
     user: CurrentUser = Depends(require("crm.contact.delete")),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Hard delete — only sensible before the contact has documents. Once orders
-    exist (plans 6-8) this endpoint refuses via reference checks."""
+    """Hard delete — only for contacts no document references. Referenced
+    contacts must be archived: deleting them would orphan posted documents."""
     org: Organization = await get_organization(session)
     contact = await _get_contact(session, org.id, contact_id)
-    # Reference checks are added by the document modules; CRM alone can delete.
+    if await _is_referenced(session, contact.id):
+        raise ConflictError(
+            "Contact is used by orders, quotations, invoices or payments — archive it instead"
+        )
     await write_audit(
         session,
         actor=user.user,

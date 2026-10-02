@@ -152,9 +152,17 @@ def create_app() -> FastAPI:
             )
         )
         jobs = await _jobs_status()
-        status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+        # The API cannot serve without postgres/redis → 503. S3 only backs
+        # backups today, so it degrades the status without failing health.
+        critical_ok = checks["postgres"] == "ok" and checks["redis"] == "ok"
+        if not critical_ok:
+            status = "down"
+        elif all(v == "ok" for v in checks.values()):
+            status = "ok"
+        else:
+            status = "degraded"
         return JSONResponse(
-            status_code=200 if status == "ok" else 503,
+            status_code=200 if critical_ok else 503,
             content={"status": status, "checks": checks, "jobs": jobs},
         )
 

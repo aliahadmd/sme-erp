@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { hrApi, type Employee, type LeaveRequest } from "@/features/hr/api"
+import { hrApi, type Employee } from "@/features/hr/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 const statusVariant = (status: string) =>
   status === "approved"
@@ -36,7 +36,7 @@ export function EmployeesPage() {
 
   const create = useMutation({
     mutationFn: () =>
-      api.post<Employee>("/api/hr/employees", { full_name: fullName, position }),
+      hrApi.createEmployee({ full_name: fullName, position }),
     onSuccess: () => {
       toast.success("Employee added")
       setFullName("")
@@ -99,11 +99,27 @@ export function LeaveRequestsPage() {
   const [typeId, setTypeId] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [typeName, setTypeName] = useState("")
+  const [typeDays, setTypeDays] = useState("20")
+
+  const { hasPermission } = useAuth()
+  const canSeeEmployees = hasPermission("hr.employee.read")
+  const canDecide = hasPermission("hr.leave.approve")
+  const canManageTypes = hasPermission("hr.employee.update")
 
   const employees = useQuery({
     queryKey: ["hr", "employees"],
     queryFn: () => hrApi.employees(),
+    enabled: canSeeEmployees,
   })
+  // Self-service: the user's own record (absent for HR staff without one).
+  const me = useQuery({
+    queryKey: ["hr", "employees", "me"],
+    queryFn: () => hrApi.myEmployee(),
+    retry: false,
+  })
+  const selectable: Employee[] = canSeeEmployees ? (employees.data ?? []) : me.data ? [me.data] : []
+  const selectedEmployee = employeeId || (!canSeeEmployees && me.data ? me.data.id : "")
   const leaveTypes = useQuery({
     queryKey: ["hr", "leave-types"],
     queryFn: () => hrApi.leaveTypes(),
@@ -112,18 +128,32 @@ export function LeaveRequestsPage() {
     queryKey: ["hr", "leave-requests", {}],
     queryFn: () => hrApi.leaveRequests({}),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["hr", "leave"] })
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["hr", "leave-requests"] })
 
   const employeeName = (id: string) =>
-    (employees.data ?? []).find((e) => e.id === id)?.full_name ?? id.slice(0, 8)
-  const typeName = (id: string) =>
+    selectable.find((e) => e.id === id)?.full_name ?? id.slice(0, 8)
+  const leaveTypeName = (id: string) =>
     (leaveTypes.data ?? []).find((t) => t.id === id)?.name ?? id.slice(0, 8)
 
+  const addType = useMutation({
+    mutationFn: () => hrApi.createLeaveType({ name: typeName, days_per_year: typeDays }),
+    onSuccess: (created) => {
+      toast.success(`Leave type "${created.name}" added`)
+      setTypeName("")
+      void queryClient.invalidateQueries({ queryKey: ["hr", "leave-types"] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+  })
+
   const decide = useMutation({
-    mutationFn: (vars: { id: string }) =>
-      api.post<LeaveRequest>(`/api/hr/leave-requests/${vars.id}/approve`, undefined),
-    onSuccess: () => {
-      toast.success("Leave approved")
+    mutationFn: (vars: { id: string; action: "approve" | "reject" | "cancel" }) =>
+      vars.action === "approve"
+        ? hrApi.approveLeave(vars.id)
+        : vars.action === "reject"
+          ? hrApi.rejectLeave(vars.id)
+          : hrApi.cancelLeave(vars.id),
+    onSuccess: (request) => {
+      toast.success(`Leave ${request.status}`)
       invalidate()
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
@@ -133,7 +163,9 @@ export function LeaveRequestsPage() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Leave requests</h1>
-        <p className="text-sm text-muted-foreground">Submit and approve time off</p>
+        <p className="text-sm text-muted-foreground">
+          {canDecide ? "Submit and decide on time off" : "Request time off — working days only"}
+        </p>
       </div>
 
       <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
@@ -141,11 +173,12 @@ export function LeaveRequestsPage() {
           <Label>Employee</Label>
           <select
             className="rounded-md border bg-transparent px-2 py-1.5 text-sm"
-            value={employeeId}
+            value={selectedEmployee}
+            disabled={!canSeeEmployees}
             onChange={(e) => setEmployeeId(e.target.value)}
           >
             <option value="">—</option>
-            {(employees.data ?? []).map((emp) => (
+            {selectable.map((emp) => (
               <option key={emp.id} value={emp.id}>
                 {emp.full_name}
               </option>
@@ -177,11 +210,11 @@ export function LeaveRequestsPage() {
         </div>
         <Button
           variant="outline"
-          disabled={!employeeId || !typeId || !dateFrom || !dateTo}
+          disabled={!selectedEmployee || !typeId || !dateFrom || !dateTo}
           onClick={async () => {
             try {
               await hrApi.createLeaveRequest({
-                employee_id: employeeId,
+                employee_id: selectedEmployee,
                 type_id: typeId,
                 date_from: dateFrom,
                 date_to: dateTo,
@@ -197,6 +230,44 @@ export function LeaveRequestsPage() {
         </Button>
       </div>
 
+      {canManageTypes && (
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="leave-type-name">New leave type</Label>
+            <Input
+              id="leave-type-name"
+              placeholder="Annual leave"
+              value={typeName}
+              onChange={(e) => setTypeName(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="leave-type-days">Working days / year</Label>
+            <Input
+              id="leave-type-days"
+              type="number"
+              min="0"
+              className="w-32"
+              value={typeDays}
+              onChange={(e) => setTypeDays(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            disabled={!typeName || !typeDays || addType.isPending}
+            onClick={() => addType.mutate()}
+          >
+            Add type
+          </Button>
+          {(leaveTypes.data ?? []).length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Existing:{" "}
+              {(leaveTypes.data ?? []).map((t) => `${t.name} (${Number(t.days_per_year)})`).join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
@@ -207,14 +278,14 @@ export function LeaveRequestsPage() {
               <TableHead>To</TableHead>
               <TableHead>Days</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-24" />
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {(requests.data ?? []).map((r) => (
               <TableRow key={r.id}>
                 <TableCell>{employeeName(r.employee_id)}</TableCell>
-                <TableCell>{typeName(r.type_id)}</TableCell>
+                <TableCell>{leaveTypeName(r.type_id)}</TableCell>
                 <TableCell className="text-sm">{r.date_from}</TableCell>
                 <TableCell className="text-sm">{r.date_to}</TableCell>
                 <TableCell className="font-mono text-sm">{Number(r.days)}</TableCell>
@@ -223,9 +294,38 @@ export function LeaveRequestsPage() {
                 </TableCell>
                 <TableCell>
                   {r.status === "pending" && (
-                    <Button size="sm" variant="outline" onClick={() => decide.mutate({ id: r.id })}>
-                      Approve
-                    </Button>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {canDecide && r.employee_id !== me.data?.id && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={decide.isPending}
+                            onClick={() => decide.mutate({ id: r.id, action: "approve" })}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={decide.isPending}
+                            onClick={() => decide.mutate({ id: r.id, action: "reject" })}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                      {(canDecide || r.employee_id === me.data?.id) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={decide.isPending}
+                          onClick={() => decide.mutate({ id: r.id, action: "cancel" })}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </TableCell>
               </TableRow>

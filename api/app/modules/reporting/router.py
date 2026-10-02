@@ -57,11 +57,34 @@ class StockValuationRow(BaseModel):
 
 
 class TaxSummaryRow(BaseModel):
+    direction: str  # output (sales, credit notes netted) | input (purchases)
     tax_code: str | None
     tax_name: str | None
     rate_pct: Decimal | None
     net: Decimal
     tax: Decimal
+
+
+# All report amounts are BASE currency (stored *_base snapshots or document
+# amounts divided by the document's snapshot rate). Credit notes are netted
+# (negated) against their side; void/draft documents are excluded.
+POSTED = "('posted','partial','paid')"
+SIGNED_TOTAL_BASE = "CASE WHEN invoice_type LIKE '%\\_credit' THEN -total_base ELSE total_base END"
+# Open (unsettled) amount in base currency: invoices owe what is not paid or
+# credited; credit notes not yet consumed reduce what the party owes.
+OPEN_BASE = (
+    "CASE WHEN invoice_type LIKE '%\\_credit' "
+    "THEN -(total - amount_paid) / fx_rate "
+    "ELSE (total - amount_paid - applied_credits) / fx_rate END"
+)
+
+
+def _side(side: str) -> dict[str, str]:
+    return {"t": side, "tc": f"{side}_credit"}
+
+
+def _q(value: object) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"))
 
 
 def _month_start() -> date:
@@ -77,69 +100,60 @@ async def dashboard(
     org = await get_organization(session)
     month_start = _month_start()
 
-    sales_mtd = (
-        await session.scalar(
-            text(
-                "SELECT COALESCE(SUM(total), 0) FROM invoicing.invoices "
-                "WHERE org_id = :org AND invoice_type = 'ar' "
-                "AND status IN ('posted','partial','paid') AND invoice_date >= :d"
-            ),
-            {"org": str(org.id), "d": month_start},
+    async def _period_total(side: str) -> Decimal:
+        return _q(
+            await session.scalar(
+                text(
+                    f"SELECT COALESCE(SUM({SIGNED_TOTAL_BASE}), 0) FROM invoicing.invoices "
+                    f"WHERE org_id = :org AND invoice_type IN (:t, :tc) "
+                    f"AND status IN {POSTED} AND invoice_date >= :d"
+                ),
+                {"org": str(org.id), "d": month_start, **_side(side)},
+            )
         )
-    ) or Decimal("0")
-    purchases_mtd = (
-        await session.scalar(
-            text(
-                "SELECT COALESCE(SUM(total), 0) FROM invoicing.invoices "
-                "WHERE org_id = :org AND invoice_type = 'ap' "
-                "AND status IN ('posted','partial','paid') AND invoice_date >= :d"
-            ),
-            {"org": str(org.id), "d": month_start},
+
+    async def _open(side: str) -> Decimal:
+        return _q(
+            await session.scalar(
+                text(
+                    f"SELECT COALESCE(SUM({OPEN_BASE}), 0) FROM invoicing.invoices "
+                    "WHERE org_id = :org AND invoice_type IN (:t, :tc) "
+                    "AND status IN ('posted','partial')"
+                ),
+                {"org": str(org.id), **_side(side)},
+            )
         )
-    ) or Decimal("0")
-    open_ar = (
-        await session.scalar(
-            text(
-                "SELECT COALESCE(SUM(total - amount_paid), 0) FROM invoicing.invoices "
-                "WHERE org_id = :org AND invoice_type = 'ar' AND status IN ('posted','partial')"
-            ),
-            {"org": str(org.id)},
-        )
-    ) or Decimal("0")
-    open_ap = (
-        await session.scalar(
-            text(
-                "SELECT COALESCE(SUM(total - amount_paid), 0) FROM invoicing.invoices "
-                "WHERE org_id = :org AND invoice_type = 'ap' AND status IN ('posted','partial')"
-            ),
-            {"org": str(org.id)},
-        )
-    ) or Decimal("0")
+
     low_stock = (
         await session.scalar(
             text(
                 """
-                SELECT COUNT(*) FROM inventory.stock s
-                JOIN catalog.products p ON p.id = s.product_id
-                WHERE s.org_id = :org AND s.qty_on_hand > 0 AND s.qty_on_hand <= p.min_stock
+                SELECT COUNT(*) FROM catalog.products p
+                CROSS JOIN inventory.warehouses w
+                LEFT JOIN inventory.stock s
+                       ON s.product_id = p.id AND s.warehouse_id = w.id
+                WHERE p.org_id = :org AND w.org_id = :org
+                  AND p.status = 'active' AND p.type = 'goods' AND p.track_inventory
+                  AND p.min_stock > 0
+                  AND COALESCE(s.qty_on_hand, 0) <= p.min_stock
                 """
             ),
             {"org": str(org.id)},
         )
     ) or 0
 
-    # 12-week sales/purchases buckets
+    # 12 full weeks + the current one, base currency, credit notes netted.
     today = date.today()
-    start = today - timedelta(days=today.weekday() + 77)  # 12 Mondays back
+    start = today - timedelta(days=today.weekday() + 77)
     rows = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT date_trunc('week', invoice_date)::date AS week_start,
-                       invoice_type, COALESCE(SUM(total), 0) AS total
+                       LEFT(invoice_type, 2) AS side,
+                       COALESCE(SUM({SIGNED_TOTAL_BASE}), 0) AS total
                 FROM invoicing.invoices
-                WHERE org_id = :org AND status IN ('posted','partial','paid')
-                  AND invoice_date >= :start
+                WHERE org_id = :org AND status IN {POSTED} AND invoice_date >= :start
                 GROUP BY 1, 2 ORDER BY 1
                 """
             ),
@@ -150,28 +164,63 @@ async def dashboard(
     for row in rows:
         week = row["week_start"].isoformat()
         buckets.setdefault(week, {"ar": Decimal("0"), "ap": Decimal("0")})
-        buckets[week]["ar" if row["invoice_type"] == "ar" else "ap"] += Decimal(str(row["total"]))
-    weeks = [
-        WeekPoint(
-            week_start=(start + timedelta(days=7 * i)).isoformat(),
-            sales=buckets.get((start + timedelta(days=7 * i)).isoformat(), {}).get(
-                "ar", Decimal("0")
-            ),
-            purchases=buckets.get((start + timedelta(days=7 * i)).isoformat(), {}).get(
-                "ap", Decimal("0")
-            ),
+        buckets[week][row["side"]] += Decimal(str(row["total"]))
+    weeks = []
+    for i in range(13):
+        week = (start + timedelta(days=7 * i)).isoformat()
+        point = buckets.get(week, {})
+        weeks.append(
+            WeekPoint(
+                week_start=week,
+                sales=point.get("ar", Decimal("0")),
+                purchases=point.get("ap", Decimal("0")),
+            )
         )
-        for i in range(13)
-    ]
 
     return DashboardOut(
-        sales_mtd=Decimal(str(sales_mtd)),
-        purchases_mtd=Decimal(str(purchases_mtd)),
-        open_ar=Decimal(str(open_ar)),
-        open_ap=Decimal(str(open_ap)),
+        sales_mtd=await _period_total("ar"),
+        purchases_mtd=await _period_total("ap"),
+        open_ar=await _open("ar"),
+        open_ap=await _open("ap"),
         low_stock_count=int(low_stock),
         weeks=weeks,
     )
+
+
+async def _by_party(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    side: str,
+    date_from: date | None,
+    date_to: date | None,
+) -> list[ByCustomerRow]:
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT party_id, COALESCE(MAX(party_name), 'Unknown') AS party_name,
+                       COUNT(*) FILTER (WHERE invoice_type = :t) AS invoice_count,
+                       COALESCE(SUM({SIGNED_TOTAL_BASE}), 0) AS total
+                FROM invoicing.invoices
+                WHERE org_id = :org AND invoice_type IN (:t, :tc)
+                  AND status IN {POSTED}
+                  AND (CAST(:from AS date) IS NULL OR invoice_date >= CAST(:from AS date))
+                  AND (CAST(:to AS date) IS NULL OR invoice_date <= CAST(:to AS date))
+                GROUP BY party_id ORDER BY total DESC
+                """
+            ),
+            {"org": str(org_id), "from": date_from, "to": date_to, **_side(side)},
+        )
+    ).mappings()
+    return [
+        ByCustomerRow(
+            party_id=r["party_id"],
+            party_name=r["party_name"],
+            invoice_count=r["invoice_count"],
+            total=_q(r["total"]),
+        )
+        for r in rows
+    ]
 
 
 @router.get("/sales-by-customer", response_model=list[ByCustomerRow])
@@ -182,32 +231,7 @@ async def sales_by_customer(
     session: AsyncSession = Depends(get_session),
 ) -> list[ByCustomerRow]:
     org = await get_organization(session)
-    rows = (
-        await session.execute(
-            text(
-                """
-                SELECT party_id, COALESCE(MAX(party_name), 'Unknown') AS party_name,
-                       COUNT(*) AS invoice_count, COALESCE(SUM(total), 0) AS total
-                FROM invoicing.invoices
-                WHERE org_id = :org AND invoice_type = 'ar'
-                  AND status IN ('posted','partial','paid')
-                  AND (:from IS NULL OR invoice_date >= :from)
-                  AND (:to IS NULL OR invoice_date <= :to)
-                GROUP BY party_id ORDER BY total DESC
-                """
-            ),
-            {"org": str(org.id), "from": date_from, "to": date_to},
-        )
-    ).mappings()
-    return [
-        ByCustomerRow(
-            party_id=r["party_id"],
-            party_name=r["party_name"],
-            invoice_count=r["invoice_count"],
-            total=Decimal(str(r["total"])),
-        )
-        for r in rows
-    ]
+    return await _by_party(session, org.id, "ar", date_from, date_to)
 
 
 @router.get("/purchases-by-supplier", response_model=list[ByCustomerRow])
@@ -218,32 +242,7 @@ async def purchases_by_supplier(
     session: AsyncSession = Depends(get_session),
 ) -> list[ByCustomerRow]:
     org = await get_organization(session)
-    rows = (
-        await session.execute(
-            text(
-                """
-                SELECT party_id, COALESCE(MAX(party_name), 'Unknown') AS party_name,
-                       COUNT(*) AS invoice_count, COALESCE(SUM(total), 0) AS total
-                FROM invoicing.invoices
-                WHERE org_id = :org AND invoice_type = 'ap'
-                  AND status IN ('posted','partial','paid')
-                  AND (:from IS NULL OR invoice_date >= :from)
-                  AND (:to IS NULL OR invoice_date <= :to)
-                GROUP BY party_id ORDER BY total DESC
-                """
-            ),
-            {"org": str(org.id), "from": date_from, "to": date_to},
-        )
-    ).mappings()
-    return [
-        ByCustomerRow(
-            party_id=r["party_id"],
-            party_name=r["party_name"],
-            invoice_count=r["invoice_count"],
-            total=Decimal(str(r["total"])),
-        )
-        for r in rows
-    ]
+    return await _by_party(session, org.id, "ap", date_from, date_to)
 
 
 @router.get("/stock-valuation", response_model=list[StockValuationRow])
@@ -274,15 +273,13 @@ async def stock_valuation(
             warehouse_name=r["warehouse_name"],
             products=r["products"],
             qty_on_hand=Decimal(str(r["qty"])),
-            value=Decimal(str(r["value"])).quantize(Decimal("0.01")),
+            value=_q(r["value"]),
         )
         for r in rows
     ]
 
 
-def _bucket(days: int | None) -> str:
-    if days is None:
-        return "90+"
+def _bucket(days: int) -> str:
     if days <= 30:
         return "current"
     if days <= 60:
@@ -298,12 +295,16 @@ async def aging(
     _user: CurrentUser = Depends(require("reports.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[AgingRow]:
+    """Open invoice balances (after payments and applied credits) in base
+    currency, bucketed by days past due. Unconsumed credit notes and
+    on-account payments are not aged."""
     org = await get_organization(session)
     rows = (
         await session.execute(
             text(
                 """
-                SELECT due_date, COALESCE(SUM(total - amount_paid), 0) AS open
+                SELECT due_date,
+                       COALESCE(SUM((total - amount_paid - applied_credits) / fx_rate), 0) AS open
                 FROM invoicing.invoices
                 WHERE org_id = :org AND invoice_type = :t AND status IN ('posted','partial')
                 GROUP BY due_date
@@ -321,10 +322,8 @@ async def aging(
     today = date.today()
     for row in rows:
         due = row["due_date"] or today
-        days = (today - due).days
-        bucket = _bucket(days if days > 0 else 0)
-        buckets[bucket] += Decimal(str(row["open"]))
-    return [AgingRow(bucket=k, amount=v) for k, v in buckets.items()]
+        buckets[_bucket(max((today - due).days, 0))] += Decimal(str(row["open"]))
+    return [AgingRow(bucket=k, amount=_q(v)) for k, v in buckets.items()]
 
 
 @router.get("/tax-summary", response_model=list[TaxSummaryRow])
@@ -334,22 +333,31 @@ async def tax_summary(
     _user: CurrentUser = Depends(require("reports.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[TaxSummaryRow]:
+    """Output tax (sales, credit notes netted) and input tax (purchases)
+    separately, grouped by the rate SNAPSHOT on each line, in base currency."""
     org = await get_organization(session)
     rows = (
         await session.execute(
             text(
-                """
-                SELECT t.code AS tax_code, t.name AS tax_name, t.rate_pct AS rate_pct,
-                       COALESCE(SUM(i.line_subtotal), 0) AS net,
-                       COALESCE(SUM(i.line_tax), 0) AS tax
+                f"""
+                SELECT CASE WHEN inv.invoice_type LIKE 'ar%' THEN 'output' ELSE 'input' END
+                           AS direction,
+                       MAX(t.code) AS tax_code, MAX(t.name) AS tax_name,
+                       i.tax_rate_pct AS rate_pct,
+                       COALESCE(SUM(
+                           CASE WHEN inv.invoice_type LIKE '%\\_credit' THEN -1 ELSE 1 END
+                           * i.line_subtotal / inv.fx_rate), 0) AS net,
+                       COALESCE(SUM(
+                           CASE WHEN inv.invoice_type LIKE '%\\_credit' THEN -1 ELSE 1 END
+                           * i.line_tax / inv.fx_rate), 0) AS tax
                 FROM invoicing.invoice_lines i
                 JOIN invoicing.invoices inv ON inv.id = i.invoice_id
                 LEFT JOIN catalog.taxes t ON t.id = i.tax_id
-                WHERE inv.org_id = :org AND inv.status IN ('posted','partial','paid')
-                  AND (:from::date IS NULL OR inv.invoice_date >= :from)
-                  AND (:to::date IS NULL OR inv.invoice_date <= :to)
-                GROUP BY t.code, t.name, t.rate_pct
-                ORDER BY net DESC
+                WHERE inv.org_id = :org AND inv.status IN {POSTED}
+                  AND (CAST(:from AS date) IS NULL OR inv.invoice_date >= CAST(:from AS date))
+                  AND (CAST(:to AS date) IS NULL OR inv.invoice_date <= CAST(:to AS date))
+                GROUP BY 1, i.tax_id, i.tax_rate_pct
+                ORDER BY 1 DESC, net DESC
                 """
             ),
             {"org": str(org.id), "from": date_from, "to": date_to},
@@ -357,11 +365,12 @@ async def tax_summary(
     ).mappings()
     return [
         TaxSummaryRow(
+            direction=r["direction"],
             tax_code=r["tax_code"],
             tax_name=r["tax_name"] or "No tax",
             rate_pct=Decimal(str(r["rate_pct"])) if r["rate_pct"] is not None else None,
-            net=Decimal(str(r["net"])),
-            tax=Decimal(str(r["tax"])),
+            net=_q(r["net"]),
+            tax=_q(r["tax"]),
         )
         for r in rows
     ]

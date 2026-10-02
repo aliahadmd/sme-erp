@@ -52,5 +52,5 @@ async def enqueue(name: str, **kwargs: Any) -> None:
         return
     fn = _registry[name]
     logger.info("job_inline_start", job=name)
-    await fn({})
+    await fn({}, **kwargs)
     logger.info("job_inline_done", job=name)

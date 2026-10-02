@@ -1,7 +1,7 @@
 """HR module API — employees, departments, leave requests."""
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -88,6 +88,8 @@ class EmployeeIn(BaseModel):
     department_id: uuid.UUID | None = None
     position: str | None = None
     hired_at: date | None = None
+    # Link to a login so the employee can request their own leave.
+    user_id: uuid.UUID | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -101,6 +103,24 @@ class EmployeeOut(BaseModel):
     position: str | None
     hired_at: date | None
     status: str
+    user_id: uuid.UUID | None = None
+
+
+@router.get("/employees/me", response_model=EmployeeOut)
+async def my_employee_record(
+    user: CurrentUser = Depends(require("hr.leave.request")),
+    session: AsyncSession = Depends(get_session),
+) -> Employee:
+    """The caller's own employee record (self-service leave)."""
+    org = await get_organization(session)
+    employee = (
+        await session.scalars(
+            select(Employee).where(Employee.org_id == org.id, Employee.user_id == user.id)
+        )
+    ).first()
+    if employee is None:
+        raise NotFoundError("No employee record is linked to your user")
+    return employee
 
 
 @router.get("/employees", response_model=list[EmployeeOut])
@@ -123,6 +143,14 @@ async def create_employee(
     session: AsyncSession = Depends(get_session),
 ) -> Employee:
     org = await get_organization(session)
+    if body.user_id is not None:
+        if await session.get(User, body.user_id) is None:
+            raise ValidationError("Unknown user")
+        linked = await session.scalar(
+            select(Employee.id).where(Employee.org_id == org.id, Employee.user_id == body.user_id)
+        )
+        if linked:
+            raise ConflictError("That user is already linked to an employee record")
     prefix = "EMP"
     number = await next_number(session, org.id, "employee", prefix)
     employee = Employee(
@@ -133,6 +161,7 @@ async def create_employee(
         department_id=body.department_id,
         position=body.position,
         hired_at=body.hired_at or date.today(),
+        user_id=body.user_id,
     )
     session.add(employee)
     await write_audit(
@@ -166,7 +195,8 @@ class LeaveTypeOut(BaseModel):
 
 @router.get("/leave-types", response_model=list[LeaveTypeOut])
 async def list_leave_types(
-    _user: CurrentUser = Depends(require("hr.employee.read")),
+    # Anyone who may request leave needs the types (self-service employees).
+    _user: CurrentUser = Depends(require("hr.leave.request")),
     session: AsyncSession = Depends(get_session),
 ) -> list[LeaveType]:
     org = await get_organization(session)
@@ -180,7 +210,8 @@ async def list_leave_types(
 @router.post("/leave-types", response_model=LeaveTypeOut, status_code=201)
 async def create_leave_type(
     body: LeaveTypeIn,
-    user: CurrentUser = Depends(require("core.settings.update")),
+    # Leave policy is HR's to manage (the hr role has this permission).
+    user: CurrentUser = Depends(require("hr.employee.update")),
     session: AsyncSession = Depends(get_session),
 ) -> LeaveType:
     org = await get_organization(session)
@@ -269,6 +300,66 @@ async def list_leave_requests(
     return list((await session.scalars(stmt)).all())
 
 
+def working_days_by_year(date_from: date, date_to: date) -> dict[int, Decimal]:
+    """Monday–Friday days in [date_from, date_to], split per calendar year
+    (public holidays are not modelled yet)."""
+    days: dict[int, Decimal] = {}
+    current = date_from
+    while current <= date_to:
+        if current.weekday() < 5:
+            days[current.year] = days.get(current.year, Decimal("0")) + 1
+        current += timedelta(days=1)
+    return days
+
+
+async def _check_allowance(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    leave_type: LeaveType,
+    date_from: date,
+    date_to: date,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    """Annual allowance per calendar year, counting approved AND pending
+    requests (pending ones are commitments too)."""
+    wanted = working_days_by_year(date_from, date_to)
+    stmt = select(LeaveRequest).where(
+        LeaveRequest.org_id == org_id,
+        LeaveRequest.employee_id == employee_id,
+        LeaveRequest.type_id == leave_type.id,
+        LeaveRequest.status.in_(("pending", "approved")),
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(LeaveRequest.id != exclude_id)
+    used: dict[int, Decimal] = {}
+    for req in (await session.scalars(stmt)).all():
+        for year, count in working_days_by_year(req.date_from, req.date_to).items():
+            used[year] = used.get(year, Decimal("0")) + count
+    for year, count in wanted.items():
+        if used.get(year, Decimal("0")) + count > leave_type.days_per_year:
+            raise ValidationError(
+                f"Exceeds the annual allowance of {leave_type.days_per_year} days for "
+                f"{leave_type.name} in {year} ({used.get(year, Decimal('0'))} already booked)"
+            )
+
+
+async def _approver_ids(session: AsyncSession) -> list[uuid.UUID]:
+    return list(
+        (
+            await session.scalars(
+                select(User.id)
+                .join(UserRole, UserRole.user_id == User.id)
+                .join(Role, Role.id == UserRole.role_id)
+                .join(RolePermission, RolePermission.role_id == Role.id)
+                .join(Permission, Permission.id == RolePermission.permission_id)
+                .where(User.is_active.is_(True), Permission.code == "hr.leave.approve")
+                .distinct()
+            )
+        ).all()
+    )
+
+
 @router.post("/leave-requests", response_model=LeaveRequestOut, status_code=201)
 async def create_leave_request(
     body: LeaveRequestIn,
@@ -290,7 +381,9 @@ async def create_leave_request(
             )
     if body.date_to < body.date_from:
         raise ValidationError("date_to must be on or after date_from")
-    days = Decimal(str((body.date_to - body.date_from).days + 1))
+    days = sum(working_days_by_year(body.date_from, body.date_to).values(), Decimal("0"))
+    if days == 0:
+        raise ValidationError("The requested period contains no working days")
 
     # Overlap guard: no pending/approved request may overlap the new one
     existing = (
@@ -309,16 +402,9 @@ async def create_leave_request(
             )
 
     leave_type = await session.get(LeaveType, body.type_id)
-    if not leave_type:
+    if not leave_type or leave_type.org_id != org.id:
         raise NotFoundError("Leave type not found")
-    used = sum(
-        (r.days for r in existing if r.type_id == body.type_id and r.status == "approved"),
-        Decimal("0"),
-    )
-    if used + days > leave_type.days_per_year:
-        raise ValidationError(
-            f"Exceeds the annual allowance of {leave_type.days_per_year} days for {leave_type.name}"
-        )
+    await _check_allowance(session, org.id, employee.id, leave_type, body.date_from, body.date_to)
 
     request = LeaveRequest(
         org_id=org.id,
@@ -338,28 +424,78 @@ async def create_leave_request(
         entity_id=request.id,
         after={"employee": employee.full_name, "days": str(days)},
     )
-    # Notify approvers (users holding hr.leave.approve)
-
-    from app.modules.core.models import Permission, Role, RolePermission, User, UserRole
-
-    approver_ids = (
-        await session.scalars(
-            select(User.id)
-            .join(UserRole, UserRole.user_id == User.id)
-            .join(Role, Role.id == UserRole.role_id)
-            .join(RolePermission, RolePermission.role_id == Role.id)
-            .join(Permission, Permission.id == RolePermission.permission_id)
-            .where(User.is_active.is_(True), Permission.code == "hr.leave.approve")
-            .distinct()
-        )
-    ).all()
-    for approver_id in approver_ids:
+    for approver_id in await _approver_ids(session):
         await notify(
             session,
             user_id=approver_id,
             type_="leave_request",
             title=f"Leave request: {employee.full_name}",
-            body=f"{days} days from {body.date_from}",
+            body=f"{days} working days from {body.date_from}",
+            link="/hr/leave",
+        )
+    await session.commit()
+    await session.refresh(request)
+    return request
+
+
+async def _pending_request(
+    session: AsyncSession, org_id: uuid.UUID, request_id: uuid.UUID
+) -> LeaveRequest:
+    request = (
+        await session.scalars(
+            select(LeaveRequest)
+            .where(LeaveRequest.id == request_id, LeaveRequest.org_id == org_id)
+            .with_for_update(of=LeaveRequest)
+        )
+    ).first()
+    if not request:
+        raise NotFoundError("Leave request not found")
+    if request.status != "pending":
+        raise ConflictError(f"Request is already {request.status}")
+    return request
+
+
+async def _decide(
+    request_id: uuid.UUID,
+    decision: str,
+    user: CurrentUser,
+    session: AsyncSession,
+) -> LeaveRequest:
+    org = await get_organization(session)
+    request = await _pending_request(session, org.id, request_id)
+    if request.employee.user_id is not None and request.employee.user_id == user.id:
+        raise PermissionDeniedError("You cannot decide on your own leave request")
+    if decision == "approved":
+        leave_type = await session.get(LeaveType, request.type_id)
+        # Re-check at approval: other requests may have been approved since.
+        await _check_allowance(
+            session,
+            org.id,
+            request.employee_id,
+            leave_type,
+            request.date_from,
+            request.date_to,
+            exclude_id=request.id,
+        )
+    request.status = decision
+    request.approver_id = user.id
+    request.decided_at = date.today()
+    await write_audit(
+        session,
+        actor=user.user,
+        action="approve" if decision == "approved" else "reject",
+        entity_type="hr.leave_request",
+        entity_id=request.id,
+        after={"status": decision},
+    )
+    if request.employee.user_id:
+        await notify(
+            session,
+            user_id=request.employee.user_id,
+            type_=f"leave_{decision}",
+            title=f"Leave {decision} ({request.days} days)",
+            payload={"request_id": str(request.id)},
+            link="/hr/leave",
         )
     await session.commit()
     await session.refresh(request)
@@ -372,33 +508,39 @@ async def approve_leave_request(
     user: CurrentUser = Depends(require("hr.leave.approve")),
     session: AsyncSession = Depends(get_session),
 ) -> LeaveRequest:
+    return await _decide(request_id, "approved", user, session)
+
+
+@router.post("/leave-requests/{request_id}/reject", response_model=LeaveRequestOut)
+async def reject_leave_request(
+    request_id: uuid.UUID,
+    user: CurrentUser = Depends(require("hr.leave.approve")),
+    session: AsyncSession = Depends(get_session),
+) -> LeaveRequest:
+    return await _decide(request_id, "rejected", user, session)
+
+
+@router.post("/leave-requests/{request_id}/cancel", response_model=LeaveRequestOut)
+async def cancel_leave_request(
+    request_id: uuid.UUID,
+    user: CurrentUser = Depends(require("hr.leave.request")),
+    session: AsyncSession = Depends(get_session),
+) -> LeaveRequest:
+    """The requester (or an approver) withdraws a pending request."""
     org = await get_organization(session)
-    request = (
-        await session.scalars(
-            select(LeaveRequest).where(LeaveRequest.id == request_id, LeaveRequest.org_id == org.id)
-        )
-    ).first()
-    if not request:
-        raise NotFoundError("Leave request not found")
-    if request.status != "pending":
-        raise ConflictError(f"Request is already {request.status}")
-    request.status = "approved"
-    request.approver_id = user.id
+    request = await _pending_request(session, org.id, request_id)
+    is_owner = request.employee.user_id == user.id
+    if not is_owner and not await _has_permission(session, user.id, "hr.leave.approve"):
+        raise PermissionDeniedError("Only the requester or an approver can cancel a request")
+    request.status = "cancelled"
     request.decided_at = date.today()
     await write_audit(
         session,
         actor=user.user,
-        action="approve",
+        action="cancel",
         entity_type="hr.leave_request",
         entity_id=request.id,
-        after={"status": "approved"},
-    )
-    await notify(
-        session,
-        user_id=request.employee.user_id or user.id,
-        type_="leave_approved",
-        title=f"Leave approved ({request.days} days)",
-        payload={"request_id": str(request.id)},
+        after={"status": "cancelled"},
     )
     await session.commit()
     await session.refresh(request)

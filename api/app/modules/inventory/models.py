@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -55,7 +56,7 @@ class StockMove(Base):
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=0)
     cogs: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # outbound moves
     reason: Mapped[str | None] = mapped_column(Text)
-    moved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    moved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_by: Mapped[uuid.UUID | None] = mapped_column()
     reverses_move_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
 

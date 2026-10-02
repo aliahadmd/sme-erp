@@ -1,11 +1,10 @@
 """AI feature endpoints — bulk descriptions, report summarizer, search.
 
 All AI content lands in a review queue (`core.ai_drafts`); nothing is applied
-automatically. Search uses pgvector embeddings when present and falls back to
-ILIKE keyword matching otherwise (and when AI is disabled entirely).
+automatically. Search is keyword (ILIKE) matching over products — embedding
+(pgvector) search is not implemented yet.
 """
 
-import os
 import uuid
 from datetime import date
 
@@ -17,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.ai import AIClient
 from app.core.config import get_settings
 from app.core.db import get_session
-from app.core.errors import DomainError, NotFoundError
+from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.modules.core.deps import CurrentUser, require
 from app.modules.core.models import AiDraft
 from app.modules.core.service import get_organization, write_audit
@@ -34,9 +33,13 @@ def _ai_client() -> AIClient:
     return client
 
 
+# Fields an accepted product draft may write to.
+DRAFT_FIELDS = {"description"}
+
+
 async def _check_budget(request: Request) -> None:
     """Daily AI request budget (per deployment). Exceeding it returns 429."""
-    limit = int(os.environ.get("AI_DAILY_REQUEST_LIMIT", "200"))
+    limit = get_settings().ai_daily_request_limit
     key = f"ai:budget:{date.today().isoformat()}"
     count = await request.app.state.redis.incr(key)
     if count == 1:
@@ -59,8 +62,8 @@ async def summarize_report(
     request: Request,
     _user: CurrentUser = Depends(require("reports.view")),
 ) -> dict:
+    client = _ai_client()  # disabled → 503 without consuming budget
     await _check_budget(request)
-    client = _ai_client()
     try:
         result = await client.complete(
             system=(
@@ -114,10 +117,12 @@ async def accept_draft(
     draft = await session.get(AiDraft, draft_id)
     if not draft or draft.org_id != org.id:
         raise NotFoundError("Draft not found")
-    if draft.entity_type != "product":
-        raise NotFoundError("Unsupported draft entity")
+    if draft.status != "pending":
+        raise ConflictError(f"Draft is already {draft.status}")
+    if draft.entity_type != "product" or (draft.field or "description") not in DRAFT_FIELDS:
+        raise NotFoundError("Unsupported draft entity or field")
     product = await session.get(Product, draft.entity_id)
-    if not product:
+    if not product or product.org_id != org.id:
         raise NotFoundError("Product no longer exists")
     setattr(product, draft.field or "description", draft.draft_text)
     draft.status = "accepted"
@@ -131,14 +136,19 @@ async def accept_draft(
 @router.post("/drafts/{draft_id}/discard")
 async def discard_draft(
     draft_id: uuid.UUID,
-    _user: CurrentUser = Depends(require("catalog.product.update")),
+    user: CurrentUser = Depends(require("catalog.product.update")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     org = await get_organization(session)
     draft = await session.get(AiDraft, draft_id)
     if not draft or draft.org_id != org.id:
         raise NotFoundError("Draft not found")
+    if draft.status != "pending":
+        raise ConflictError(f"Draft is already {draft.status}")
     draft.status = "discarded"
+    await write_audit(
+        session, actor=user.user, action="discard", entity_type="ai.draft", entity_id=draft.id
+    )
     await session.commit()
     return {"status": "discarded"}
 
@@ -150,8 +160,7 @@ async def semantic_search(
     _user: CurrentUser = Depends(require("reports.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    """Keyword search over active products (embeddings-based semantic search
-    is planned; this is the deterministic fallback)."""
+    """Keyword search over active products (name, SKU, description)."""
     org = await get_organization(session)
     like = f"%{q.lower()}%"
     from app.modules.catalog.models import Product

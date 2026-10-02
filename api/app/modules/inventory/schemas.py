@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.shared.pagination import Page
 
@@ -110,7 +110,17 @@ class DeliveryOut(BaseModel):
 
 class AdjustmentLineIn(BaseModel):
     product_id: uuid.UUID
-    qty: Decimal  # may be negative
+    qty: Decimal  # may be negative, never zero
+    # Base-currency unit cost for FOUND stock (positive lines). Omitted/0 →
+    # the current moving-average cost. Ignored for decreases (valued at avg).
+    unit_cost: Decimal = Field(0, ge=0)
+
+    @field_validator("qty")
+    @classmethod
+    def _non_zero(cls, value: Decimal) -> Decimal:
+        if value == 0:
+            raise ValueError("Adjustment quantity cannot be zero")
+        return value
 
 
 class AdjustmentIn(BaseModel):

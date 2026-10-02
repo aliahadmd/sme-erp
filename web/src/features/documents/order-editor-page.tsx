@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { CurrencySelect } from "@/components/currency-select"
 import {
   Select,
   SelectContent,
@@ -30,27 +31,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { centsToMoney, lineMathCents } from "@/lib/money"
 import { queryKeys } from "@/lib/query-keys"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
 }
 
-function money(value: number): string {
-  // banker-style 2dp rounding to mirror the server
-  const rounded = Math.round(value * 100) / 100
-  return rounded.toFixed(2)
-}
-
-function lineBase(line: OrderLine): number {
-  const qty = Number(line.qty) || 0
-  const price = Number(line.unit_price) || 0
-  const disc = Number(line.discount_pct) || 0
-  return Number(money(qty * price * (1 - disc / 100)))
-}
-
-function lineTax(line: OrderLine, rate: number): number {
-  return Number(money(lineBase(line) * (rate / 100)))
+/** Exact preview of the server's line math (decimal strings, banker's rounding). */
+function lineCents(line: OrderLine, ratePct: string) {
+  return lineMathCents(line.qty || "0", line.unit_price || "0", line.discount_pct || "0", ratePct)
 }
 
 function blankLine(): OrderLine {
@@ -84,6 +74,7 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10))
   const [expectedDate, setExpectedDate] = useState("")
   const [notes, setNotes] = useState("")
+  const [currency, setCurrency] = useState<string | undefined>(undefined)
   const [lines, setLines] = useState<OrderLine[]>([blankLine()])
   const [error, setError] = useState<string | null>(null)
   const [initializedFrom, setInitializedFrom] = useState<string | null>(null)
@@ -97,20 +88,19 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
     setOrderDate(serverOrder.order_date)
     setExpectedDate(serverOrder.expected_date ?? "")
     setNotes(serverOrder.notes ?? "")
+    setCurrency(serverOrder.currency)
     setLines(serverOrder.lines.map((l) => ({ ...l, qty: String(l.qty), unit_price: String(l.unit_price), discount_pct: String(l.discount_pct ?? "0") })))
   }
 
-  const taxRateFor = (line: OrderLine): number => {
-    if (line.tax_rate_pct !== undefined) return Number(line.tax_rate_pct)
+  const taxRateFor = (line: OrderLine): string => {
+    if (line.tax_rate_pct !== undefined && line.tax_rate_pct !== null) return String(line.tax_rate_pct)
     const tax = (taxesQuery.data ?? []).find((t) => t.id === line.tax_id)
-    return tax ? Number(tax.rate_pct) : 0
+    return tax ? String(tax.rate_pct) : "0"
   }
 
   const totals = lines.reduce(
     (acc, line) => {
-      const base = lineBase(line)
-      const tax = lineTax(line, taxRateFor(line))
-      const gross = Number(money((Number(line.qty) || 0) * (Number(line.unit_price) || 0)))
+      const { gross, base, tax } = lineCents(line, taxRateFor(line))
       return {
         subtotal: acc.subtotal + gross,
         discount: acc.discount + (gross - base),
@@ -118,7 +108,7 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         total: acc.total + base + tax,
       }
     },
-    { subtotal: 0, discount: 0, tax: 0, total: 0 },
+    { subtotal: 0n, discount: 0n, tax: 0n, total: 0n },
   )
 
   const setLine = (index: number, patch: Partial<OrderLine>) =>
@@ -134,6 +124,7 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         order_date: orderDate,
         expected_date: expectedDate || null,
         notes: notes || null,
+        ...(currency ? { currency } : {}),
         lines: lines.map((line) => ({
           product_id: line.product_id,
           description: line.description ?? null,
@@ -247,6 +238,10 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         <div className="flex flex-col gap-2">
           <Label>Expected date</Label>
           <Input type="date" value={expectedDate} disabled={!editable} onChange={(e) => setExpectedDate(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="order-currency">Currency</Label>
+          <CurrencySelect id="order-currency" value={currency} onChange={setCurrency} disabled={!editable} />
         </div>
         <div className="flex flex-col gap-2">
           <Label>Notes</Label>
@@ -370,15 +365,18 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                   </Select>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {money(lineBase(line) + lineTax(line, taxRateFor(line)))}
+                  {(() => {
+                    const { base, tax } = lineCents(line, taxRateFor(line))
+                    return centsToMoney(base + tax)
+                  })()}
                   {Number(line.qty_delivered ?? 0) > 0 && (
                     <div className="text-[10px] text-muted-foreground">
-                      {Number(line.qty_delivered).toFixed(2)} delivered
+                      {Number(line.qty_delivered)} delivered
                     </div>
                   )}
                   {Number(line.qty_invoiced ?? 0) > 0 && (
                     <div className="text-[10px] text-muted-foreground">
-                      {Number(line.qty_invoiced).toFixed(2)} invoiced
+                      {Number(line.qty_invoiced)} invoiced
                     </div>
                   )}
                 </TableCell>
@@ -412,20 +410,20 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         <div className="w-64 rounded-lg border p-4 text-sm">
           <div className="flex justify-between py-0.5">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="font-mono">{money(totals.subtotal)}</span>
+            <span className="font-mono">{centsToMoney(totals.subtotal)}</span>
           </div>
           <div className="flex justify-between py-0.5">
             <span className="text-muted-foreground">Discount</span>
-            <span className="font-mono">-{money(totals.discount)}</span>
+            <span className="font-mono">-{centsToMoney(totals.discount)}</span>
           </div>
           <div className="flex justify-between py-0.5">
             <span className="text-muted-foreground">Tax</span>
-            <span className="font-mono">{money(totals.tax)}</span>
+            <span className="font-mono">{centsToMoney(totals.tax)}</span>
           </div>
           <Separator className="my-2" />
           <div className="flex justify-between text-base font-semibold">
             <span>Total</span>
-            <span className="font-mono">{money(totals.total)}</span>
+            <span className="font-mono">{centsToMoney(totals.total)}</span>
           </div>
         </div>
       </div>

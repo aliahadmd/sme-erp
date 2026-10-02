@@ -1,37 +1,48 @@
-"""Invoicing API: invoices (AR/AP), payments, allocations, statements."""
+"""Invoicing API: invoices (AR/AP), credit notes, payments, allocations, statements.
+
+Journal entries are posted by transactional subscribers (`emit` before
+commit) — a document and its journal entry are saved atomically.
+"""
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.core.deps import CurrentUser, require
-from app.modules.core.service import (
-    get_organization,
-    write_audit,
-)
+from app.modules.core.service import get_organization, write_audit
 from app.modules.crm.models import Contact
+from app.modules.currencies.service import resolve_rate, to_base
 from app.modules.invoicing import schemas as inv
 from app.modules.invoicing.models import Invoice, Payment
 from app.modules.invoicing.service import (
+    allocate_existing_payment,
     apply_allocation_to_invoice,
     build_lines_from_input,
     build_lines_from_invoice,
     build_lines_from_order,
     invoice_or_404,
+    is_credit,
+    open_balance,
+    order_amounts,
     payment_or_404,
     post_invoice,
     record_payment,
+    refresh_settlement_status,
+    void_invoice_settlement,
 )
-from app.shared.events import Event, publish
+from app.shared.events import Event, emit, publish
+from app.shared.order_engine import recompute_header
 from app.shared.pagination import PageParamsDep, paginate
 
 router = APIRouter(prefix="/invoicing")
+
+ZERO = Decimal("0")
 
 
 async def _party(session: AsyncSession, party_id: uuid.UUID) -> Contact:
@@ -41,15 +52,60 @@ async def _party(session: AsyncSession, party_id: uuid.UUID) -> Contact:
     return contact
 
 
-def _expected_party_type(invoice_type: str) -> str:
-    return "customer" if invoice_type == "ar" else "supplier"
+def _check_party_role(party: Contact, invoice_type: str) -> None:
+    if invoice_type.startswith("ar") and not party.is_customer:
+        raise ValidationError("Contact is not a customer")
+    if invoice_type.startswith("ap") and not party.is_supplier:
+        raise ValidationError("Contact is not a supplier")
+
+
+async def _default_currency(session: AsyncSession, party: Contact | None) -> str:
+    if party is not None and party.currency:
+        return party.currency
+    return (await get_organization(session)).base_currency
+
+
+async def _snapshot_fx(session: AsyncSession, org_id: uuid.UUID, invoice: Invoice) -> None:
+    """(Re)compute header totals + the FX snapshot at the invoice date."""
+    recompute_header(invoice, invoice.lines)
+    invoice.fx_rate = await resolve_rate(session, org_id, invoice.currency, invoice.invoice_date)
+    invoice.total_base = to_base(invoice.total, invoice.fx_rate)
+
+
+def _invoice_event(name: str, invoice: Invoice, org_id: uuid.UUID) -> Event:
+    return Event(
+        name=name,
+        payload={
+            "invoice_id": str(invoice.id),
+            "number": invoice.number,
+            "invoice_type": invoice.invoice_type,
+            "party_id": str(invoice.party_id) if invoice.party_id else None,
+            "party_name": invoice.party_name,
+            "currency": invoice.currency,
+            "total": str(invoice.total),
+            "total_base": str(invoice.total_base),
+        },
+        org_id=org_id,
+    )
+
+
+async def _order_for(session: AsyncSession, org_id: uuid.UUID, invoice_type: str, order_id):  # noqa: ANN001
+    if invoice_type.startswith("ar"):
+        from app.modules.sales.models import SalesOrder as model
+    else:
+        from app.modules.purchasing.models import PurchaseOrder as model
+    order = await session.get(model, order_id)
+    if not order or order.org_id != org_id:
+        raise NotFoundError("Source order not found")
+    return order
 
 
 # ------------------------------------------------------------------ invoices
 @router.get("/invoices", response_model=inv.InvoicePage)
 async def list_invoices(
     params: PageParamsDep,
-    invoice_type: str | None = Query(None, pattern=r"^(ar|ap)$"),
+    invoice_type: str | None = Query(None, pattern=r"^(ar|ap|ar_credit|ap_credit)$"),
+    side: str | None = Query(None, pattern=r"^(ar|ap)$", description="ar/ap incl. credit notes"),
     status: str | None = None,
     party_id: uuid.UUID | None = None,
     q: str | None = Query(None, max_length=60),
@@ -60,13 +116,15 @@ async def list_invoices(
     stmt = select(Invoice).where(Invoice.org_id == org.id).order_by(Invoice.created_at.desc())
     if invoice_type:
         stmt = stmt.where(Invoice.invoice_type == invoice_type)
+    if side:
+        stmt = stmt.where(Invoice.invoice_type.in_((side, f"{side}_credit")))
     if status:
         stmt = stmt.where(Invoice.status == status)
     if party_id:
         stmt = stmt.where(Invoice.party_id == party_id)
     if q:
         like = f"%{q.lower()}%"
-        stmt = stmt.where(Invoice.number.ilike(like) | Invoice.party_name.ilike(like))
+        stmt = stmt.where(or_(Invoice.number.ilike(like), Invoice.party_name.ilike(like)))
     rows, total = await paginate(session, stmt, params)
     return inv.InvoicePage(
         items=[inv.InvoiceOut.model_validate(r) for r in rows],
@@ -94,13 +152,13 @@ async def create_invoice(
 ) -> Invoice:
     org = await get_organization(session)
     party = await _party(session, body.party_id)
-    is_credit = body.invoice_type.endswith("_credit")
-    base_type = "ar" if body.invoice_type.startswith("ar") else "ap"
-    flag = "is_customer" if base_type == "ar" else "is_supplier"
-    if not getattr(party, flag):
-        raise ValidationError(f"Contact is not a {_expected_party_type(base_type)}")
-    if is_credit and not body.original_invoice_id:
+    _check_party_role(party, body.invoice_type)
+    credit = body.invoice_type.endswith("_credit")
+    base_type = body.invoice_type.removesuffix("_credit")
+    if credit and not body.original_invoice_id:
         raise ValidationError("Credit notes must reference the original invoice")
+    if not credit and body.original_invoice_id:
+        raise ValidationError("Only credit notes reference an original invoice")
 
     invoice = Invoice(
         org_id=org.id,
@@ -109,87 +167,66 @@ async def create_invoice(
         party_name=party.name,
         invoice_date=body.invoice_date or date.today(),
         due_date=body.due_date,
-        currency=body.currency,
         notes=body.notes,
     )
-    original = None
-    lines: list = []
-    if body.original_invoice_id:
-        # Credit note: mirrors the original invoice's lines.
+    currency = body.currency
+    if credit:
         original = await invoice_or_404(session, org.id, body.original_invoice_id)
+        if original.invoice_type != base_type:
+            raise ValidationError(f"A {body.invoice_type} must credit a {base_type} invoice")
+        if original.party_id != party.id:
+            raise ValidationError("Credit note party must match the original invoice")
         if original.status not in ("posted", "partial", "paid"):
             raise ConflictError("Can only credit posted invoices")
+        if currency and currency != original.currency:
+            raise ValidationError("Credit notes use the original invoice's currency")
+        currency = original.currency
+        invoice.original_invoice_id = original.id
         if body.lines:
-            lines = await build_lines_from_input(session, org.id, body.lines, False)
+            lines = await build_lines_from_input(
+                session, org.id, body.lines, is_purchase=base_type == "ap"
+            )
         else:
             lines = build_lines_from_invoice(original)
     elif body.source_order_id:
-        source_type = "sales_order" if body.invoice_type == "ar" else "purchase_order"
-        module = {
-            "sales_order": "app.modules.sales.models",
-            "purchase_order": "app.modules.purchasing.models",
-        }[source_type]
-        model_name = "SalesOrder" if source_type == "sales_order" else "PurchaseOrder"
-        order_model = getattr(__import__(module, fromlist=[model_name]), model_name)
-        order = await session.get(order_model, body.source_order_id)
-        if not order or order.org_id != org.id:
-            raise NotFoundError("Source order not found")
+        order = await _order_for(session, org.id, body.invoice_type, body.source_order_id)
         if order.status not in ("confirmed", "delivered", "received", "invoiced"):
             raise ConflictError("Only confirmed/processed orders can be invoiced")
-        from app.shared.order_progress import remaining_by_product
-
-        progress_field = "qty_invoiced"
-        remaining = remaining_by_product(order, progress_field)
-        if remaining and all(q <= 0 for q in remaining.values()):
-            raise ConflictError(f"Order {order.number} is fully invoiced")
-        invoice.source_type = source_type
+        if currency and currency != order.currency:
+            raise ValidationError("Invoices use the source order's currency")
+        currency = order.currency
+        invoice.source_type = "sales_order" if base_type == "ar" else "purchase_order"
         invoice.source_id = order.id
         invoice.source_number = order.number
-        lines = await build_lines_from_order(
-            session, order, body.invoice_type == "ap", remaining=remaining
-        )
+        lines = build_lines_from_order(order)
         if not lines:
-            raise ConflictError("No outstanding quantities left to invoice")
+            raise ConflictError(f"Order {order.number} is fully invoiced")
     else:
         if not body.lines:
             raise ValidationError("Standalone invoice needs at least one line")
-        lines = await build_lines_from_input(session, org.id, body.lines, body.invoice_type == "ap")
+        lines = await build_lines_from_input(
+            session, org.id, body.lines, is_purchase=base_type == "ap"
+        )
 
+    invoice.currency = currency or await _default_currency(session, party)
     # Assign while the invoice is still transient — after flush the assignment
     # would trigger a sync lazy-load (MissingGreenlet).
     invoice.lines = lines
-    from app.modules.currencies.service import resolve_rate, to_base
-    from app.shared.order_engine import recompute_header
-
-    recompute_header(invoice, lines)
-    rate = await resolve_rate(
-        session, org.id, body.currency or invoice.currency, invoice.invoice_date
-    )
-    invoice.fx_rate = rate
-    invoice.total_base = to_base(invoice.total, invoice.fx_rate)
-    if is_credit and original is not None:
-        already_credited = sum(
-            (
-                Decimal(str(c.total))
-                for c in (
-                    await session.scalars(
-                        select(Invoice).where(
-                            Invoice.original_invoice_id == original.id,
-                            Invoice.status.in_(("posted", "partial", "paid")),
-                        )
-                    )
-                )
-            ),
-            Decimal("0"),
-        )
-        if already_credited + invoice.total > original.total:
-            raise ConflictError(
-                f"Credit exceeds the invoice total (already credited {already_credited})"
+    await _snapshot_fx(session, org.id, invoice)
+    if credit:
+        # Early feedback against already-posted credits; the binding check
+        # (with a row lock) runs again when the credit note is posted.
+        posted_credits = await session.scalar(
+            select(func.coalesce(func.sum(Invoice.total), 0)).where(
+                Invoice.original_invoice_id == invoice.original_invoice_id,
+                Invoice.status.in_(("posted", "partial", "paid")),
             )
-    # default due date from payment terms
-    if invoice.due_date is None and party.payment_terms_days:
-        from datetime import timedelta
-
+        )
+        if Decimal(str(posted_credits)) + invoice.total > original.total:
+            raise ConflictError(
+                f"Credit exceeds the invoice total (already credited {posted_credits})"
+            )
+    if invoice.due_date is None and party.payment_terms_days and not credit:
         invoice.due_date = invoice.invoice_date + timedelta(days=party.payment_terms_days)
     session.add(invoice)
     await write_audit(
@@ -198,7 +235,7 @@ async def create_invoice(
         action="create",
         entity_type="invoicing.invoice",
         entity_id=invoice.id,
-        after={"party": party.name, "total": str(invoice.total)},
+        after={"party": party.name, "total": str(invoice.total), "currency": invoice.currency},
     )
     await session.commit()
     await session.refresh(invoice)
@@ -208,7 +245,7 @@ async def create_invoice(
 @router.patch("/invoices/{invoice_id}", response_model=inv.InvoiceOut)
 async def update_invoice(
     invoice_id: uuid.UUID,
-    body: inv.InvoiceCreateIn,
+    body: inv.InvoiceUpdateIn,
     user: CurrentUser = Depends(require("invoicing.invoice.update")),
     session: AsyncSession = Depends(get_session),
 ) -> Invoice:
@@ -216,30 +253,77 @@ async def update_invoice(
     invoice = await invoice_or_404(session, org.id, invoice_id)
     if invoice.status != "draft":
         raise ConflictError("Only draft invoices can be edited")
-    party = await _party(session, body.party_id)
-    invoice.party_id = party.id
-    invoice.party_name = party.name
-    invoice.notes = body.notes
-    invoice.invoice_date = body.invoice_date or invoice.invoice_date
-    invoice.due_date = body.due_date
-    if not body.lines:
-        raise ValidationError("Invoice needs at least one line")
-    invoice.lines = await build_lines_from_input(
-        session, org.id, body.lines, invoice.invoice_type == "ap"
-    )
-    from app.shared.order_engine import recompute_header
-
-    recompute_header(invoice, invoice.lines)
+    data = body.model_dump(exclude_unset=True)
+    if data.get("party_id"):
+        party = await _party(session, body.party_id)
+        _check_party_role(party, invoice.invoice_type)
+        invoice.party_id = party.id
+        invoice.party_name = party.name
+    if "currency" in data and body.currency and body.currency != invoice.currency:
+        if invoice.original_invoice_id or invoice.source_id:
+            raise ValidationError("The currency follows the source document")
+        invoice.currency = body.currency
+    if body.invoice_date:
+        invoice.invoice_date = body.invoice_date
+    for field in ("due_date", "notes"):
+        if field in data:
+            setattr(invoice, field, data[field])
+    if "lines" in data:
+        if not body.lines:
+            raise ValidationError("Invoice needs at least one line")
+        invoice.lines = await build_lines_from_input(
+            session, org.id, body.lines, invoice.invoice_type.startswith("ap")
+        )
+    # Totals AND the FX snapshot always follow the edit — a stale total_base
+    # would post an unbalanced journal entry.
+    await _snapshot_fx(session, org.id, invoice)
     await write_audit(
         session,
         actor=user.user,
         action="update",
         entity_type="invoicing.invoice",
         entity_id=invoice.id,
+        after={"total": str(invoice.total), "currency": invoice.currency},
     )
     await session.commit()
     await session.refresh(invoice)
     return invoice
+
+
+@router.delete("/invoices/{invoice_id}", status_code=204)
+async def delete_draft_invoice(
+    invoice_id: uuid.UUID,
+    user: CurrentUser = Depends(require("invoicing.invoice.update")),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    org = await get_organization(session)
+    invoice = await invoice_or_404(session, org.id, invoice_id)
+    if invoice.status != "draft":
+        raise ConflictError("Only draft invoices can be deleted — void posted ones")
+    await write_audit(
+        session,
+        actor=user.user,
+        action="delete",
+        entity_type="invoicing.invoice",
+        entity_id=invoice.id,
+        before={"party": invoice.party_name, "total": str(invoice.total)},
+    )
+    await session.delete(invoice)
+    await session.commit()
+
+
+async def _register_order(
+    session: AsyncSession, org_id: uuid.UUID, invoice: Invoice, release: bool
+):
+    if not invoice.source_id:
+        return
+    by_line, by_product = order_amounts(invoice)
+    if invoice.source_type == "sales_order":
+        from app.modules.sales import service as order_service
+    else:
+        from app.modules.purchasing import service as order_service
+    fn = order_service.release_invoiced if release else order_service.register_invoiced
+    await fn(session, org_id, invoice.source_id, by_line=by_line, by_product=by_product)
 
 
 @router.post("/invoices/{invoice_id}/post", response_model=inv.InvoiceOut)
@@ -249,25 +333,9 @@ async def post_invoice_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> Invoice:
     org = await get_organization(session)
-    invoice = await invoice_or_404(session, org.id, invoice_id)
+    invoice = await invoice_or_404(session, org.id, invoice_id, for_update=True)
     await post_invoice(session, org.id, invoice, user.id)
-    if invoice.source_id:
-        # Register invoiced quantities; the service moves the order to
-        # `invoiced` and to `closed` when receipt/delivery + invoicing complete.
-        per_product: dict = {}
-        for line in invoice.lines:
-            if line.product_id is None:
-                continue
-            per_product[line.product_id] = per_product.get(line.product_id, 0) + line.qty
-        amounts = list(per_product.items())
-        if invoice.source_type == "sales_order":
-            from app.modules.sales import service as sales_service
-
-            await sales_service.register_invoiced(session, org.id, invoice.source_id, amounts)
-        else:
-            from app.modules.purchasing import service as purchasing_service
-
-            await purchasing_service.register_invoiced(session, org.id, invoice.source_id, amounts)
+    await _register_order(session, org.id, invoice, release=False)
     await write_audit(
         session,
         actor=user.user,
@@ -276,41 +344,10 @@ async def post_invoice_endpoint(
         entity_id=invoice.id,
         after={"number": invoice.number, "total": str(invoice.total)},
     )
+    event = _invoice_event("invoice.posted", invoice, org.id)
+    await emit(session, event)  # journal entry — same transaction
     await session.commit()
-    await publish(
-        Event(
-            name="invoice.posted",
-            payload={
-                "invoice_id": str(invoice.id),
-                "number": invoice.number,
-                "invoice_type": invoice.invoice_type,
-                "party_id": str(invoice.party_id),
-                "total_base": str(invoice.total_base),
-                "net_base": str(
-                    (Decimal(str(invoice.subtotal)) - Decimal(str(invoice.discount_total)))
-                    / invoice.fx_rate
-                ),
-                "tax_base": str(Decimal(str(invoice.tax_total)) / invoice.fx_rate),
-                "total": str(invoice.total),
-                "subtotal": str(invoice.subtotal),
-                "discount_total": str(invoice.discount_total),
-                "tax_total": str(invoice.tax_total),
-                "lines": [
-                    {
-                        "product_id": str(line.product_id) if line.product_id else None,
-                        "qty": str(line.qty),
-                        "unit_price": str(line.unit_price),
-                        "line_subtotal": str(line.line_subtotal),
-                        "tax_id": str(line.tax_id) if line.tax_id else None,
-                        "tax_rate_pct": str(line.tax_rate_pct),
-                        "line_tax": str(line.line_tax),
-                    }
-                    for line in invoice.lines
-                ],
-            },
-            org_id=org.id,
-        )
-    )
+    await publish(event)
     await session.refresh(invoice)
     return invoice
 
@@ -322,13 +359,13 @@ async def void_invoice(
     session: AsyncSession = Depends(get_session),
 ) -> Invoice:
     org = await get_organization(session)
-    invoice = await invoice_or_404(session, org.id, invoice_id)
+    invoice = await invoice_or_404(session, org.id, invoice_id, for_update=True)
     if invoice.status == "void":
         raise ConflictError("Invoice is already void")
     if invoice.status == "draft":
-        raise ConflictError("Draft invoices can simply be deleted — post first to void")
-    if Decimal(str(invoice.amount_paid)) > 0:
-        raise ConflictError("Invoice has payments allocated — void them first")
+        raise ConflictError("Draft invoices are deleted, not voided")
+    await void_invoice_settlement(session, org.id, invoice)
+    await _register_order(session, org.id, invoice, release=True)
     invoice.status = "void"
     await write_audit(
         session,
@@ -338,28 +375,10 @@ async def void_invoice(
         entity_id=invoice.id,
         after={"number": invoice.number},
     )
+    event = _invoice_event("invoice.voided", invoice, org.id)
+    await emit(session, event)
     await session.commit()
-    await publish(
-        Event(
-            name="invoice.voided",
-            payload={
-                "invoice_id": str(invoice.id),
-                "number": invoice.number,
-                "invoice_type": invoice.invoice_type,
-                "total_base": str(invoice.total_base),
-                "net_base": str(
-                    (Decimal(str(invoice.subtotal)) - Decimal(str(invoice.discount_total)))
-                    / invoice.fx_rate
-                ),
-                "tax_base": str(Decimal(str(invoice.tax_total)) / invoice.fx_rate),
-                "total": str(invoice.total),
-                "subtotal": str(invoice.subtotal),
-                "tax_total": str(invoice.tax_total),
-                "discount_total": str(invoice.discount_total),
-            },
-            org_id=org.id,
-        )
-    )
+    await publish(event)
     await session.refresh(invoice)
     return invoice
 
@@ -367,30 +386,25 @@ async def void_invoice(
 @router.post("/invoices/{invoice_id}/send-email")
 async def email_invoice(
     invoice_id: uuid.UUID,
-    user: CurrentUser = Depends(require("invoicing.invoice.read")),
+    user: CurrentUser = Depends(require("invoicing.invoice.post")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Queue the invoice email to the customer's billing contact."""
     from app.jobs.queue import enqueue
+    from app.modules.core.notification_events import document_email, party_email
 
     org = await get_organization(session)
     invoice = await invoice_or_404(session, org.id, invoice_id)
     if invoice.status == "draft":
         raise ValidationError("Post the invoice before emailing it")
-    if not invoice.party_id:
-        raise NotFoundError("Invoice has no customer")
-    party = await session.get(Contact, invoice.party_id)
-    to = None
-    if party and party.emails:
-        to = party.emails[0].get("value")
+    if not invoice.invoice_type.startswith("ar"):
+        raise ValidationError("Only customer invoices and credit notes are emailed")
+    party = await session.get(Contact, invoice.party_id) if invoice.party_id else None
+    to = party_email(party)
     if not to:
-        raise ValidationError("Customer has no email address")
-    await enqueue(
-        "send_email",
-        to=to,
-        subject=f"Invoice {invoice.number} — {invoice.total}",
-        body="Please find your invoice attached.",
-    )
+        raise ValidationError("Customer has no valid email address")
+    subject, body = document_email(invoice, org.name)
+    await enqueue("send_email", to=to, subject=subject, body=body)
     await write_audit(
         session,
         actor=user.user,
@@ -427,6 +441,39 @@ async def list_payments(
     )
 
 
+def _payment_event(name: str, payment: Payment, org_id: uuid.UUID) -> Event:
+    return Event(
+        name=name,
+        payload={
+            "payment_id": str(payment.id),
+            "number": payment.number,
+            "direction": payment.direction,
+            "party_id": str(payment.party_id),
+            "currency": payment.currency,
+            "amount": str(payment.amount),
+            "amount_base": str(payment.amount_base),
+            "method": payment.method,
+            "credit_note_id": str(payment.credit_note_id) if payment.credit_note_id else None,
+        },
+        org_id=org_id,
+    )
+
+
+async def _reload_payment(session: AsyncSession, payment_id: uuid.UUID) -> Payment:
+    # Re-fetch with allocations loaded — post-commit relationship access would
+    # otherwise trigger a sync lazy-load.
+    from sqlalchemy.orm import selectinload
+
+    return (
+        await session.scalars(
+            select(Payment)
+            .where(Payment.id == payment_id)
+            .options(selectinload(Payment.allocations))
+            .execution_options(populate_existing=True)
+        )
+    ).one()
+
+
 @router.post("/payments", response_model=inv.PaymentOut, status_code=201)
 async def create_payment(
     body: inv.PaymentIn,
@@ -435,55 +482,54 @@ async def create_payment(
 ) -> Payment:
     org = await get_organization(session)
     party = await _party(session, body.party_id)
-    # Refund: money out against a posted AR credit note
-    credit_note = None
+    payment_date = body.payment_date or date.today()
+
+    currencies: set[str] = set()
+    for allocation in body.allocations:
+        invoice = await session.get(Invoice, allocation.invoice_id)
+        if not invoice or invoice.org_id != org.id:
+            raise ValidationError("Unknown invoice in allocations")
+        currencies.add(invoice.currency)
     if body.credit_note_id:
-        if body.direction != "out":
-            raise ValidationError("Refunds are recorded as payments going out")
+        # Refund: AR credit note → money out; AP credit note → money in.
         credit_note = await invoice_or_404(session, org.id, body.credit_note_id)
-        if not credit_note.invoice_type.startswith("ar_credit") or credit_note.status != "posted":
-            raise ValidationError("Refunds must reference a posted AR credit note")
-        refunded = (
-            await session.scalars(
-                select(Payment).where(
-                    Payment.credit_note_id == credit_note.id,
-                    Payment.status == "recorded",
-                )
+        if not is_credit(credit_note) or credit_note.status not in ("posted", "partial"):
+            raise ValidationError("Refunds must reference an open posted credit note")
+        if credit_note.party_id != party.id:
+            raise ValidationError("Refund party must match the credit note")
+        expected = "out" if credit_note.invoice_type == "ar_credit" else "in"
+        if body.direction != expected:
+            raise ValidationError(
+                f"Refunds of {credit_note.invoice_type} credit notes are money '{expected}'"
             )
-        ).all()
-        already_refunded = sum((p.amount for p in refunded), Decimal("0"))
-        if already_refunded + body.amount > credit_note.total:
-            raise ValidationError("Refund exceeds the credit note total")
-
-    # Payment currency follows the allocated invoices (all must match);
-    # base-currency rate is 1 by definition.
-    from app.modules.currencies.service import resolve_rate
-    from app.modules.invoicing.models import Invoice
-
-    currencies = {(await session.get(Invoice, a.invoice_id)).currency for a in body.allocations}
+        refundable = open_balance(credit_note)
+        if body.amount > refundable:
+            raise ValidationError(f"Refund exceeds the credit note's open amount {refundable}")
+        currencies.add(credit_note.currency)
+    if body.currency:
+        currencies.add(body.currency)
     if len(currencies) > 1:
-        raise ValidationError("Allocations must reference invoices of one currency")
-    payment_currency = currencies.pop() if currencies else org.base_currency
-    rate = await resolve_rate(session, org.id, payment_currency, body.payment_date or date.today())
+        raise ValidationError("A payment and its documents must share one currency")
+    currency = currencies.pop() if currencies else await _default_currency(session, party)
+    rate = await resolve_rate(session, org.id, currency, payment_date)
 
-    prefixes = {"in": "PAY", "out": "SPAY"}
     payment = await record_payment(
         session,
         org.id,
         direction=body.direction,
         party_id=party.id,
         party_name=party.name,
-        payment_date=body.payment_date or date.today(),
+        payment_date=payment_date,
         amount=body.amount,
         method=body.method,
         reference=body.reference,
         notes=body.notes,
         allocations=[(a.invoice_id, a.amount) for a in body.allocations],
         actor_id=user.id,
-        prefix=prefixes[body.direction],
-        currency=payment_currency,
-        fx_rate=rate,
+        prefix="PAY" if body.direction == "in" else "SPAY",
         credit_note_id=body.credit_note_id,
+        currency=currency,
+        fx_rate=rate,
     )
     await write_audit(
         session,
@@ -491,41 +537,50 @@ async def create_payment(
         action="create",
         entity_type="invoicing.payment",
         entity_id=payment.id,
-        after={"number": payment.number, "amount": str(payment.amount)},
+        after={"number": payment.number, "amount": str(payment.amount), "currency": currency},
     )
+    event = _payment_event("payment.recorded", payment, org.id)
+    await emit(session, event)
     await session.commit()
-    # Re-fetch with allocations loaded — post-commit relationship access would
-    # otherwise trigger a sync lazy-load.
-    from sqlalchemy.orm import selectinload
+    await publish(event)
+    return await _reload_payment(session, payment.id)
 
-    payment = (
-        await session.scalars(
-            select(Payment)
-            .where(Payment.id == payment.id)
-            .options(selectinload(Payment.allocations))
-        )
-    ).first()
-    await publish(
-        Event(
-            name="payment.recorded",
-            payload={
-                "payment_id": str(payment.id),
-                "number": payment.number,
-                "direction": payment.direction,
-                "party_id": str(party.id),
-                "amount": str(payment.amount),
-                "amount_base": str(payment.amount_base),
-                "method": payment.method,
-                "credit_note_id": str(payment.credit_note_id) if payment.credit_note_id else None,
-                "allocations": [
-                    {"invoice_id": str(a.invoice_id), "amount": str(a.amount)}
-                    for a in payment.allocations
-                ],
-            },
-            org_id=org.id,
-        )
+
+@router.post("/payments/{payment_id}/allocate", response_model=inv.PaymentOut)
+async def allocate_payment(
+    payment_id: uuid.UUID,
+    body: inv.PaymentAllocationsIn,
+    user: CurrentUser = Depends(require("invoicing.payment.create")),
+    session: AsyncSession = Depends(get_session),
+) -> Payment:
+    """Apply an on-account (unallocated) payment amount to open invoices."""
+    org = await get_organization(session)
+    payment = await payment_or_404(session, org.id, payment_id, for_update=True)
+    allocations = [(a.invoice_id, a.amount) for a in body.allocations]
+    await allocate_existing_payment(session, org.id, payment, allocations)
+    await write_audit(
+        session,
+        actor=user.user,
+        action="allocate",
+        entity_type="invoicing.payment",
+        entity_id=payment.id,
+        after={"allocations": [[str(i), str(a)] for i, a in allocations]},
     )
-    return payment
+    for invoice_id, amount in allocations:
+        await emit(
+            session,
+            Event(
+                name="payment.allocated",
+                payload={
+                    "payment_id": str(payment.id),
+                    "invoice_id": str(invoice_id),
+                    "amount": str(amount),
+                },
+                org_id=org.id,
+            ),
+        )
+    await session.commit()
+    return await _reload_payment(session, payment.id)
 
 
 @router.post("/payments/{payment_id}/void", response_model=inv.PaymentOut)
@@ -535,17 +590,18 @@ async def void_payment(
     session: AsyncSession = Depends(get_session),
 ) -> Payment:
     org = await get_organization(session)
-    payment = await payment_or_404(session, org.id, payment_id)
+    payment = await _reload_payment(session, payment_id)
+    if payment.org_id != org.id:
+        raise NotFoundError("Payment not found")
     if payment.status == "void":
         raise ConflictError("Payment is already void")
     for allocation in payment.allocations:
-        invoice = (
-            await session.scalars(
-                select(Invoice).where(Invoice.id == allocation.invoice_id).with_for_update()
-            )
-        ).first()
-        if invoice:
-            await apply_allocation_to_invoice(invoice, allocation.amount, sign=-1)
+        invoice = await invoice_or_404(session, org.id, allocation.invoice_id, for_update=True)
+        await apply_allocation_to_invoice(invoice, allocation.amount, sign=-1)
+    if payment.credit_note_id:
+        credit = await invoice_or_404(session, org.id, payment.credit_note_id, for_update=True)
+        credit.amount_paid = max(Decimal(str(credit.amount_paid)) - payment.amount, ZERO)
+        refresh_settlement_status(credit)
     payment.status = "void"
     await write_audit(
         session,
@@ -555,22 +611,11 @@ async def void_payment(
         entity_id=payment.id,
         after={"number": payment.number},
     )
+    event = _payment_event("payment.voided", payment, org.id)
+    await emit(session, event)
     await session.commit()
-    await publish(
-        Event(
-            name="payment.voided",
-            payload={
-                "payment_id": str(payment.id),
-                "number": payment.number,
-                "direction": payment.direction,
-                "amount": str(payment.amount),
-                "method": payment.method,
-            },
-            org_id=org.id,
-        )
-    )
-    await session.refresh(payment)
-    return payment
+    await publish(event)
+    return await _reload_payment(session, payment.id)
 
 
 # ----------------------------------------------------------------- statement
@@ -580,6 +625,8 @@ async def party_statement(
     _user: CurrentUser = Depends(require("invoicing.invoice.read")),
     session: AsyncSession = Depends(get_session),
 ) -> inv.StatementOut:
+    """Open items of a party in document currency: open invoices, credit
+    notes not yet consumed, and on-account payment amounts."""
     org = await get_organization(session)
     party = await session.get(Contact, party_id)
     if not party:
@@ -590,38 +637,47 @@ async def party_statement(
             .where(
                 Invoice.org_id == org.id,
                 Invoice.party_id == party_id,
-                # Invoices carry what is owed; posted credit notes reduce it.
-                (
-                    (Invoice.status.in_(("posted", "partial")))
-                    | ((Invoice.status == "paid") & (Invoice.invoice_type.endswith("_credit")))
-                ),
+                Invoice.status.in_(("posted", "partial")),
             )
             .order_by(Invoice.invoice_date)
         )
     ).all()
     lines = []
-    open_balance = Decimal("0.00")
+    open_total = ZERO
     for invoice in invoices:
-        if invoice.invoice_type.endswith("_credit"):
-            balance = -Decimal(str(invoice.total))
-        else:
-            balance = Decimal(str(invoice.total)) - Decimal(str(invoice.amount_paid))
-        open_balance += balance
+        balance = open_balance(invoice)
+        if is_credit(invoice):
+            balance = -balance  # unconsumed credit reduces what is owed
+        open_total += balance
         lines.append(
             inv.StatementLine(
                 invoice_id=invoice.id,
+                invoice_type=invoice.invoice_type,
                 number=invoice.number,
                 invoice_date=invoice.invoice_date,
                 due_date=invoice.due_date,
                 total=invoice.total,
+                total_base=invoice.total_base,
                 amount_paid=invoice.amount_paid,
                 balance=balance,
                 status=invoice.status,
             )
         )
+    payments = (
+        await session.scalars(
+            select(Payment).where(
+                Payment.org_id == org.id,
+                Payment.party_id == party_id,
+                Payment.status == "recorded",
+                Payment.credit_note_id.is_(None),
+            )
+        )
+    ).all()
+    unapplied = sum((inv.PaymentOut.model_validate(p).unallocated for p in payments), ZERO)
     return inv.StatementOut(
         party_id=party_id,
         party_name=party.name,
-        open_balance=open_balance.quantize(Decimal("0.01")),
+        open_balance=(open_total - unapplied).quantize(Decimal("0.01")),
+        unapplied_payments=unapplied,
         invoices=lines,
     )

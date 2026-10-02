@@ -60,21 +60,6 @@ async def test_inline_enqueue_runs_job(client):
 
     await enqueue("check_overdue_invoices")
 
-    from sqlalchemy import select as _select
-
-    from app.core.db import SessionFactory as _SF
-    from app.modules.core.models import Notification as _N
-
-    async with _SF() as dbg:
-        rows = (await dbg.scalars(_select(_N))).all()
-        from app.modules.core.models import User as _U
-
-        emails = {}
-        for n in rows:
-            u = await dbg.get(_U, n.user_id)
-            emails.setdefault(u.email if u else "?", []).append(n.type)
-        print("DBG by user:", {k: len(v) for k, v in emails.items()})
-
     # Assert directly on the DB for THIS invoice (deterministic regardless of
     # cross-test notification volume).
     from sqlalchemy import select

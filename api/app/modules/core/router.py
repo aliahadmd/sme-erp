@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.errors import (
     AuthenticationError,
+    ConflictError,
     DomainError,
     NotFoundError,
     PermissionDeniedError,
@@ -39,6 +40,7 @@ from app.modules.core.schemas import (
     AuditLogOut,
     BranchIn,
     BranchOut,
+    BranchUpdateIn,
     LoginIn,
     MeOut,
     NotificationOut,
@@ -46,6 +48,7 @@ from app.modules.core.schemas import (
     OrganizationUpdateIn,
     RoleIn,
     RoleOut,
+    RoleUpdateIn,
     SettingIn,
     SettingOut,
     TokenOut,
@@ -90,8 +93,6 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
 
 
 # --------------------------------------------------------------------- auth
-LOGIN_MAX_FAILURES = 10
-LOGIN_WINDOW_SECONDS = 300
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -104,8 +105,9 @@ async def login(
     # Brute-force guard: per (ip, email) failure counter in redis.
     fail_key = f"login:fail:{client_ip(request) or 'unknown'}:{body.email.lower()}"
     redis = request.app.state.redis
+    settings = get_settings()
     attempts = int(await redis.get(fail_key) or 0)
-    if attempts >= LOGIN_MAX_FAILURES:
+    if attempts >= settings.login_max_failures:
         raise DomainError(
             "Too many failed login attempts — try again later",
             code="rate_limited",
@@ -115,7 +117,7 @@ async def login(
         user = await authenticate(session, body.email, body.password)
     except AuthenticationError:
         await redis.incr(fail_key)
-        await redis.expire(fail_key, LOGIN_WINDOW_SECONDS)
+        await redis.expire(fail_key, settings.login_window_seconds)
         raise
     await redis.delete(fail_key)
     await write_audit(
@@ -207,7 +209,16 @@ async def update_org(
 ) -> Organization:
     org = await get_organization(session)
     before = snapshot(org, [f for f in OrganizationUpdateIn.model_fields])
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    new_base = changes.get("base_currency")
+    if new_base and new_base != org.base_currency and await _has_documents(session, org.id):
+        # Every stored base-currency amount (total_base, journals, stock
+        # costs) is denominated in the current base currency.
+        raise ValidationError(
+            "The base currency cannot change once documents exist — "
+            "journals and stock values are denominated in it"
+        )
+    for field, value in changes.items():
         setattr(org, field, value)
     await write_audit(
         session,
@@ -223,6 +234,19 @@ async def update_org(
     return org
 
 
+async def _has_documents(session: AsyncSession, org_id: uuid.UUID) -> bool:
+    from app.modules.accounting.models import JournalEntry
+    from app.modules.invoicing.models import Invoice, Payment
+    from app.modules.purchasing.models import PurchaseOrder
+    from app.modules.sales.models import Quotation, SalesOrder
+
+    for model in (JournalEntry, Invoice, Payment, SalesOrder, PurchaseOrder, Quotation):
+        found = await session.scalar(select(model.id).where(model.org_id == org_id).limit(1))
+        if found is not None:
+            return True
+    return False
+
+
 # ----------------------------------------------------------------- branches
 @router.get(
     "/branches",
@@ -230,24 +254,59 @@ async def update_org(
     dependencies=[Depends(require("core.branch.read"))],
 )
 async def list_branches(session: AsyncSession = Depends(get_session)) -> list[Branch]:
-    return list(await session.scalars(select(Branch).order_by(Branch.code)))
+    org = await get_organization(session)
+    return list(
+        await session.scalars(select(Branch).where(Branch.org_id == org.id).order_by(Branch.code))
+    )
 
 
-@router.post("/branches", response_model=BranchOut)
+@router.post("/branches", response_model=BranchOut, status_code=201)
 async def create_branch(
     body: BranchIn,
     user: CurrentUser = Depends(require("core.branch.create")),
     session: AsyncSession = Depends(get_session),
 ) -> Branch:
     org = await get_organization(session)
-    branch = Branch(org_id=org.id, **body.model_dump())
+    code = body.code.upper()
+    if await session.scalar(select(Branch.id).where(Branch.org_id == org.id, Branch.code == code)):
+        raise ConflictError(f"Branch {code} already exists")
+    branch = Branch(org_id=org.id, **{**body.model_dump(), "code": code})
     session.add(branch)
     await write_audit(
         session,
         actor=user.user,
         action="create",
         entity_type="core.branch",
+        entity_id=branch.id,
         after={"code": branch.code},
+    )
+    await session.commit()
+    await session.refresh(branch)
+    return branch
+
+
+@router.patch("/branches/{branch_id}", response_model=BranchOut)
+async def update_branch(
+    branch_id: uuid.UUID,
+    body: BranchUpdateIn,
+    user: CurrentUser = Depends(require("core.branch.update")),
+    session: AsyncSession = Depends(get_session),
+) -> Branch:
+    org = await get_organization(session)
+    branch = await session.get(Branch, branch_id)
+    if not branch or branch.org_id != org.id:
+        raise NotFoundError("Branch not found")
+    before = snapshot(branch, ["name", "address", "is_active"])
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(branch, field, value)
+    await write_audit(
+        session,
+        actor=user.user,
+        action="update",
+        entity_type="core.branch",
+        entity_id=branch.id,
+        before=before,
+        after=snapshot(branch, ["name", "address", "is_active"]),
     )
     await session.commit()
     await session.refresh(branch)
@@ -437,6 +496,53 @@ async def create_role(
     )
 
 
+@router.patch("/roles/{role_id}", response_model=RoleOut)
+async def update_role(
+    role_id: uuid.UUID,
+    body: RoleUpdateIn,
+    actor: CurrentUser = Depends(require("core.role.update")),
+    session: AsyncSession = Depends(get_session),
+) -> RoleOut:
+    role = await session.get(Role, role_id)
+    if not role:
+        raise NotFoundError("Role not found")
+    if role.is_system:
+        raise ValidationError("System roles are managed by the seed and cannot be edited")
+    before = {"name": role.name, "permissions": sorted(p.code for p in role.permissions)}
+    if body.name is not None:
+        role.name = body.name
+    if body.description is not None:
+        role.description = body.description
+    if body.permission_codes is not None:
+        permissions = list(
+            await session.scalars(
+                select(Permission).where(Permission.code.in_(body.permission_codes))
+            )
+        )
+        if len(permissions) != len(set(body.permission_codes)):
+            raise ValidationError("Unknown permission code in list")
+        role.permissions = permissions
+    await write_audit(
+        session,
+        actor=actor.user,
+        action="update",
+        entity_type="core.role",
+        entity_id=role.id,
+        before=before,
+        after={"name": role.name, "permissions": sorted(p.code for p in role.permissions)},
+    )
+    await session.commit()
+    await session.refresh(role)
+    return RoleOut(
+        id=role.id,
+        code=role.code,
+        name=role.name,
+        description=role.description,
+        is_system=role.is_system,
+        permission_codes=sorted(p.code for p in role.permissions),
+    )
+
+
 @router.get("/permissions", dependencies=[Depends(require("core.role.read"))])
 async def list_permissions(session: AsyncSession = Depends(get_session)) -> list[dict]:
     perms = list(await session.scalars(select(Permission).order_by(Permission.code)))
@@ -481,6 +587,7 @@ async def put_setting(
     session: AsyncSession = Depends(get_session),
 ) -> Setting:
     org = await get_organization(session)
+    await _validate_setting(session, org.id, key, body.value)
     setting = await set_setting(session, org.id, key, body.value)
     await write_audit(
         session,
@@ -493,6 +600,59 @@ async def put_setting(
     await session.commit()
     await session.refresh(setting)
     return setting
+
+
+PREFIX_ERROR = "Prefix must be 1-10 characters, alphanumeric with dashes allowed"
+
+
+def _valid_prefix(prefix: object) -> bool:
+    return (
+        isinstance(prefix, str)
+        and 0 < len(prefix) <= 10
+        and prefix.replace("-", "").replace("_", "").isalnum()
+    )
+
+
+async def _validate_setting(
+    session: AsyncSession, org_id: uuid.UUID, key: str, value: dict
+) -> None:
+    """Settings drive postings and numbering — reject values that would make
+    every later posting fail (unknown keys, missing accounts, bad prefixes)."""
+    from app.modules.accounting.models import Account
+    from app.modules.accounting.service import DEFAULT_MAPPING
+    from app.modules.core.service import DEFAULT_SETTINGS
+
+    known = set(DEFAULT_SETTINGS) | {"accounting.mapping"}
+    if key not in known:
+        raise ValidationError(f"Unknown setting '{key}' (known: {', '.join(sorted(known))})")
+    if key == "accounting.mapping":
+        unknown_keys = set(value) - set(DEFAULT_MAPPING)
+        if unknown_keys:
+            raise ValidationError(f"Unknown mapping keys: {', '.join(sorted(unknown_keys))}")
+        codes = {str(code) for code in value.values()}
+        existing = set(
+            await session.scalars(
+                select(Account.code).where(
+                    Account.org_id == org_id, Account.code.in_(codes), Account.is_active.is_(True)
+                )
+            )
+        )
+        missing = codes - existing
+        if missing:
+            raise ValidationError(
+                f"Accounts do not exist or are inactive: {', '.join(sorted(missing))}"
+            )
+    elif key == "numbering.prefixes":
+        unknown = set(value) - set(DEFAULT_SETTINGS["numbering.prefixes"])
+        if unknown:
+            raise ValidationError(f"Unknown numbering entities: {', '.join(sorted(unknown))}")
+        if not all(_valid_prefix(p) for p in value.values()):
+            raise ValidationError(PREFIX_ERROR)
+    elif key == "inventory.guard":
+        if set(value) - {"allow_negative"} or not isinstance(
+            value.get("allow_negative", False), bool
+        ):
+            raise ValidationError("inventory.guard accepts only a boolean 'allow_negative'")
 
 
 # --------------------------------------------------------------- numbering
@@ -510,18 +670,18 @@ async def list_numbering(session: AsyncSession = Depends(get_session)) -> list[d
     org = await get_organization(session)
     overrides = await get_setting(session, org.id, "numbering.prefixes") or {}
     out = []
+    year = datetime.now(UTC).year  # sequences restart every year
     for entity, default_prefix in DEFAULT_SETTINGS["numbering.prefixes"].items():
         prefix = overrides.get(entity, default_prefix)
         row = (
             await session.execute(
                 _text(
                     "SELECT last_number FROM core.document_sequences "
-                    "WHERE org_id = :org AND entity = :entity"
+                    "WHERE org_id = :org AND entity = :entity AND year = :year"
                 ),
-                {"org": str(org.id), "entity": entity},
+                {"org": str(org.id), "entity": entity, "year": year},
             )
         ).scalar()
-        year = datetime.now(UTC).year
         out.append(
             {
                 "entity": entity,
@@ -548,8 +708,8 @@ async def update_numbering_prefix(
     )
 
     prefix = str(body.value.get("prefix", "")).strip()
-    if not prefix or len(prefix) > 10 or not prefix.replace("-", "").replace("_", "").isalnum():
-        raise ValidationError("Prefix must be 1-10 characters, alphanumeric with dashes allowed")
+    if not _valid_prefix(prefix):
+        raise ValidationError(PREFIX_ERROR)
     if entity not in DEFAULT_SETTINGS["numbering.prefixes"]:
         raise NotFoundError(f"Unknown numbering entity: {entity}")
     org = await get_organization(session)
@@ -660,11 +820,15 @@ async def unread_count(
 ) -> dict[str, int]:
     # Lazy overdue-invoice detection: deduped, so the poll is self-healing
     # without a scheduler.
-    from app.modules.core.notification_events import notify_overdue_invoices
+    from app.modules.core.notification_events import (
+        flush_overdue_emails,
+        notify_overdue_invoices,
+    )
 
     org = await get_organization(session)
     await notify_overdue_invoices(session, org.id)
     await session.commit()
+    await flush_overdue_emails(session)
     count = await session.scalar(
         select(func.count())
         .select_from(Notification)

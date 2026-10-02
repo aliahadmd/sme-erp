@@ -34,7 +34,7 @@ async def seed(session) -> None:  # noqa: ANN001
     # Organization (single-org deployment in phase 1)
     org = (await session.scalars(select(Organization).limit(1))).first()
     if not org:
-        org = Organization(name="My Company", base_currency="USD")
+        org = Organization(name=settings.org_name, base_currency=settings.base_currency.upper())
         session.add(org)
         await session.flush()
         logger.info("seed_org_created", name=org.name)

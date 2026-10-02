@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.errors import ConflictError
-from app.modules.core.deps import CurrentUser, require
+from app.modules.core.deps import CurrentUser, get_current_user, require
 from app.modules.core.service import get_organization, write_audit
 from app.modules.currencies.models import Currency, FxRate
 
@@ -48,7 +48,8 @@ class RateOut(BaseModel):
 
 @router.get("", response_model=list[CurrencyOut])
 async def list_currencies(
-    _user: CurrentUser = Depends(require("core.settings.read")),
+    # Any signed-in user: document editors need the list for currency pickers.
+    _user: CurrentUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[Currency]:
     org = await get_organization(session)

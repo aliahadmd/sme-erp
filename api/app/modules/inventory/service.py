@@ -148,7 +148,9 @@ async def default_warehouse(session: AsyncSession, org_id: uuid.UUID) -> Any:
     )
     warehouse = result.first()
     if not warehouse:
-        result = await session.scalars(select(Warehouse).limit(1))
+        result = await session.scalars(
+            select(Warehouse).where(Warehouse.org_id == org_id).order_by(Warehouse.code).limit(1)
+        )
         warehouse = result.first()
     if not warehouse:
         raise NotFoundError("No warehouse exists — create one in settings")

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
+import { formatMoney } from "@/lib/money"
 
 const STATUS_TABS = ["all", "in progress", "draft", "confirmed", "delivered", "invoiced", "received", "closed", "cancelled"]
 
@@ -149,7 +150,7 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
                   <Badge variant={STATUS_COLORS[order.status] ?? "outline"}>{order.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(order.total).toFixed(2)} {order.currency}
+                  {formatMoney(order.total)} {order.currency}
                 </TableCell>
               </TableRow>
             ))}

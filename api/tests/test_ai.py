@@ -90,38 +90,45 @@ async def test_draft_review_lifecycle(client):
     assert product_after["description"] == "A great widget."
 
 
-async def test_ai_budget_enforced(client):
-    """Without a key each call is ai_disabled(503); the budget guard still
-    limits daily usage — third call exceeds the limit of 2."""
-    import os
+async def test_ai_budget_enforced(client, monkeypatch):
+    """With AI enabled (model stubbed) the daily budget allows exactly
+    AI_DAILY_REQUEST_LIMIT calls; a disabled AI never consumes budget."""
     from datetime import date
+
+    from redis.asyncio import from_url as aioredis_from_url
+
+    from app.core.ai import AIClient, AIResult
+    from app.core.config import get_settings
 
     admin = await _admin(client)
     headers = _auth(admin)
     key = f"ai:budget:{date.today().isoformat()}"
+    settings = get_settings()
 
-    # start from a clean budget counter (redis persists across runs)
-    from redis.asyncio import from_url as aioredis_from_url
+    async def _reset_budget() -> None:
+        r = aioredis_from_url(settings.redis_url, decode_responses=True)
+        try:
+            await r.delete(key)
+        finally:
+            await r.aclose()
 
-    from app.core.config import get_settings
+    async def _summarize(i: int) -> int:
+        response = await client.post(
+            "/api/ai/summarize", headers=headers, json={"report": "sales", "payload": {"i": i}}
+        )
+        return response.status_code
 
-    r = aioredis_from_url(get_settings().redis_url, decode_responses=True)
+    await _reset_budget()
+    # Disabled AI: 503 and no budget consumed.
+    assert [await _summarize(i) for i in range(3)] == [503, 503, 503]
+
+    async def fake_complete(self, system: str, prompt: str) -> AIResult:  # noqa: ARG001
+        return AIResult(text="- sales are up", model="stub")
+
+    monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+    monkeypatch.setattr(settings, "ai_daily_request_limit", 2)
+    monkeypatch.setattr(AIClient, "complete", fake_complete)
     try:
-        await r.delete(key)
+        assert [await _summarize(i) for i in range(3)] == [200, 200, 429]
     finally:
-        await r.aclose()
-
-    os.environ["AI_DAILY_REQUEST_LIMIT"] = "2"
-    try:
-        statuses = []
-        for i in range(3):
-            response = await client.post(
-                "/api/ai/summarize",
-                headers=headers,
-                json={"report": "sales", "payload": {"i": i}},
-            )
-            statuses.append(response.status_code)
-        # calls 1-2: ai_disabled(503) — no key configured; call 3: budget(429)
-        assert statuses == [503, 503, 429]
-    finally:
-        os.environ.pop("AI_DAILY_REQUEST_LIMIT", None)
+        await _reset_budget()

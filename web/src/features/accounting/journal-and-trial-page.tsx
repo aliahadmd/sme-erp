@@ -3,6 +3,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { accountingApi } from "@/features/accounting/api"
+import { formatMoney, moneyToCents, subtractMoney, sumMoney } from "@/lib/money"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +41,8 @@ const SOURCE_LABELS: Record<string, string> = {
   ap_invoice: "AP bill",
   payment: "Payment",
   delivery: "Delivery (COGS)",
+  receipt: "Goods received",
+  reversal: "Reversal",
   adjustment: "Stock adjustment",
   manual: "Manual",
 }
@@ -68,7 +71,7 @@ export function JournalPage() {
       <div className="flex flex-col gap-3">
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {(data?.items ?? []).map((entry) => {
-          const totalDebit = entry.lines.reduce((s, l) => s + Number(l.debit), 0)
+          const totalDebit = sumMoney(entry.lines.map((l) => l.debit))
           return (
             <div key={entry.id} className="rounded-lg border">
               <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
@@ -76,7 +79,7 @@ export function JournalPage() {
                 <span className="text-sm text-muted-foreground">{entry.entry_date}</span>
                 <Badge variant="outline">{SOURCE_LABELS[entry.source_type] ?? entry.source_type}</Badge>
                 <span className="text-sm text-muted-foreground">{entry.memo}</span>
-                <span className="ml-auto font-mono text-sm">{totalDebit.toFixed(2)}</span>
+                <span className="ml-auto font-mono text-sm">{totalDebit}</span>
               </div>
               <Table>
                 <TableBody>
@@ -87,10 +90,10 @@ export function JournalPage() {
                       </TableCell>
                       <TableCell>{line.account_name}</TableCell>
                       <TableCell className="w-32 text-right font-mono text-sm">
-                        {Number(line.debit) ? Number(line.debit).toFixed(2) : ""}
+                        {moneyToCents(line.debit) ? formatMoney(line.debit) : ""}
                       </TableCell>
                       <TableCell className="w-32 pr-4 text-right font-mono text-sm">
-                        {Number(line.credit) ? Number(line.credit).toFixed(2) : ""}
+                        {moneyToCents(line.credit) ? formatMoney(line.credit) : ""}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -229,9 +232,11 @@ export function TrialBalancePage() {
     queryFn: () => accountingApi.trialBalance(),
   })
 
-  const totalDebit = (data ?? []).reduce((s, r) => s + Number(r.total_debit), 0)
-  const totalCredit = (data ?? []).reduce((s, r) => s + Number(r.total_credit), 0)
-  const balanced = Math.abs(totalDebit - totalCredit) < 0.001
+  // Exact decimal sums — float addition could report a fake imbalance.
+  const totalDebit = sumMoney((data ?? []).map((r) => r.total_debit))
+  const totalCredit = sumMoney((data ?? []).map((r) => r.total_credit))
+  const difference = subtractMoney(totalDebit, totalCredit)
+  const balanced = difference === "0.00"
 
   return (
     <div className="flex flex-col gap-4">
@@ -269,13 +274,13 @@ export function TrialBalancePage() {
                   <Badge variant="outline">{row.type}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(row.total_debit) ? Number(row.total_debit).toFixed(2) : ""}
+                  {moneyToCents(row.total_debit) ? formatMoney(row.total_debit) : ""}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(row.total_credit) ? Number(row.total_credit).toFixed(2) : ""}
+                  {moneyToCents(row.total_credit) ? formatMoney(row.total_credit) : ""}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(row.balance).toFixed(2)}
+                  {formatMoney(row.balance)}
                 </TableCell>
               </TableRow>
             ))}
@@ -286,15 +291,15 @@ export function TrialBalancePage() {
         <div className="w-64 rounded-lg border p-3 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Total debits</span>
-            <span className="font-mono">{totalDebit.toFixed(2)}</span>
+            <span className="font-mono">{totalDebit}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Total credits</span>
-            <span className="font-mono">{totalCredit.toFixed(2)}</span>
+            <span className="font-mono">{totalCredit}</span>
           </div>
           <div className="mt-1 flex justify-between border-t pt-2 font-semibold">
             <span>{balanced ? "Balanced ✓" : "OUT OF BALANCE"}</span>
-            <span className="font-mono">{(totalDebit - totalCredit).toFixed(2)}</span>
+            <span className="font-mono">{difference}</span>
           </div>
         </div>
       </div>

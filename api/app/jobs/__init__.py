@@ -9,7 +9,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
-from app.jobs import backups, maintenance
+from app.jobs import backups, email, maintenance
 from app.jobs.queue import enqueue, job_names, register_job  # noqa: F401
 
 
@@ -30,6 +30,7 @@ class WorkerSettings:
         maintenance.expire_quotations,
         backups.backup_database,
         backups.prune_audit_logs,
+        email.send_email,
         worker_heartbeat,
     ]
     cron_jobs = [

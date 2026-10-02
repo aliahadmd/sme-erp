@@ -114,11 +114,17 @@ async def test_roles_listed_with_permissions(client):
 
 async def test_settings_roundtrip_and_audit(client):
     admin = await _login(client)
-    value = {"payment_terms_days": 14}
-    put = await client.put("/api/settings/test.key", headers=_auth(admin), json={"value": value})
+    value = {"payment_terms_days": 14, "default_sale_tax": None}
+    put = await client.put(
+        "/api/settings/invoicing.defaults", headers=_auth(admin), json={"value": value}
+    )
     assert put.status_code == 200, put.text
-    got = (await client.get("/api/settings/test.key", headers=_auth(admin))).json()
+    got = (await client.get("/api/settings/invoicing.defaults", headers=_auth(admin))).json()
     assert got["value"] == value
+
+    # Unknown keys are rejected (settings drive postings and numbering)
+    bad = await client.put("/api/settings/test.key", headers=_auth(admin), json={"value": {}})
+    assert bad.status_code == 422
 
     # Login + settings change are audited
     logs = (await client.get("/api/audit-logs", headers=_auth(admin), params={"limit": 50})).json()

@@ -29,6 +29,8 @@ export type StockValuationRow = {
 }
 
 export type TaxSummaryRow = {
+  /** output = sales tax (credit notes netted) · input = purchase tax */
+  direction: "output" | "input"
   tax_code: string | null
   tax_name: string | null
   rate_pct: string | null
@@ -69,5 +71,10 @@ export const reportsApi = {
       `/api/notifications?limit=20${unreadOnly ? "&unread_only=true" : ""}`,
     ),
   unreadCount: () => api.get<{ count: number }>("/api/notifications/unread-count"),
+  summarize: (report: string, payload: unknown) =>
+    api.post<{ summary: string; model: string }>("/api/ai/summarize", {
+      report,
+      payload: { rows: payload },
+    }),
   markRead: (id: string) => api.post<Notification>(`/api/notifications/${id}/read`),
 }

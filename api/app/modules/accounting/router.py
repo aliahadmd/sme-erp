@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -83,6 +83,18 @@ class LedgerRow(BaseModel):
     balance: Decimal
 
 
+class AccountUpdateIn(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=100)
+    is_active: bool | None = None
+
+
+class JournalEntryPage(BaseModel):
+    items: list[JournalEntryOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class TrialBalanceRow(BaseModel):
     account_id: uuid.UUID
     code: str
@@ -136,19 +148,51 @@ async def create_account(
     return account
 
 
-@router.get("/journal-entries", response_model=list[JournalEntryOut])
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+async def update_account(
+    account_id: uuid.UUID,
+    body: AccountUpdateIn,
+    user: CurrentUser = Depends(require("accounting.account.update")),
+    session: AsyncSession = Depends(get_session),
+) -> Account:
+    org = await get_organization(session)
+    account = await session.get(Account, account_id)
+    if not account or account.org_id != org.id:
+        raise NotFoundError("Account not found")
+    if account.is_system and body.is_active is False:
+        raise ValidationError(
+            "System accounts receive automatic postings and cannot be deactivated"
+        )
+    before = {"name": account.name, "is_active": account.is_active}
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(account, field, value)
+    await write_audit(
+        session,
+        actor=user.user,
+        action="update",
+        entity_type="accounting.account",
+        entity_id=account.id,
+        before=before,
+        after={"name": account.name, "is_active": account.is_active},
+    )
+    await session.commit()
+    await session.refresh(account)
+    return account
+
+
+@router.get("/journal-entries", response_model=JournalEntryPage)
 async def list_journal_entries(
     params: PageParamsDep,
     source_type: str | None = None,
     _user: CurrentUser = Depends(require("accounting.entry.read")),
     session: AsyncSession = Depends(get_session),
-) -> list[JournalEntryOut]:
+) -> JournalEntryPage:
     org = await get_organization(session)
     stmt = (
         select(JournalEntry)
         .where(JournalEntry.org_id == org.id)
         .options(selectinload(JournalEntry.lines).selectinload(JournalLine.account))
-        .order_by(JournalEntry.created_at.desc())
+        .order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
     )
     if source_type:
         stmt = stmt.where(JournalEntry.source_type == source_type)
@@ -160,7 +204,7 @@ async def list_journal_entries(
             item.lines[i].account_code = line.account.code
             item.lines[i].account_name = line.account.name
         out.append(item)
-    return out
+    return JournalEntryPage(items=out, total=total, limit=params.limit, offset=params.offset)
 
 
 @router.post("/journal-entries", response_model=JournalEntryOut, status_code=201)
@@ -176,6 +220,8 @@ async def create_manual_entry(
         account = accounts.get(line.account_id) or await session.get(Account, line.account_id)
         if not account or account.org_id != org.id:
             raise ValidationError("Unknown account in entry")
+        if not account.is_active:
+            raise ValidationError(f"Account {account.code} is inactive")
         accounts[line.account_id] = account
         lines.append((account, line.debit, line.credit))
     entry = await post_entry(
@@ -237,32 +283,37 @@ async def account_ledger(
 
 @router.get("/trial-balance", response_model=list[TrialBalanceRow])
 async def trial_balance(
+    as_of: date | None = None,
     _user: CurrentUser = Depends(require("accounting.entry.read")),
     session: AsyncSession = Depends(get_session),
 ) -> list[TrialBalanceRow]:
+    """Per-account totals aggregated in the database (optionally up to and
+    including `as_of`)."""
     org = await get_organization(session)
+    totals_stmt = (
+        select(
+            JournalLine.account_id,
+            func.coalesce(func.sum(JournalLine.debit), 0),
+            func.coalesce(func.sum(JournalLine.credit), 0),
+        )
+        .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+        .where(JournalEntry.org_id == org.id, JournalEntry.status == "posted")
+        .group_by(JournalLine.account_id)
+    )
+    if as_of:
+        totals_stmt = totals_stmt.where(JournalEntry.entry_date <= as_of)
+    totals = {
+        account_id: (Decimal(str(debit)), Decimal(str(credit)))
+        for account_id, debit, credit in (await session.execute(totals_stmt)).all()
+    }
     accounts = (
         await session.scalars(
             select(Account).where(Account.org_id == org.id).order_by(Account.code)
         )
     ).all()
-    entries = (
-        await session.scalars(
-            select(JournalEntry)
-            .where(JournalEntry.org_id == org.id, JournalEntry.status == "posted")
-            .options(selectinload(JournalEntry.lines))
-        )
-    ).all()
-    totals: dict[uuid.UUID, list[Decimal]] = {}
-    for entry in entries:
-        for line in entry.lines:
-            agg = totals.setdefault(line.account_id, [Decimal("0"), Decimal("0")])
-            agg[0] += Decimal(str(line.debit))
-            agg[1] += Decimal(str(line.credit))
     rows = []
     for account in accounts:
         debit, credit = totals.get(account.id, (Decimal("0"), Decimal("0")))
-        raw = Decimal(str(debit)) - Decimal(str(credit))
         rows.append(
             TrialBalanceRow(
                 account_id=account.id,
@@ -271,7 +322,7 @@ async def trial_balance(
                 type=account.type,
                 total_debit=debit,
                 total_credit=credit,
-                balance=raw.quantize(Decimal("0.01")),
+                balance=(debit - credit).quantize(Decimal("0.01")),
             )
         )
     return rows

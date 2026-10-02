@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { formatMoney } from "@/lib/money"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -134,7 +135,7 @@ export function StockPage() {
                   {Number(row.avg_cost).toFixed(4)}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(row.stock_value).toFixed(2)}
+                  {formatMoney(row.stock_value)}
                 </TableCell>
               </TableRow>
             ))}
@@ -362,13 +363,12 @@ function CreateFromOrderDialog({
 
   const ordersQuery = useQuery({
     queryKey: ["inventory", "source-orders", kind, open],
-    queryFn: () =>
-      kind === "receipt"
-        ? inventoryApi.purchaseOrders("confirmed")
-        : inventoryApi.salesOrders("confirmed"),
+    queryFn: () => (kind === "receipt" ? inventoryApi.purchaseOrders() : inventoryApi.salesOrders()),
     enabled: open,
   })
-  const orders = ordersQuery.data?.items ?? []
+  // Goods may still be outstanding on partly moved or already-invoiced orders.
+  const movable = new Set(["confirmed", "delivered", "received", "invoiced"])
+  const orders = (ordersQuery.data?.items ?? []).filter((o) => movable.has(o.status))
 
   const create = async () => {
     setSaving(true)

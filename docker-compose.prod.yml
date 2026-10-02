@@ -78,7 +78,7 @@ services:
     build:
       context: .
       dockerfile: docker/api.prod.Dockerfile
-    environment:
+    environment: &app-env
       ENVIRONMENT: ${ENVIRONMENT:-prod}
       DATABASE_URL: ${DATABASE_URL:?set in env}
       REDIS_URL: ${REDIS_URL:?set in env}
@@ -89,9 +89,28 @@ services:
       S3_BUCKET: ${S3_BUCKET:-erp}
       S3_REGION: ${S3_REGION:-us-east-1}
       JOBS_MODE: ${JOBS_MODE:-redis}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # bootstrap (seeded idempotently at every start)
+      ORG_NAME: ${ORG_NAME:-My Company}
+      BASE_CURRENCY: ${BASE_CURRENCY:-USD}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?set in env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set in env}
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # email (empty SMTP_HOST = emails are logged, not sent)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-erp@example.com}
+      # AI (empty key = AI features disabled)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      AI_DAILY_REQUEST_LIMIT: ${AI_DAILY_REQUEST_LIMIT:-200}
+      # retention & backups
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-backups/}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-8}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-6}
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,22 +125,24 @@ services:
       dockerfile: docker/api.prod.Dockerfile
     entrypoint: ["sh", "-c", "exec arq app.jobs.WorkerSettings"]
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import os; os.kill(1, 0)'"]
-      interval: 15s
+      # The worker writes jobs:heartbeat every minute (180 s TTL).
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, redis, sys; sys.exit(0 if redis.from_url(os.environ['REDIS_URL']).get('jobs:heartbeat') else 1)",
+        ]
+      interval: 30s
       timeout: 5s
       retries: 6
-      start_period: 20s
+      start_period: 90s
     environment:
-      ENVIRONMENT: ${ENVIRONMENT:-prod}
-      DATABASE_URL: ${DATABASE_URL:?set in env}
-      REDIS_URL: ${REDIS_URL:?set in env}
-      JWT_SECRET: ${JWT_SECRET:?set in env}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://seaweedfs:8333}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set in env}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:?set in env}
-      S3_BUCKET: ${S3_BUCKET:-erp}
-      S3_REGION: ${S3_REGION:-us-east-1}
+      <<: *app-env
       JOBS_MODE: redis
+    volumes:
+      # Local backup copies survive redeploys (S3 holds the off-box copy).
+      - dumps:/app/dumps
     depends_on:
       api:
         condition: service_healthy
@@ -142,3 +163,4 @@ volumes:
   pgdata:
   redisdata:
   s3data:
+  dumps:

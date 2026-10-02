@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api/client"
+import { formatMoney } from "@/lib/money"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -146,7 +147,7 @@ export function QuotesPage() {
                   <Badge variant={statusVariant(quote.status)}>{quote.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(quote.total).toFixed(2)}
+                  {formatMoney(quote.total)}
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">

@@ -42,8 +42,25 @@ class Settings(BaseSettings):
     # --- AI / OpenRouter (empty key = AI features disabled) ---
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"
+    ai_daily_request_limit: int = 200
 
-    # --- bootstrap admin (used by `make seed`) ---
+    # --- auth hardening ---
+    login_max_failures: int = 10
+    login_window_seconds: int = 300
+
+    # --- retention & backups ---
+    audit_retention_days: int = 365
+    backup_dir: str = "/app/dumps"
+    backup_keep_daily: int = 14
+    backup_keep_weekly: int = 8
+    backup_keep_monthly: int = 6
+    # Upload each dump to S3 under this prefix (empty = keep local copies only).
+    backup_s3_prefix: str = "backups/"
+    backup_timeout_seconds: int = 1800
+
+    # --- bootstrap (used by `make seed`) ---
+    org_name: str = "My Company"
+    base_currency: str = "USD"
     admin_email: str = "admin@example.com"
     admin_password: str = "admin123"
     admin_full_name: str = "Admin"

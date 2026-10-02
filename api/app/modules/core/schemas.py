@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.shared.money import CurrencyCode
 from app.shared.pagination import Page
 
 # Page[...] instances used as response models
@@ -31,7 +32,7 @@ class OrganizationUpdateIn(BaseModel):
     name: str | None = None
     legal_name: str | None = None
     tax_id: str | None = None
-    base_currency: str | None = Field(None, min_length=3, max_length=3)
+    base_currency: CurrencyCode | None = None
     email: str | None = None
     phone: str | None = None
     address_line1: str | None = None
@@ -73,6 +74,18 @@ class RoleIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
     permission_codes: list[str] = []
+
+
+class RoleUpdateIn(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = None
+    permission_codes: list[str] | None = None
+
+
+class BranchUpdateIn(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    address: str | None = None
+    is_active: bool | None = None
 
 
 class UserOut(BaseModel):

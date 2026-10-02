@@ -1,12 +1,14 @@
 """Email job — sends transactional email via SMTP when configured.
 
-Without SMTP_HOST the email body is logged instead of sent, so dev and CI
-work without any mail infrastructure.
+Without SMTP_HOST the email is logged (recipient + subject, never the body)
+instead of sent, so dev and CI work without any mail infrastructure.
 """
 
 from __future__ import annotations
 
+import asyncio
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from typing import Any
 
@@ -24,7 +26,8 @@ def _send_smtp(to: str, subject: str, body: str) -> None:
     message["From"] = settings.email_from
     message["To"] = to
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-        smtp.starttls()
+        # Verified TLS: smtplib's default context does not check certificates.
+        smtp.starttls(context=ssl.create_default_context())
         if settings.smtp_user:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.sendmail(settings.email_from, [to], message.as_string())
@@ -36,6 +39,7 @@ async def send_email(ctx: dict[str, Any], to: str, subject: str, body: str) -> d
     if not settings.smtp_host:
         logger.info("email_logged_not_sent", to=to, subject=subject, length=len(body))
         return {"status": "logged"}
-    _send_smtp(to, subject, body)
+    # smtplib is blocking — keep it off the worker's event loop.
+    await asyncio.to_thread(_send_smtp, to, subject, body)
     logger.info("email_sent", to=to, subject=subject, length=len(body))
     return {"status": "sent"}

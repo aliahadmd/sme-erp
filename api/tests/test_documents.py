@@ -1,5 +1,7 @@
 """Sales & purchasing document tests — totals, state machine, RBAC, numbering."""
 
+import re
+
 import pytest
 
 from app.shared.totals import compute_line, compute_totals
@@ -158,7 +160,8 @@ async def test_purchase_order_flow_and_numbering(client, doc_ids):
     assert po["number"].startswith("PO-")
     assert po["status"] == "draft"
     # PO numbers are a separate sequence from SO
-    assert po["number"].endswith("0001") or po["number"].endswith("0002")
+    # Sequence value depends on test order — assert the numbering FORMAT.
+    assert re.fullmatch(r"PO-\d{4}-\d{4}", po["number"]), po["number"]
 
     confirmed = await client.post(
         f"/api/purchasing/orders/{po['id']}/confirm", headers=_auth(token)

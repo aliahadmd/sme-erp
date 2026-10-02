@@ -40,6 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { formatMoney } from "@/lib/money"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -143,10 +144,10 @@ export function ProductsPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(product.sale_price).toFixed(2)}
+                  {formatMoney(product.sale_price)}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {Number(product.cost_price).toFixed(2)}
+                  {formatMoney(product.cost_price)}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">

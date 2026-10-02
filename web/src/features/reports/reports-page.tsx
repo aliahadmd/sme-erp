@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { reportsApi } from "@/features/reports/api"
+import { useAuth } from "@/lib/auth"
+import { ApiError } from "@/lib/api/client"
+import { formatMoney } from "@/lib/money"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,8 +21,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 function toCsv(rows: Record<string, string | number>[]): string {
   if (rows.length === 0) return ""
   const headers = Object.keys(rows[0])
-  const escape = (value: string | number) =>
-    typeof value === "string" && value.includes(",") ? `"${value}"` : String(value)
+  const escape = (value: string | number) => {
+    let text = String(value)
+    // Neutralize spreadsheet formulas (CSV injection) from user-entered names.
+    if (/^[=+\-@]/.test(text) && typeof value === "string") text = `'${text}`
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  }
   return [
     headers.join(","),
     ...rows.map((row) => headers.map((h) => escape(row[h])).join(",")),
@@ -72,6 +79,17 @@ export function ReportsPage() {
     queryFn: () => reportsApi.taxSummary(applied.from, applied.to),
     enabled: report === "tax",
   })
+  const { hasPermission } = useAuth()
+  const currentRows = {
+    sales: salesQuery.data,
+    purchases: purchasesQuery.data,
+    valuation: valuationQuery.data,
+    aging: { ar: agingArQuery.data, ap: agingApQuery.data },
+    tax: taxQuery.data,
+  }[report]
+  const summary = useMutation({
+    mutationFn: () => reportsApi.summarize(report, currentRows ?? []),
+  })
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,6 +109,30 @@ export function ReportsPage() {
           </TabsList>
         </Tabs>
       </div>
+
+      {hasPermission("reports.view") && (
+        <div className="flex flex-col gap-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-muted-foreground">
+              AI summary of the report on screen (assistive — verify the numbers)
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={summary.isPending || !currentRows}
+              onClick={() => summary.mutate()}
+            >
+              {summary.isPending ? "Summarizing…" : "Summarize with AI"}
+            </Button>
+          </div>
+          {summary.data && <p className="whitespace-pre-wrap text-sm">{summary.data.summary}</p>}
+          {summary.error && (
+            <p className="text-xs text-destructive">
+              {summary.error instanceof ApiError ? summary.error.message : "AI request failed"}
+            </p>
+          )}
+        </div>
+      )}
 
       {["sales", "purchases", "tax"].includes(report) && (
         <div className="flex flex-wrap items-end gap-2">
@@ -133,7 +175,7 @@ export function ReportsPage() {
                   <TableCell>{row.warehouse_name} ({row.warehouse_code})</TableCell>
                   <TableCell className="text-right">{row.products}</TableCell>
                   <TableCell className="text-right font-mono text-sm">{Number(row.qty_on_hand).toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{Number(row.value).toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{formatMoney(row.value)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -180,7 +222,7 @@ export function ReportsPage() {
                     <TableRow key={row.bucket}>
                       <TableCell>{row.bucket}</TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {Number(row.amount).toFixed(2)}
+                        {formatMoney(row.amount)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -196,6 +238,7 @@ export function ReportsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Direction</TableHead>
                 <TableHead>Tax</TableHead>
                 <TableHead className="text-right">Rate</TableHead>
                 <TableHead className="text-right">Net</TableHead>
@@ -205,10 +248,13 @@ export function ReportsPage() {
             <TableBody>
               {(taxQuery.data ?? []).map((row, i) => (
                 <TableRow key={i}>
+                  <TableCell className="text-sm">
+                    {row.direction === "output" ? "Output (sales)" : "Input (purchases)"}
+                  </TableCell>
                   <TableCell>{row.tax_name}</TableCell>
                   <TableCell className="text-right">{row.rate_pct ? `${Number(row.rate_pct)}%` : "—"}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{Number(row.net).toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{Number(row.tax).toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{formatMoney(row.net)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{formatMoney(row.tax)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -221,6 +267,7 @@ export function ReportsPage() {
                 downloadCsv(
                   "tax-summary",
                   (taxQuery.data ?? []).map((r) => ({
+                    direction: r.direction,
                     tax_name: r.tax_name ?? "",
                     rate_pct: r.rate_pct ?? "",
                     net: r.net,
@@ -291,7 +338,7 @@ function PartyReport({
             <TableRow key={i}>
               <TableCell>{row.party_name}</TableCell>
               <TableCell className="text-right">{row.invoice_count}</TableCell>
-              <TableCell className="text-right font-mono text-sm">{Number(row.total).toFixed(2)}</TableCell>
+              <TableCell className="text-right font-mono text-sm">{formatMoney(row.total)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

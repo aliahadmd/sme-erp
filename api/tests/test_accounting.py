@@ -166,10 +166,11 @@ async def test_business_events_post_balanced_journals(client):
     tb = await _trial_balance(client, admin)
     await _assert_balanced(tb)
 
-    # Ledger effects of the whole cycle (vs baseline).
-    # Note: receipts do not post journals in phase 1 (AP books at bill time);
-    # the delivery COGS entry credits Inventory for the goods sold.
-    assert _net(tb, "1200") - _net(tb_before, "1200") == Decimal("-60.00")  # COGS credit
+    # Ledger effects of the whole cycle (vs baseline). Perpetual inventory:
+    # the receipt debits Inventory 100 / credits GRNI 100 (no supplier bill for
+    # these goods yet, so GRNI stays open); the delivery moves 60 to COGS.
+    assert _net(tb, "1200") - _net(tb_before, "1200") == Decimal("40.00")  # 100 in − 60 out
+    assert _net(tb, "2050") - _net(tb_before, "2050") == Decimal("-100.00")  # GRNI accrual
     assert _net(tb, "5000") - _net(tb_before, "5000") == Decimal("60.00")  # COGS
     assert _net(tb, "4000") - _net(tb_before, "4000") == Decimal("-120.00")  # revenue (credit)
     assert _net(tb, "1000") - _net(tb_before, "1000") == Decimal("120.00")  # customer cash in
@@ -184,9 +185,9 @@ async def test_business_events_post_balanced_journals(client):
         await client.get(
             "/api/accounting/journal-entries", headers=_auth(admin), params={"limit": 50}
         )
-    ).json()
+    ).json()["items"]
     sources = {e["source_type"] for e in entries}
-    assert {"ar_invoice", "ap_invoice", "payment", "delivery"} <= sources
+    assert {"ar_invoice", "ap_invoice", "payment", "delivery", "receipt"} <= sources
     for entry in entries:
         total_d = sum(Decimal(line["debit"]) for line in entry["lines"])
         total_c = sum(Decimal(line["credit"]) for line in entry["lines"])

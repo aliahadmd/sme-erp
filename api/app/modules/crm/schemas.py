@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.shared.money import CurrencyCode
 from app.shared.pagination import Page
 
 
@@ -19,7 +20,8 @@ class ContactIn(BaseModel):
     emails: list[dict] = []
     phones: list[dict] = []
     addresses: list[dict] = []
-    currency: str = Field("USD", min_length=3, max_length=3)
+    # Omitted → the organization's base currency.
+    currency: CurrencyCode | None = None
     payment_terms_days: int = Field(30, ge=0, le=365)
     credit_limit: Decimal = Field(0, ge=0)
     tags: list[str] = []
@@ -41,7 +43,7 @@ class ContactUpdateIn(BaseModel):
     emails: list[dict] | None = None
     phones: list[dict] | None = None
     addresses: list[dict] | None = None
-    currency: str | None = Field(None, min_length=3, max_length=3)
+    currency: CurrencyCode | None = None
     payment_terms_days: int | None = Field(None, ge=0, le=365)
     credit_limit: Decimal | None = Field(None, ge=0)
     tags: list[str] | None = None

@@ -5,7 +5,9 @@ banker's rounding (ROUND_HALF_EVEN).
 """
 
 from decimal import ROUND_HALF_EVEN, Decimal
+from typing import Annotated
 
+from pydantic import BeforeValidator, StringConstraints
 from sqlalchemy import Numeric
 
 MONEY = Numeric(18, 2)
@@ -38,3 +40,14 @@ def line_total(qty: Decimal, unit: Decimal, discount_pct: Decimal = Decimal("0")
 def line_tax(base: Decimal, rate_pct: Decimal) -> Decimal:
     """Tax amount for a taxed base."""
     return money(Decimal(str(base)) * Decimal(str(rate_pct)) / Decimal("100"))
+
+
+def _upper_code(value: str) -> str:
+    return value.strip().upper()
+
+
+# ISO 4217-style code: 3 letters, normalized to upper case (so "eur" and "EUR"
+# resolve to the same FX rates). Use for every currency field in schemas.
+CurrencyCode = Annotated[
+    str, BeforeValidator(_upper_code), StringConstraints(pattern=r"^[A-Z]{3}$")
+]

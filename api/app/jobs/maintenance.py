@@ -13,20 +13,29 @@ logger = get_logger(__name__)
 
 @register_job
 async def check_overdue_invoices(ctx: dict[str, Any]) -> dict[str, int]:
-    """Scan every organization for overdue invoices and create the deduped
-    notifications (same logic as the phase-1 lazy path)."""
+    """Scan every organization for overdue invoices: deduped in-app
+    notifications plus ONE reminder email per overdue customer invoice.
+    Each organization commits on its own so one failure cannot block others."""
     from sqlalchemy import select
 
     from app.core.db import SessionFactory
     from app.modules.core.models import Organization
-    from app.modules.core.notification_events import notify_overdue_invoices
+    from app.modules.core.notification_events import (
+        flush_overdue_emails,
+        notify_overdue_invoices,
+    )
 
     created = 0
     async with SessionFactory() as session:
         orgs = (await session.scalars(select(Organization.id))).all()
-        for org_id in orgs:
-            created += await notify_overdue_invoices(session, org_id)
-        await session.commit()
+    for org_id in orgs:
+        try:
+            async with SessionFactory() as session:
+                created += await notify_overdue_invoices(session, org_id, send_reminders=True)
+                await session.commit()
+                await flush_overdue_emails(session)
+        except Exception:
+            logger.exception("overdue_check_failed", org_id=str(org_id))
     logger.info("overdue_check_done", notifications_created=created)
     return {"notifications_created": created}
 
@@ -43,7 +52,8 @@ async def purge_login_counters(ctx: dict[str, Any]) -> dict[str, int]:
     removed = 0
     try:
         async for key in redis.scan_iter("login:fail:*", count=200):
-            if not await redis.ttl(key):
+            # TTL -1 = key exists without expiry (a normal counter always has one).
+            if await redis.ttl(key) == -1:
                 await redis.delete(key)
                 removed += 1
     finally:
@@ -77,6 +87,12 @@ async def generate_missing_descriptions(
                     Product.org_id == org_id,
                     Product.status == "active",
                     (Product.description.is_(None)) | (Product.description == ""),
+                    # Skip products that already have a draft awaiting review.
+                    Product.id.not_in(
+                        select(AiDraft.entity_id).where(
+                            AiDraft.entity_type == "product", AiDraft.status == "pending"
+                        )
+                    ),
                 )
                 .limit(limit)
             )

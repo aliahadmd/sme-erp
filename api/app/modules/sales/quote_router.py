@@ -21,6 +21,7 @@ from app.modules.sales.quote_service import (
     ensure_transition,
     recompute,
 )
+from app.shared.money import CurrencyCode
 from app.shared.numbering import next_number
 from app.shared.order_engine import (
     apply_line_math,
@@ -45,7 +46,8 @@ class QuoteCreateIn(BaseModel):
     customer_id: uuid.UUID
     quote_date: date | None = None
     valid_until: date | None = None
-    currency: str = Field("USD", min_length=3, max_length=3)
+    # Omitted → the customer's default currency, else the org base currency.
+    currency: CurrencyCode | None = None
     notes: str | None = None
     lines: list[QuoteLineIn] = []
 
@@ -54,7 +56,7 @@ class QuoteUpdateIn(BaseModel):
     customer_id: uuid.UUID | None = None
     quote_date: date | None = None
     valid_until: date | None = None
-    currency: str | None = Field(None, min_length=3, max_length=3)
+    currency: CurrencyCode | None = None
     notes: str | None = None
     lines: list[QuoteLineIn] | None = None
 
@@ -100,6 +102,14 @@ class QuoteOut(BaseModel):
     converted_order_id: uuid.UUID | None
     created_at: datetime | None = None
     lines: list[QuoteLineOut] = []
+
+
+async def _snapshot_fx(session: AsyncSession, org_id: uuid.UUID, document: Any) -> None:
+    from app.modules.currencies.service import resolve_rate, to_base
+
+    doc_date = getattr(document, "quote_date", None) or document.order_date
+    document.fx_rate = await resolve_rate(session, org_id, document.currency, doc_date)
+    document.total_base = to_base(document.total, document.fx_rate)
 
 
 async def _quote_or_404(session: AsyncSession, org_id: uuid.UUID, quote_id: uuid.UUID) -> Quotation:
@@ -189,7 +199,7 @@ async def create_quotation(
         customer_name=party.name,
         quote_date=body.quote_date or date.today(),
         valid_until=body.valid_until,
-        currency=body.currency,
+        currency=body.currency or party.currency or org.base_currency,
         notes=body.notes,
         created_by=user.id,
         status="draft",
@@ -197,10 +207,7 @@ async def create_quotation(
     lines = await _build_lines(session, org.id, body.lines)
     quotation.lines = lines
     recompute(quotation)
-    from app.modules.currencies.service import resolve_rate, to_base
-
-    quotation.fx_rate = await resolve_rate(session, org.id, body.currency, quotation.quote_date)
-    quotation.total_base = to_base(quotation.total, quotation.fx_rate)
+    await _snapshot_fx(session, org.id, quotation)
     session.add(quotation)
     await write_audit(
         session,
@@ -230,14 +237,17 @@ async def update_quotation(
         party = await _party(session, data["customer_id"])
         quotation.customer_id = party.id
         quotation.customer_name = party.name
-    for f in ("quote_date", "valid_until", "currency", "notes"):
+    for f in ("quote_date", "valid_until", "notes"):
         if f in data:
             setattr(quotation, f, data[f])
+    if data.get("currency"):
+        quotation.currency = data["currency"]
     if data.get("lines") is not None:
         if not body.lines:
             raise ValidationError("Quotation needs at least one line")
         quotation.lines = await _build_lines(session, org.id, list(body.lines))
         recompute(quotation)
+    await _snapshot_fx(session, org.id, quotation)
     await write_audit(
         session,
         actor=user.user,
@@ -318,7 +328,7 @@ async def reject_quotation(
 @router.post("/{quote_id}/cancel")
 async def cancel_quotation(
     quote_id: uuid.UUID,
-    user: CurrentUser = Depends(require("sales.quote.update")),
+    user: CurrentUser = Depends(require("sales.quote.cancel")),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     quotation = await _transition(quote_id, "cancelled", "cancel", user, session)
@@ -340,6 +350,9 @@ async def convert_quotation(
     ensure_transition(quotation.status, "converted")
     if not quotation.lines:
         raise ValidationError("Quotation has no lines to convert")
+    if quotation.customer_id is None:
+        raise ValidationError("Quotation has no customer")
+    await _party(session, quotation.customer_id)  # still an active customer
 
     prefix = await order_number_prefix(session, org.id, "sales_order", "SO")
     from app.shared.numbering import next_number
@@ -352,7 +365,6 @@ async def convert_quotation(
         customer_name=quotation.customer_name,
         order_date=date.today(),
         currency=quotation.currency,
-        fx_rate=quotation.fx_rate,
         notes=f"From {quotation.number}" + (f" — {quotation.notes}" if quotation.notes else ""),
         created_by=user.id,
         status="draft",
@@ -375,11 +387,10 @@ async def convert_quotation(
                 line_total=line.line_total,
             )
         )
-    from app.modules.currencies.service import to_base
     from app.shared.order_engine import recompute_header
 
     recompute_header(order, order.lines)
-    order.total_base = to_base(order.total, order.fx_rate)
+    await _snapshot_fx(session, org.id, order)  # order-date rate
     session.add(order)
     await session.flush()
     quotation.status = "converted"
@@ -396,7 +407,7 @@ async def convert_quotation(
         session,
         actor=user.user,
         action="create",
-        entity_type="sales.order",
+        entity_type="sales_order",
         entity_id=order.id,
         after={"number": number, "from_quotation": quotation.number},
     )

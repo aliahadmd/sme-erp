@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/invoicing", label: "Invoicing", icon: FileText, anyPermission: ["invoicing.invoice.read"] },
   { to: "/accounting", label: "Accounting", icon: Landmark, anyPermission: ["accounting.entry.read"] },
   { to: "/reports", label: "Reports", icon: BarChart3, anyPermission: ["reports.view"] },
-  { to: "/hr", label: "HR", icon: Users, anyPermission: ["hr.employee.read"] },
+  { to: "/hr", label: "HR", icon: Users, anyPermission: ["hr.employee.read", "hr.leave.request"] },
   {
     to: "/settings",
     label: "Settings",

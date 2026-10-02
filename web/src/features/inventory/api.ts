@@ -128,9 +128,9 @@ export const inventoryApi = {
   }) => api.post<Adjustment>("/api/inventory/adjustments", body),
   postAdjustment: (id: string) => api.post<Adjustment>(`/api/inventory/adjustments/${id}/post`, undefined),
 
-  purchaseOrders: (status: string) =>
-    api.get<Page<Order>>(`/api/purchasing/orders?status=${status}&limit=100`),
-  salesOrders: (status: string) =>
-    api.get<Page<Order>>(`/api/sales/orders?status=${status}&limit=100`),
+  // All orders (status filtered client-side): partly received/delivered or
+  // already-invoiced orders can still have goods outstanding.
+  purchaseOrders: () => api.get<Page<Order>>("/api/purchasing/orders?limit=100"),
+  salesOrders: () => api.get<Page<Order>>("/api/sales/orders?limit=100"),
   products: () => api.get<Page<Product>>("/api/catalog/products?limit=100"),
 }

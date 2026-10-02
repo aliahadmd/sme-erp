@@ -1,11 +1,17 @@
-"""Inventory API: warehouses, stock, receipts, deliveries, adjustments."""
+"""Inventory API: warehouses, stock, receipts, deliveries, adjustments.
+
+Journal entries (Inventory/GRNI on receipts, COGS on deliveries, stock
+corrections) are posted by transactional subscribers (`emit` before commit),
+so stock movements and their bookkeeping are saved atomically.
+"""
 
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import and_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -25,15 +31,52 @@ from app.modules.inventory.models import (
     StockMove,
     Warehouse,
 )
-from app.modules.inventory.service import default_warehouse, post_move, warehouse_or_404
+from app.modules.inventory.service import (
+    default_warehouse,
+    get_stock_row,
+    post_move,
+    warehouse_or_404,
+)
 from app.modules.purchasing import service as purchasing_service
 from app.modules.sales import service as sales_service
-from app.shared.events import Event, publish
+from app.shared.events import Event, emit, publish
 from app.shared.numbering import next_number
 from app.shared.order_engine import order_number_prefix
+from app.shared.order_progress import goods_product_ids, remaining_by_product
 from app.shared.pagination import PageParamsDep, paginate
 
 router = APIRouter(prefix="/inventory")
+
+ZERO = Decimal("0")
+# Orders accept goods movements in any open state — invoicing may come first.
+MOVABLE_ORDER_STATUSES = ("confirmed", "delivered", "received", "invoiced")
+
+
+async def _stocked_product(session: AsyncSession, org_id: uuid.UUID, product_id: uuid.UUID):
+    product = await session.get(Product, product_id)
+    if (
+        not product
+        or product.org_id != org_id
+        or product.type != "goods"
+        or not product.track_inventory
+    ):
+        raise ValidationError("Stock lines must reference existing stock-tracked goods products")
+    return product
+
+
+def _check_against_order(order: Any, progress_field: str, lines: list[dict]) -> None:
+    """Manual lines on an order-sourced document must not exceed what the
+    order still has outstanding per product."""
+    remaining = remaining_by_product(order, progress_field)
+    requested: dict[uuid.UUID, Decimal] = {}
+    for line in lines:
+        requested[line["product_id"]] = requested.get(line["product_id"], ZERO) + line["qty"]
+    for product_id, qty in requested.items():
+        if qty > remaining.get(product_id, ZERO):
+            raise ConflictError(
+                f"{qty} requested but only {remaining.get(product_id, ZERO)} outstanding "
+                f"on {order.number} for this product"
+            )
 
 
 # ---------------------------------------------------------------- warehouses
@@ -93,20 +136,49 @@ async def stock_on_hand(
     session: AsyncSession = Depends(get_session),
 ) -> list[inv.StockRowOut]:
     org = await get_organization(session)
-    stmt = (
-        select(Stock, Product, Warehouse)
-        .join(Product, Product.id == Stock.product_id)
-        .join(Warehouse, Warehouse.id == Stock.warehouse_id)
-        .where(Stock.org_id == org.id, Stock.qty_on_hand != 0)
-        .order_by(Product.name)
-    )
-    if warehouse_id:
-        stmt = stmt.where(Stock.warehouse_id == warehouse_id)
-    rows = (await session.execute(stmt)).all()
+    if low_only:
+        # Low stock must include products at ZERO and products never stocked
+        # in a warehouse — those are the most urgent ones.
+        stmt = (
+            select(Product, Warehouse, Stock)
+            .select_from(Product)
+            .join(Warehouse, true())  # every stocked product × every warehouse
+            .outerjoin(
+                Stock,
+                and_(Stock.product_id == Product.id, Stock.warehouse_id == Warehouse.id),
+            )
+            .where(
+                Product.org_id == org.id,
+                Warehouse.org_id == org.id,
+                Product.status == "active",
+                Product.type == "goods",
+                Product.track_inventory.is_(True),
+                Product.min_stock > 0,
+            )
+            .order_by(Product.name)
+        )
+        if warehouse_id:
+            stmt = stmt.where(Warehouse.id == warehouse_id)
+        rows = [
+            (stock, product, warehouse)
+            for product, warehouse, stock in (await session.execute(stmt)).all()
+            if (stock.qty_on_hand if stock else ZERO) <= product.min_stock
+        ]
+    else:
+        stmt = (
+            select(Stock, Product, Warehouse)
+            .join(Product, Product.id == Stock.product_id)
+            .join(Warehouse, Warehouse.id == Stock.warehouse_id)
+            .where(Stock.org_id == org.id, Stock.qty_on_hand != 0)
+            .order_by(Product.name)
+        )
+        if warehouse_id:
+            stmt = stmt.where(Stock.warehouse_id == warehouse_id)
+        rows = list((await session.execute(stmt)).all())
     out = []
     for stock, product, warehouse in rows:
-        if low_only and stock.qty_on_hand >= product.min_stock:
-            continue
+        qty = stock.qty_on_hand if stock else ZERO
+        avg = stock.avg_cost if stock else ZERO
         out.append(
             inv.StockRowOut(
                 product_id=product.id,
@@ -114,10 +186,10 @@ async def stock_on_hand(
                 product_name=product.name,
                 warehouse_id=warehouse.id,
                 warehouse_code=warehouse.code,
-                qty_on_hand=stock.qty_on_hand,
-                avg_cost=stock.avg_cost,
-                stock_value=(stock.qty_on_hand * stock.avg_cost).quantize(Decimal("0.01")),
-                is_low=stock.qty_on_hand <= product.min_stock,
+                qty_on_hand=qty,
+                avg_cost=avg,
+                stock_value=(qty * avg).quantize(Decimal("0.01")),
+                is_low=qty <= product.min_stock and product.min_stock > 0,
             )
         )
     return out
@@ -143,6 +215,45 @@ async def list_moves(
         total=total,
         limit=params.limit,
         offset=params.offset,
+    )
+
+
+async def _reverse_moves(
+    session: AsyncSession, org_id: uuid.UUID, ref_type: str, document: Any, actor_id: uuid.UUID
+) -> None:
+    originals = (
+        await session.scalars(
+            select(StockMove).where(StockMove.ref_type == ref_type, StockMove.ref_id == document.id)
+        )
+    ).all()
+    for move in originals:
+        await post_move(
+            session,
+            org_id=org_id,
+            product_id=move.product_id,
+            warehouse_id=move.warehouse_id,
+            qty=-move.qty,
+            move_type="reversal",
+            unit_cost=move.unit_cost,
+            ref_type=f"{ref_type}_void",
+            ref_id=document.id,
+            ref_number=document.number,
+            actor_id=actor_id,
+            reverses_move_id=move.id,
+        )
+
+
+def _stock_event(name: str, key: str, document: Any, org_id: uuid.UUID, **extra: Any) -> Event:
+    return Event(
+        name=name,
+        payload={
+            key: str(document.id),
+            "document_id": str(document.id),
+            "number": document.number,
+            "warehouse_id": str(document.warehouse_id),
+            **extra,
+        },
+        org_id=org_id,
     )
 
 
@@ -186,6 +297,14 @@ async def get_receipt(
     return await _receipt_or_404(session, org.id, receipt_id)
 
 
+def _po_unit_cost_base(po: Any, line: Any) -> Decimal:
+    """Net (after discount) PO unit price converted to the base currency —
+    inventory is always valued in base currency."""
+    qty = Decimal(str(line.qty))
+    net_unit = Decimal(str(line.line_subtotal)) / qty if qty else Decimal(str(line.unit_price))
+    return (net_unit / Decimal(str(po.fx_rate))).quantize(Decimal("0.000001"))
+
+
 @router.post("/receipts", response_model=inv.ReceiptOut, status_code=201)
 async def create_receipt(
     body: inv.ReceiptIn,
@@ -204,30 +323,30 @@ async def create_receipt(
         po = await session.get(PurchaseOrder, body.source_po_id)
         if not po or po.org_id != org.id:
             raise NotFoundError("Purchase order not found")
-        if po.status not in ("confirmed", "received"):
-            raise ConflictError("Only confirmed purchase orders can be received")
+        if po.status not in MOVABLE_ORDER_STATUSES:
+            raise ConflictError(f"Cannot receive against a '{po.status}' purchase order")
         source = po
-        from app.shared.order_progress import remaining_by_product
-
-        remaining = remaining_by_product(po, "qty_received")
-        if remaining and all(q <= 0 for q in remaining.values()):
-            raise ConflictError(f"Purchase order {po.number} is fully received")
+        goods = await goods_product_ids(session, po)
         if not lines_data:
+            # One receipt line per outstanding PO line (FIFO-consistent).
             lines_data = [
                 {
                     "product_id": line.product_id,
-                    "qty": remaining[line.product_id],
-                    "unit_cost": line.unit_price,
+                    "qty": Decimal(str(line.qty)) - Decimal(str(line.qty_received)),
+                    "unit_cost": _po_unit_cost_base(po, line),
                 }
-                for line in po.lines
-                if line.product_id is not None and remaining[line.product_id] > 0
+                for line in sorted(po.lines, key=lambda item: item.position)
+                if line.product_id in goods
+                and Decimal(str(line.qty)) > Decimal(str(line.qty_received))
             ]
+            if not lines_data:
+                raise ConflictError(f"Purchase order {po.number} is fully received")
+        else:
+            _check_against_order(po, "qty_received", lines_data)
     if not lines_data:
         raise ValidationError("Receipt needs at least one line (or a source order)")
     for line in lines_data:
-        product = await session.get(Product, line["product_id"])
-        if not product or product.org_id != org.id or product.type != "goods":
-            raise ValidationError("Receipt lines must reference existing goods products")
+        await _stocked_product(session, org.id, line["product_id"])
 
     prefix = await order_number_prefix(session, org.id, "receipt", "RCV")
     number = await next_number(session, org.id, "receipt", prefix)
@@ -286,10 +405,7 @@ async def post_receipt(
     receipt.posted_by = user.id
     if receipt.source_id:
         await purchasing_service.register_receipt(
-            session,
-            org.id,
-            receipt.source_id,
-            [(line.product_id, line.qty) for line in receipt.lines],
+            session, org.id, receipt.source_id, [(ln.product_id, ln.qty) for ln in receipt.lines]
         )
     await write_audit(
         session,
@@ -299,26 +415,10 @@ async def post_receipt(
         entity_id=receipt.id,
         after={"number": receipt.number},
     )
+    event = _stock_event("receipt.posted", "receipt_id", receipt, org.id)
+    await emit(session, event)  # Inventory / GRNI journal — same transaction
     await session.commit()
-    await publish(
-        Event(
-            name="receipt.posted",
-            payload={
-                "receipt_id": str(receipt.id),
-                "number": receipt.number,
-                "warehouse_id": str(receipt.warehouse_id),
-                "moves": [
-                    {
-                        "product_id": str(line.product_id),
-                        "qty": str(line.qty),
-                        "unit_cost": str(line.unit_cost),
-                    }
-                    for line in receipt.lines
-                ],
-            },
-            org_id=org.id,
-        )
-    )
+    await publish(event)
     await session.refresh(receipt)
     return receipt
 
@@ -333,25 +433,10 @@ async def void_receipt(
     receipt = await _receipt_or_404(session, org.id, receipt_id)
     if receipt.status != "posted":
         raise ConflictError("Only posted receipts can be voided")
-    originals = (
-        await session.scalars(
-            select(StockMove).where(StockMove.ref_type == "receipt", StockMove.ref_id == receipt.id)
-        )
-    ).all()
-    for move in originals:
-        await post_move(
-            session,
-            org_id=org.id,
-            product_id=move.product_id,
-            warehouse_id=move.warehouse_id,
-            qty=-move.qty,
-            move_type="reversal",
-            unit_cost=move.unit_cost,
-            ref_type="receipt_void",
-            ref_id=receipt.id,
-            ref_number=receipt.number,
-            actor_id=user.id,
-            reverses_move_id=move.id,
+    await _reverse_moves(session, org.id, "receipt", receipt, user.id)
+    if receipt.source_id:
+        await purchasing_service.release_receipt(
+            session, org.id, receipt.source_id, [(ln.product_id, ln.qty) for ln in receipt.lines]
         )
     receipt.status = "void"
     await write_audit(
@@ -362,7 +447,10 @@ async def void_receipt(
         entity_id=receipt.id,
         after={"number": receipt.number},
     )
+    event = _stock_event("receipt.voided", "receipt_id", receipt, org.id)
+    await emit(session, event)
     await session.commit()
+    await publish(event)
     await session.refresh(receipt)
     return receipt
 
@@ -425,26 +513,30 @@ async def create_delivery(
         so = await session.get(SalesOrder, body.source_so_id)
         if not so or so.org_id != org.id:
             raise NotFoundError("Sales order not found")
-        if so.status not in ("confirmed", "delivered"):
-            raise ConflictError("Only confirmed sales orders can be delivered")
+        if so.status not in MOVABLE_ORDER_STATUSES:
+            raise ConflictError(f"Cannot deliver a '{so.status}' sales order")
         source = so
-        from app.shared.order_progress import remaining_by_product
-
-        remaining = remaining_by_product(so, "qty_delivered")
-        if remaining and all(q <= 0 for q in remaining.values()):
-            raise ConflictError(f"Sales order {so.number} is fully delivered")
+        goods = await goods_product_ids(session, so)
         if not lines_data:
+            # One delivery line per outstanding goods line; services and
+            # free-text lines never move stock.
             lines_data = [
-                {"product_id": line.product_id, "qty": remaining[line.product_id]}
-                for line in so.lines
-                if line.product_id is not None and remaining[line.product_id] > 0
+                {
+                    "product_id": line.product_id,
+                    "qty": Decimal(str(line.qty)) - Decimal(str(line.qty_delivered)),
+                }
+                for line in sorted(so.lines, key=lambda item: item.position)
+                if line.product_id in goods
+                and Decimal(str(line.qty)) > Decimal(str(line.qty_delivered))
             ]
+            if not lines_data:
+                raise ConflictError(f"Sales order {so.number} is fully delivered")
+        else:
+            _check_against_order(so, "qty_delivered", lines_data)
     if not lines_data:
         raise ValidationError("Delivery needs at least one line (or a source order)")
     for line in lines_data:
-        product = await session.get(Product, line["product_id"])
-        if not product or product.org_id != org.id or product.type != "goods":
-            raise ValidationError("Delivery lines must reference existing goods products")
+        await _stocked_product(session, org.id, line["product_id"])
 
     prefix = await order_number_prefix(session, org.id, "delivery", "DLV")
     number = await next_number(session, org.id, "delivery", prefix)
@@ -484,7 +576,7 @@ async def post_delivery(
     delivery = await _delivery_or_404(session, org.id, delivery_id)
     if delivery.status != "draft":
         raise ConflictError(f"Cannot post a delivery in status '{delivery.status}'")
-    cogs_moves = []
+    moves = []
     for line in delivery.lines:
         move = await post_move(
             session,
@@ -498,7 +590,7 @@ async def post_delivery(
             ref_number=delivery.number,
             actor_id=user.id,
         )
-        cogs_moves.append(
+        moves.append(
             {
                 "product_id": str(line.product_id),
                 "qty": str(-line.qty),
@@ -511,10 +603,7 @@ async def post_delivery(
     delivery.posted_by = user.id
     if delivery.source_id:
         await sales_service.register_delivery(
-            session,
-            org.id,
-            delivery.source_id,
-            [(line.product_id, line.qty) for line in delivery.lines],
+            session, org.id, delivery.source_id, [(ln.product_id, ln.qty) for ln in delivery.lines]
         )
     await write_audit(
         session,
@@ -524,20 +613,12 @@ async def post_delivery(
         entity_id=delivery.id,
         after={"number": delivery.number},
     )
-    await session.commit()
-    await publish(
-        Event(
-            name="delivery.posted",
-            payload={
-                "delivery_id": str(delivery.id),
-                "number": delivery.number,
-                "warehouse_id": str(delivery.warehouse_id),
-                "actor_id": str(user.id),
-                "moves": cogs_moves,
-            },
-            org_id=org.id,
-        )
+    event = _stock_event(
+        "delivery.posted", "delivery_id", delivery, org.id, actor_id=str(user.id), moves=moves
     )
+    await emit(session, event)  # COGS journal — same transaction
+    await session.commit()
+    await publish(event)
     await session.refresh(delivery)
     return delivery
 
@@ -552,27 +633,10 @@ async def void_delivery(
     delivery = await _delivery_or_404(session, org.id, delivery_id)
     if delivery.status != "posted":
         raise ConflictError("Only posted deliveries can be voided")
-    originals = (
-        await session.scalars(
-            select(StockMove).where(
-                StockMove.ref_type == "delivery", StockMove.ref_id == delivery.id
-            )
-        )
-    ).all()
-    for move in originals:
-        await post_move(
-            session,
-            org_id=org.id,
-            product_id=move.product_id,
-            warehouse_id=move.warehouse_id,
-            qty=-move.qty,
-            move_type="reversal",
-            unit_cost=move.unit_cost,
-            ref_type="delivery_void",
-            ref_id=delivery.id,
-            ref_number=delivery.number,
-            actor_id=user.id,
-            reverses_move_id=move.id,
+    await _reverse_moves(session, org.id, "delivery", delivery, user.id)
+    if delivery.source_id:
+        await sales_service.release_delivery(
+            session, org.id, delivery.source_id, [(ln.product_id, ln.qty) for ln in delivery.lines]
         )
     delivery.status = "void"
     await write_audit(
@@ -583,7 +647,10 @@ async def void_delivery(
         entity_id=delivery.id,
         after={"number": delivery.number},
     )
+    event = _stock_event("delivery.voided", "delivery_id", delivery, org.id)
+    await emit(session, event)  # COGS reversal — same transaction
     await session.commit()
+    await publish(event)
     await session.refresh(delivery)
     return delivery
 
@@ -628,6 +695,8 @@ async def create_adjustment(
     await warehouse_or_404(session, org.id, warehouse_id)
     if not body.lines:
         raise ValidationError("Adjustment needs at least one line")
+    for line in body.lines:
+        await _stocked_product(session, org.id, line.product_id)
 
     prefix = await order_number_prefix(session, org.id, "adjustment", "ADJ")
     number = await next_number(session, org.id, "adjustment", prefix)
@@ -665,18 +734,12 @@ async def post_adjustment(
     adjustment = await _adjustment_or_404(session, org.id, adjustment_id)
     if adjustment.status != "draft":
         raise ConflictError(f"Cannot post an adjustment in status '{adjustment.status}'")
-    posted_moves: list[StockMove] = []
     for line in adjustment.lines:
-        stock_row = await session.scalars(
-            select(Stock).where(
-                Stock.org_id == org.id,
-                Stock.product_id == line.product_id,
-                Stock.warehouse_id == adjustment.warehouse_id,
-            )
-        )
-        row = stock_row.first()
-        cost = row.avg_cost if row else Decimal("0")
-        move = await post_move(
+        cost = Decimal(str(line.unit_cost or 0))
+        if line.qty > 0 and cost == 0:
+            row = await get_stock_row(session, org.id, line.product_id, adjustment.warehouse_id)
+            cost = row.avg_cost if row else ZERO
+        await post_move(
             session,
             org_id=org.id,
             product_id=line.product_id,
@@ -690,7 +753,6 @@ async def post_adjustment(
             reason=adjustment.reason,
             actor_id=user.id,
         )
-        posted_moves.append(move)
     adjustment.status = "posted"
     adjustment.posted_at = datetime.now(UTC)
     adjustment.posted_by = user.id
@@ -702,21 +764,13 @@ async def post_adjustment(
         entity_id=adjustment.id,
         after={"number": adjustment.number},
     )
+    event = Event(
+        name="adjustment.posted",
+        payload={"adjustment_id": str(adjustment.id), "number": adjustment.number},
+        org_id=org.id,
+    )
+    await emit(session, event)  # stock-correction journal — same transaction
     await session.commit()
-    total_value = sum((m.qty * m.unit_cost for m in posted_moves), Decimal("0")).quantize(
-        Decimal("0.01")
-    )
-    await publish(
-        Event(
-            name="adjustment.posted",
-            payload={
-                "adjustment_id": str(adjustment.id),
-                "number": adjustment.number,
-                "qty": str(sum((m.qty for m in posted_moves), Decimal("0"))),
-                "value": str(total_value),
-            },
-            org_id=org.id,
-        )
-    )
+    await publish(event)
     await session.refresh(adjustment)
     return adjustment

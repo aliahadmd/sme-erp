@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { contactsApi, type Contact, type ContactInput } from "@/features/contacts/api"
+import { CurrencySelect } from "@/components/currency-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -209,7 +210,8 @@ function ContactDialog({
     is_supplier: contact?.is_supplier ?? false,
     legal_name: contact?.legal_name ?? "",
     tax_id: contact?.tax_id ?? "",
-    currency: contact?.currency ?? "USD",
+    // New contacts: omitted → the API applies the organization base currency.
+    currency: contact?.currency,
     payment_terms_days: contact?.payment_terms_days ?? 30,
     credit_limit: contact?.credit_limit ?? "0",
     tags: contact?.tags ?? [],
@@ -292,6 +294,14 @@ function ContactDialog({
                 }
               />
             </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="contact-currency">Default document currency</Label>
+            <CurrencySelect
+              id="contact-currency"
+              value={form.currency}
+              onChange={(code) => setForm((p) => ({ ...p, currency: code }))}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="contact-tags">Tags (comma separated)</Label>

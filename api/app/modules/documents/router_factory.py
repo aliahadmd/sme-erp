@@ -9,6 +9,7 @@ core, and business modules never import it.
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -16,7 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.modules.core.deps import CurrentUser, require
 from app.modules.core.service import get_organization, write_audit
 from app.shared.events import Event, publish
@@ -47,6 +48,13 @@ class OrderModuleConfig:
     label: str = "sales order"
     is_purchase: bool = False
     progress_field: str = "qty_delivered"
+
+
+async def _snapshot_fx(session: AsyncSession, org_id: uuid.UUID, order: Any) -> None:
+    from app.modules.currencies.service import resolve_rate, to_base
+
+    order.fx_rate = await resolve_rate(session, org_id, order.currency, order.order_date)
+    order.total_base = to_base(order.total, order.fx_rate)
 
 
 def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
@@ -169,7 +177,7 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             org_id=org.id,
             number=number,
             order_date=body.order_date or date.today(),
-            currency=body.currency,
+            currency=body.currency or party.currency or org.base_currency,
             notes=body.notes,
             expected_date=body.expected_date,
             created_by=user.id,
@@ -182,10 +190,7 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         lines = await _build_lines(session, org.id, body.lines)
         order.lines = lines
         recompute_header(order, lines)
-        from app.modules.currencies.service import resolve_rate, to_base
-
-        order.fx_rate = await resolve_rate(session, org.id, body.currency, order.order_date)
-        order.total_base = to_base(order.total, order.fx_rate)
+        await _snapshot_fx(session, org.id, order)
         session.add(order)
         await write_audit(
             session,
@@ -217,13 +222,15 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
             setattr(order, cfg.party_field, party.id)
             setattr(order, cfg.party_snapshot_field, party.name)
         for field_name in ("order_date", "expected_date", "currency", "notes"):
-            if field_name in data:
+            if field_name in data and (data[field_name] is not None or field_name != "currency"):
                 setattr(order, field_name, data[field_name])
         if lines_in is not None:
             if not lines_in:
                 raise ValidationError(f"{cfg.label.capitalize()} needs at least one line")
             order.lines = await _build_lines(session, org.id, list(body.lines or []))
             recompute_header(order, order.lines)
+        # Currency/date/lines may all have changed: re-take the FX snapshot.
+        await _snapshot_fx(session, org.id, order)
         await write_audit(
             session,
             actor=user.user,
@@ -278,6 +285,15 @@ def build_order_router(cfg: OrderModuleConfig) -> APIRouter:
         org = await get_organization(session)
         order = await _get_order(session, org.id, order_id)
         ensure_transition(order.status, "cancelled", cfg.label)
+        processed = any(
+            Decimal(str(getattr(line, cfg.progress_field, 0) or 0)) > 0
+            or Decimal(str(line.qty_invoiced or 0)) > 0
+            for line in order.lines
+        )
+        if processed:
+            raise ConflictError(
+                f"{cfg.label.capitalize()} has goods moved or invoiced — void those documents first"
+            )
         order.status = "cancelled"
         await write_audit(
             session,

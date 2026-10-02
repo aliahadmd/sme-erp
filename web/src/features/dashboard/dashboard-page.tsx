@@ -14,6 +14,7 @@ import { Link } from "react-router"
 import { reportsApi } from "@/features/reports/api"
 import { useAuth } from "@/lib/auth"
 import { queryKeys } from "@/lib/query-keys"
+import { formatMoney } from "@/lib/money"
 
 function KpiCard({
   label,
@@ -61,9 +62,9 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Sales this month", value: Number(data?.sales_mtd ?? 0).toFixed(2), to: "/invoicing/ar" },
-          { label: "Open receivables", value: Number(data?.open_ar ?? 0).toFixed(2), to: "/invoicing/ar" },
-          { label: "Open payables", value: Number(data?.open_ap ?? 0).toFixed(2), to: "/invoicing/ap" },
+          { label: "Sales this month", value: formatMoney(data?.sales_mtd), to: "/invoicing/ar" },
+          { label: "Open receivables", value: formatMoney(data?.open_ar), to: "/invoicing/ar" },
+          { label: "Open payables", value: formatMoney(data?.open_ap), to: "/invoicing/ap" },
           { label: "Low stock items", value: String(data?.low_stock_count ?? 0), to: "/inventory?low=1" },
         ].map((kpi, i) => (
           <div
@@ -109,7 +110,7 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <KpiCard label="Purchases this month" value={Number(data?.purchases_mtd ?? 0).toFixed(2)} to="/purchasing" />
+        <KpiCard label="Purchases this month" value={formatMoney(data?.purchases_mtd)} to="/purchasing" />
         <KpiCard label="Reports" value="Sales · Stock · Aging · Tax" to="/reports" />
       </div>
     </div>

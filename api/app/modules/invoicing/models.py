@@ -32,6 +32,9 @@ class Invoice(Base, TimestampMixin, UuidPk):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
     # draft | posted | partial | paid | void
+    # Settlement: open balance = total - amount_paid - applied_credits.
+    # On credit notes, amount_paid is the CONSUMED amount (applied to the
+    # original invoice + refunded in cash); applied_credits stays 0.
 
     subtotal: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     discount_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -75,6 +78,8 @@ class InvoiceLine(Base):
     line_subtotal: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     line_tax: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     line_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    # Order line this invoice line was copied from (per-line invoicing progress).
+    source_line_id: Mapped[uuid.UUID | None] = mapped_column()
 
 
 class Payment(Base, TimestampMixin, UuidPk):

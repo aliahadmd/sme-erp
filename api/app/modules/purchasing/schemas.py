@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.shared.money import CurrencyCode
 from app.shared.pagination import Page
 
 
@@ -22,7 +23,8 @@ class OrderCreateIn(BaseModel):
     supplier_id: uuid.UUID
     order_date: date | None = None
     expected_date: date | None = None
-    currency: str = Field("USD", min_length=3, max_length=3)
+    # Omitted → the party's default currency, else the org base currency.
+    currency: CurrencyCode | None = None
     notes: str | None = None
     lines: list[OrderLineIn] = []
 
@@ -31,7 +33,7 @@ class OrderUpdateIn(BaseModel):
     supplier_id: uuid.UUID | None = None
     order_date: date | None = None
     expected_date: date | None = None
-    currency: str | None = Field(None, min_length=3, max_length=3)
+    currency: CurrencyCode | None = None
     notes: str | None = None
     lines: list[OrderLineIn] | None = None
 

@@ -32,5 +32,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"
 
-# Migrations run before the server starts (single-instance rollout in phase 2).
-ENTRYPOINT ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+# Migrations + idempotent bootstrap seed (org, roles, permissions, admin from
+# env) run before the server starts (single-instance rollout).
+ENTRYPOINT ["sh", "-c", "alembic upgrade head && python -m app.core.seed && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]

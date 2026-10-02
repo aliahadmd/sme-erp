@@ -4,8 +4,9 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.shared.money import CurrencyCode
 from app.shared.pagination import Page
 
 
@@ -25,9 +26,22 @@ class InvoiceCreateIn(BaseModel):
     source_order_id: uuid.UUID | None = None
     invoice_date: date | None = None
     due_date: date | None = None
-    currency: str = Field("USD", min_length=3, max_length=3)
+    # Omitted → the source document's currency (original invoice / order),
+    # else the party's default currency, else the org base currency.
+    currency: CurrencyCode | None = None
     notes: str | None = None
     lines: list[InvoiceLineIn] = []
+
+
+class InvoiceUpdateIn(BaseModel):
+    """Draft edit — only the fields sent are changed."""
+
+    party_id: uuid.UUID | None = None
+    invoice_date: date | None = None
+    due_date: date | None = None
+    currency: CurrencyCode | None = None
+    notes: str | None = None
+    lines: list[InvoiceLineIn] | None = None
 
 
 class PaymentAllocateIn(BaseModel):
@@ -44,7 +58,14 @@ class PaymentIn(BaseModel):
     reference: str | None = None
     notes: str | None = None
     credit_note_id: uuid.UUID | None = None
+    # Omitted → the allocated invoices' / refunded credit note's currency,
+    # else the party's default currency.
+    currency: CurrencyCode | None = None
     allocations: list[PaymentAllocateIn] = []
+
+
+class PaymentAllocationsIn(BaseModel):
+    allocations: list[PaymentAllocateIn] = Field(min_length=1)
 
 
 class InvoiceLineOut(BaseModel):
@@ -87,9 +108,16 @@ class InvoiceOut(BaseModel):
     total: Decimal
     total_base: Decimal = 0
     amount_paid: Decimal = 0
+    applied_credits: Decimal = 0
+    original_invoice_id: uuid.UUID | None = None
     notes: str | None
     posted_at: datetime | None
     lines: list[InvoiceLineOut] = []
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def open_balance(self) -> Decimal:
+        return self.total - self.amount_paid - self.applied_credits
 
 
 class PaymentAllocationOut(BaseModel):
@@ -109,7 +137,7 @@ class PaymentOut(BaseModel):
     party_id: uuid.UUID
     party_name: str | None
     payment_date: date
-    currency: str = "USD"
+    currency: str
     fx_rate: Decimal = 1
     amount: Decimal
     method: str
@@ -119,6 +147,13 @@ class PaymentOut(BaseModel):
     credit_note_id: uuid.UUID | None = None
     allocations: list[PaymentAllocationOut] = []
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def unallocated(self) -> Decimal:
+        if self.credit_note_id or self.status != "recorded":
+            return Decimal("0")
+        return self.amount - sum((a.amount for a in self.allocations), Decimal("0"))
+
 
 InvoicePage = Page[InvoiceOut]
 PaymentPage = Page[PaymentOut]
@@ -126,6 +161,7 @@ PaymentPage = Page[PaymentOut]
 
 class StatementLine(BaseModel):
     invoice_id: uuid.UUID
+    invoice_type: str
     number: str | None
     invoice_date: date
     due_date: date | None
@@ -140,4 +176,5 @@ class StatementOut(BaseModel):
     party_id: uuid.UUID
     party_name: str | None
     open_balance: Decimal
+    unapplied_payments: Decimal = Decimal("0")
     invoices: list[StatementLine]

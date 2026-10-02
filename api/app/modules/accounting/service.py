@@ -23,14 +23,17 @@ DEFAULT_COA: list[tuple[str, str, str]] = [
     ("1100", "Accounts Receivable", "asset"),
     ("1200", "Inventory", "asset"),
     ("2000", "Accounts Payable", "liability"),
+    ("2050", "Goods Received Not Invoiced", "liability"),
     ("2100", "Tax Payable", "liability"),
     ("3000", "Owner's Equity", "equity"),
     ("4000", "Sales Revenue", "income"),
     ("4100", "Sales Returns & Refunds", "expense"),
+    ("4900", "Realized FX Gain", "income"),
     ("5000", "Cost of Goods Sold", "expense"),
     ("5100", "Purchases Expense", "expense"),
     ("5200", "Stock Correction", "expense"),
     ("5900", "Rounding", "expense"),
+    ("6900", "Realized FX Loss", "expense"),
 ]
 
 DEFAULT_MAPPING: dict[str, str] = {
@@ -43,6 +46,9 @@ DEFAULT_MAPPING: dict[str, str] = {
     "refunds": "4100",
     "purchases": "5100",
     "stock_correction": "5200",
+    "grni": "2050",
+    "fx_gain": "4900",
+    "fx_loss": "6900",
     "cash": "1000",
     "bank": "1010",
 }
@@ -78,9 +84,19 @@ async def resolve_account(session: AsyncSession, org_id: uuid.UUID, mapping_key:
     )
     account = result.first()
     if not account:
-        raise ValidationError(
-            f"Account {code} (mapped from '{mapping_key}') does not exist — run make seed"
+        default = next((row for row in DEFAULT_COA if row[0] == code), None)
+        if default is None:
+            raise ValidationError(
+                f"Account {code} (mapped from '{mapping_key}') does not exist — "
+                "create it or fix accounting.mapping"
+            )
+        # System accounts added in later releases are created on first use so
+        # existing databases never fail a posting for want of a re-seed.
+        account = Account(
+            org_id=org_id, code=code, name=default[1], type=default[2], is_system=True
         )
+        session.add(account)
+        await session.flush()
     return account
 
 
@@ -137,3 +153,43 @@ async def post_entry(
     session.add(entry)
     await session.flush()
     return entry
+
+
+async def reverse_source_entries(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    source_id: uuid.UUID,
+    *,
+    memo: str,
+    entry_date: date | None = None,
+    actor_id: uuid.UUID | None = None,
+) -> JournalEntry | None:
+    """Post one entry that exactly mirrors every journal entry booked for a
+    source document (voids). Mirroring what was actually posted — rather than
+    recomputing from the document — keeps reversals exact even when rates,
+    mappings, or rounding rules changed in between."""
+    originals = (
+        await session.scalars(
+            select(JournalEntry).where(
+                JournalEntry.org_id == org_id,
+                JournalEntry.source_id == source_id,
+                JournalEntry.source_type != "reversal",
+            )
+        )
+    ).all()
+    lines: list[tuple[Account, Decimal, Decimal]] = []
+    for entry in originals:
+        for line in entry.lines:
+            lines.append((line.account, Decimal(str(line.credit)), Decimal(str(line.debit))))
+    if not lines:
+        return None
+    return await post_entry(
+        session,
+        org_id,
+        entry_date=entry_date or date.today(),
+        memo=memo,
+        source_type="reversal",
+        source_id=source_id,
+        lines=lines,
+        actor_id=actor_id,
+    )
