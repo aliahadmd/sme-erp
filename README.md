@@ -1,156 +1,106 @@
-# ERP — Self-Hosted SME ERP
+# SME ERP — Live Demo
 
-A general-purpose ERP for small and medium-sized enterprises, built as a
-**modular monolith**: one application, one database, clear internal modules.
+A complete business-management system for small and medium-sized companies:
+customers, products, sales, purchasing, stock, invoicing, payments, double-entry
+accounting, reports and HR — in one fast, modern web app.
 
-```
-                  ERP APPLICATION  (FastAPI api/ + React web/)
-                                │
-     ┌──────────┬───────────────┼───────────────┬─────────────┐
-     CRM        Sales        Purchasing      Inventory     Invoicing ── Accounting
-     └──────────┴───────────────┴───────────────┴─────────────┘
-                                │
-              PostgreSQL 17 (pgvector) · Redis 7 · SeaweedFS (S3)
-```
+### 👉 [Open the live demo: erp.aliahad.com](https://erp.aliahad.com)
 
-Modules build on a shared **ERP Core**: organizations, branches, users, roles &
-permissions, auth, settings, audit logs, notifications, document numbering.
+![Dashboard](docs/screenshots/02-dashboard.jpg)
 
-## Quickstart
+---
 
-Requires: Docker, and (for host-side tooling) [uv](https://docs.astral.sh/uv/) + pnpm.
+## Demo logins
 
-```bash
-cp .env.example .env
-make up        # builds & starts postgres, redis, seaweedfs, api, web
-make migrate   # apply migrations (runs on the host via uv)
-make seed      # admin user, roles, permissions
-```
+Sign in at **[erp.aliahad.com](https://erp.aliahad.com)** with any account below.
+Each role sees a different app — try two or three to see how permissions work.
 
-**No bind mounts.** Docker Desktop on the dev machine cannot share the SSD
-volume this repo lives on, so compose never mounts host paths: source code is
-baked into the dev images (`make up` rebuilds after changes) and data lives in
-named volumes. For live reload, run only the infrastructure in Docker and the
-apps on the host:
+| Role | Email | Password | What this person can do |
+|---|---|---|---|
+| **Administrator** | `admin@example.com` | `8abb04127570a863` | Everything, including users, roles and settings |
+| Accountant | `accountant@example.com` | `dc920aa1846e` | Invoices, payments, journal, trial balance, reports |
+| Sales | `sales@example.com` | `dc920aa1846e` | Customers, quotations, sales orders, customer invoices |
+| Purchasing | `purchasing@example.com` | `dc920aa1846e` | Suppliers, purchase orders, goods receipts |
+| Warehouse | `warehouse@example.com` | `dc920aa1846e` | Stock, receipts, deliveries, stock adjustments |
+| HR | `hr@example.com` | `dc920aa1846e` | Employees, leave types, approve or reject leave |
+| Viewer | `viewer@example.com` | `dc920aa1846e` | Read-only access across the whole system |
+| Employee | `employee@example.com` | `dc920aa1846e` | Self-service: request and track their own leave |
 
-```bash
-make infra     # postgres, redis, seaweedfs
-make dev-api   # uvicorn --reload on :8000 (host)
-make dev-web   # Vite HMR on :5173 (host)
-make dev-worker  # optional: arq worker (set JOBS_MODE=redis in .env)
-```
+> **This is a shared demo.** Other visitors use the same accounts, so data you
+> see may change and may be reset at any time. Please don't enter real
+> personal or company information.
 
-Host-side targets read `.env` and point DB/Redis/S3 at the published
-localhost ports automatically.
+---
 
-| Service | URL |
+## A 5-minute tour
+
+Sign in as **Administrator** and follow the money from a sale to the books:
+
+1. **Dashboard** — sales this month, open receivables and payables, low-stock
+   alerts and a 12-week sales vs purchases chart, all live from the books.
+2. **Sales → New sales order** — pick a customer and products; prices, discounts
+   and tax are calculated as you type. **Save draft**, then **Confirm**.
+3. **Inventory → Deliveries → New delivery** — choose the order and **Post** it.
+   Stock goes down and the cost of goods sold is booked automatically.
+4. **Invoicing → New invoice** — create it *from the order* (only what hasn't
+   been invoiced yet is copied), then **Post**. It gets its official number.
+5. **Invoicing → Payments → Record payment** — money in from the customer. The
+   payment is matched to open invoices oldest-first; partial payments work too.
+6. **Accounting → Journal entries** — every step above already created a
+   balanced journal entry. **Trial balance** shows the books always balance.
+7. **Reports** — sales by customer, purchases by supplier, stock valuation,
+   aging and tax summary; export any of them to CSV.
+
+Then sign out and sign in as **Sales** or **Viewer** to see the same company
+through a narrower set of permissions.
+
+---
+
+## What's inside
+
+| Area | Highlights |
 |---|---|
-| Web (Vite dev server) | http://localhost:5173 |
-| API | http://localhost:8000 |
-| API health | http://localhost:8000/healthz |
-| Postgres | localhost:55432 (host) — `postgres:5432` inside the docker network |
-| Redis | localhost:56379 (host) — `redis:6379` inside the docker network |
-| SeaweedFS S3 | localhost:18333 (host) — `seaweedfs:8333` inside the network; master console: http://localhost:19333 |
+| **CRM** | One list of customers and suppliers (a company can be both), payment terms, default currency, tags |
+| **Products** | Goods and services, categories, units, tax rates, optional AI-drafted descriptions\* |
+| **Sales** | Quotations that convert to orders, sales orders with partial delivery and partial invoicing |
+| **Purchasing** | Purchase orders, goods receipts, supplier bills — bills can arrive before or after the goods |
+| **Inventory** | Multiple warehouses, moving-average costing, deliveries, receipts, adjustments, low-stock alerts |
+| **Invoicing** | Customer invoices, supplier bills, credit notes, refunds, payments, on-account payments, invoice email |
+| **Accounting** | Automatic double-entry bookkeeping, chart of accounts, journal, ledger, trial balance, manual entries |
+| **Multi-currency** | Invoice in any currency; exchange-rate gains and losses are booked automatically on payment |
+| **Reports** | Dashboard, sales and purchase analysis, stock valuation, receivables/payables aging, tax summary, optional AI summary\* |
+| **HR** | Employees, leave types and allowances, working-day leave requests, approve / reject, employee self-service |
+| **Administration** | Users, roles and 84 fine-grained permissions, organization profile, numbering, currencies, full audit log |
 
-Host ports are chosen to avoid clashes with other local Docker projects.
+\* AI features connect to an AI provider and are switched off in this public
+demo; they show a "disabled" notice when clicked.
 
-## Make targets
+**Built to be trusted with money:** posted documents can't be edited, only
+reversed; every amount is exact decimal arithmetic; each document and its
+journal entry are saved together or not at all; every change is audit-logged.
 
-| Target | What it does |
+---
+
+## Screenshots
+
+| | |
 |---|---|
-| `make up` | Build & start everything (source baked into images) |
-| `make infra` | Start only postgres, redis, seaweedfs |
-| `make dev-api` / `make dev-web` / `make dev-worker` | Run the apps on the host with live reload |
-| `make down` | Stop everything |
-| `make logs` | Follow logs |
-| `make ps` | Service status |
-| `make reset` | **Destructive:** stop and wipe all volumes |
-| `make migrate` | Apply database migrations (host; needs infra) |
-| `make seed` | Seed bootstrap data (admin user, roles, permissions) |
-| `make shell-api` / `make shell-web` | Shell into a container |
-| `make verify` | Quality gates on the host: lint, format, tests, build (needs infra) |
+| ![Sign in](docs/screenshots/01-login.jpg) **Sign in** | ![Dashboard](docs/screenshots/02-dashboard.jpg) **Dashboard** |
+| ![Customers and suppliers](docs/screenshots/03-crm-contacts.jpg) **CRM — customers & suppliers** | ![Products](docs/screenshots/04-products.jpg) **Products & services** |
+| ![Sales orders](docs/screenshots/05-sales-orders.jpg) **Sales orders** | ![Sales order](docs/screenshots/06-sales-order-detail.jpg) **Order with delivery & invoicing progress** |
+| ![Stock on hand](docs/screenshots/07-inventory-stock.jpg) **Stock on hand, valued at average cost** | ![Customer invoices](docs/screenshots/08-customer-invoices.jpg) **Invoices with open balances, credit notes, email** |
+| ![Journal entries](docs/screenshots/09-journal-entries.jpg) **Automatic journal entries** | ![Trial balance](docs/screenshots/10-trial-balance.jpg) **Trial balance — always balanced** |
+| ![Reports](docs/screenshots/11-reports.jpg) **Reports with CSV export** | ![Roles](docs/screenshots/12-roles-permissions.jpg) **Roles & permissions** |
 
-## Repository layout
+---
 
-```
-api/       FastAPI backend (uv project) — app/core, app/shared, app/modules/<module>
-web/       Vite + React + TypeScript SPA (pnpm) — feature-sliced
-docker/    Dockerfiles (dev + prod), nginx config, deploy smoke script
-plans/     phased implementation plans (plans/phase1 first)
-```
+## Technology
 
-## Configuration
+**Frontend:** React 19, TypeScript, Vite, TanStack Query, Tailwind CSS, shadcn/ui ·
+**Backend:** Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic ·
+**Data:** PostgreSQL 17, Redis 7, S3-compatible storage ·
+**Operations:** Docker, background job worker, nightly backups, automated tests and CI,
+automatic deployment on every push.
 
-Everything is configured via environment variables (see `.env.example`).
-In development the database, Redis, and S3 run as local containers; for
-deployment their host/credential variables can simply be pointed at external
-services — no code changes.
-
-## CI & backups
-
-- `.github/workflows/ci.yml` — ruff + pytest (with pgvector/redis services) and
-  web typecheck/lint/vitest/build on every push.
-- Backups: prod worker cron `backup_database` (02:30, GFS retention) and
-  `prune_audit_logs` (03:15, `AUDIT_RETENTION_DAYS`); dev: `make backup`.
-
-## Production deployment (single demo server + Cloudflare Tunnel)
-
-Everything runs in Docker; **the only published port is the web container on
-`127.0.0.1:$PROXY_PORT`** (loopback — never `0.0.0.0`, Docker bypasses host
-firewalls). postgres/redis/seaweedfs/api/worker stay on the project's internal
-network. A host `cloudflared` tunnel routes a public hostname to that port.
-
-```bash
-# one-time on the server
-git clone https://github.com/aliahadmd/sme-erp.git /opt/apps/sme-erp
-/opt/apps/sme-erp/deploy/deploy.sh          # generates .env, builds, starts, seeds demo
-( crontab -l; echo '* * * * * /opt/apps/sme-erp/deploy/deploy.sh >> /var/log/sme-erp-deploy.log 2>&1' ) | crontab -
-# Cloudflare dashboard → tunnel → public hostname → http://localhost:30001
-```
-
-**Continuous deployment is pull-based:** cron runs `deploy/deploy.sh` every
-minute; it redeploys only when `origin/main` moved (`git reset --hard` +
-`docker compose up -d --build`). No SSH keys in GitHub, no inbound access.
-Server secrets live in the generated, git-ignored `.env` (`chmod 600`);
-deploys never rewrite it. Force a redeploy with `deploy/deploy.sh --force`.
-
-`docker-compose.prod.yml` runs: api (migrations + idempotent seed + uvicorn,
-non-root), worker (arq), web (nginx serving the built SPA + proxying `/api`),
-postgres, redis, seaweedfs. One origin — no CORS setup needed. Local smoke test
-of the same stack: `PROXY_PORT=8080 ADMIN_EMAIL=... ADMIN_PASSWORD=... make deploy-check`.
-
-## Implementation plans
-
-See [`plans/phase1/index.md`](plans/phase1/index.md) for the phase-1 plan set,
-execution order, and status; [`plans/phase2-draft.md`](plans/phase2-draft.md)
-for the deferred backlog.
-
-## Test users (dev only)
-
-```bash
-make seed-users   # one account per role + a self-service employee + a disabled user
-```
-
-Accounts, roles and the shared dev password are listed in
-[`api/app/core/seed_test_users.py`](api/app/core/seed_test_users.py); the
-superuser is `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env`. The script refuses
-to run unless `ENVIRONMENT=dev`.
-
-## Demo data
-
-```bash
-make seed-demo   # contacts, products, full buy/sell cycles with payments
-```
-
-## Adding a module (the architecture contract)
-
-1. `api/app/modules/<name>/` with `models.py` (own PostgreSQL schema),
-   `schemas.py`, `service.py`, `router.py`; import models in `alembic/env.py`.
-2. Cross-module reads go through the owning module's service functions;
-   reactions (audit, notifications, postings) subscribe to events
-   (see `app/modules/accounting/postings.py` for the pattern).
-3. Frontend: `web/src/features/<name>/` with `api.ts` + pages; add the nav
-   entry in `src/app/nav-items.ts` and routes in `src/app/router.tsx`.
-4. Add tests under `api/tests/`, regenerate web types with `pnpm gen:api`,
-   and run `make verify`.
-
+Developers: setup, architecture and deployment notes are in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
