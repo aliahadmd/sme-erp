@@ -4,6 +4,7 @@ name: erp-prod
 
 services:
   postgres:
+    restart: unless-stopped
     image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set in env}
@@ -18,6 +19,7 @@ services:
       retries: 12
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -29,6 +31,7 @@ services:
       retries: 12
 
   seaweedfs:
+    restart: unless-stopped
     image: chrislusf/seaweedfs:3.80
     entrypoint: ["/bin/sh", "-c"]
     # s3.json generated from env — credentials never live in git.
@@ -70,11 +73,16 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?set in env}
       AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
     entrypoint: ["sh", "-c"]
+    # The S3 gateway comes up after the master is healthy — retry until the
+    # bucket exists (or is created), then exit.
     command: >
-      'aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket ${S3_BUCKET:-erp}
-      || aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket ${S3_BUCKET:-erp}'
+      'for i in $$(seq 1 30); do
+      aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket ${S3_BUCKET:-erp} 2>/dev/null && exit 0;
+      aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket ${S3_BUCKET:-erp} >/dev/null 2>&1 && exit 0;
+      sleep 2; done; echo "bucket init failed"; exit 1'
 
   api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/api.prod.Dockerfile
@@ -123,6 +131,7 @@ services:
         condition: service_healthy
 
   worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/api.prod.Dockerfile
@@ -151,6 +160,7 @@ services:
         condition: service_healthy
 
   web:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/web.prod.Dockerfile

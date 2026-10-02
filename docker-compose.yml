@@ -78,9 +78,13 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-erpdevsecret}
       AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
     entrypoint: ["sh", "-c"]
+    # The S3 gateway comes up after the master is healthy — retry until the
+    # bucket exists (or is created), then exit.
     command: >
-      'aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket ${S3_BUCKET:-erp-dev}
-      || aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket ${S3_BUCKET:-erp-dev}'
+      'for i in $$(seq 1 30); do
+      aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket ${S3_BUCKET:-erp-dev} 2>/dev/null && exit 0;
+      aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket ${S3_BUCKET:-erp-dev} >/dev/null 2>&1 && exit 0;
+      sleep 2; done; echo "bucket init failed"; exit 1'
 
   # api / worker / web: source is baked into the images (no bind mounts —
   # Docker Desktop cannot share the SSD volume this repo lives on). `make up`
