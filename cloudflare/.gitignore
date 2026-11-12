@@ -1,0 +1,11 @@
+.cloudflare/
+.dev.vars
+.secrets.*.json
+.python-version
+node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv-workers/
+python_modules/

@@ -1,0 +1,8 @@
+packages: []
+
+allowBuilds:
+  workerd: true
+  sharp: true
+
+patchedDependencies:
+  cf@0.15.0: patches/cf@0.15.0.patch

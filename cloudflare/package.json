@@ -1,0 +1,17 @@
+{
+  "name": "erp-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vendor": "uv run python scripts/vendor.py",
+    "build": "node scripts/build.mjs",
+    "deploy:staging": "cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
+    "test": "uv run pytest -q",
+    "lint": "uv run ruff check src tests scripts"
+  },
+  "devDependencies": {
+    "@cloudflare/build-output-utils": "0.8.0",
+    "@cloudflare/config": "0.18.0",
+    "cf": "0.15.0"
+  }
+}

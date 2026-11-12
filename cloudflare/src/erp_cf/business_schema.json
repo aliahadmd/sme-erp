@@ -1,0 +1,5247 @@
+{
+  "format": "erp-d1-schema-v1",
+  "sources": {
+    "api/app/modules/accounting/models.py": "43308d9a59dbfc29daac2dfbb67efd46800c1f1989ab265c34fda0ee9f8bd1ce",
+    "api/app/modules/catalog/models.py": "9f1c83e714d6ed5e8f74cc0298f3cf43aeeb94fde6a64316afc3c3293abb4eb2",
+    "api/app/modules/core/models.py": "8a95eb0ddbc83bc29a3e23ad8311865376f90b46d419bde78b0738290445b7ec",
+    "api/app/modules/crm/models.py": "272fe373dca042bc000a47c12bc6d0f997590251b57867fe28262c65d96bd0c8",
+    "api/app/modules/currencies/models.py": "2338addbfda2f6bbf720c9baba4da11bdd6a10cde491eaa9bd693e028e333032",
+    "api/app/modules/hr/models.py": "39fb4e68c25a4a3824e53754600a3832c1973729ea5d994fa75e288317d7aad8",
+    "api/app/modules/inventory/models.py": "868ee1cb506595b63344905b6f9fb0ec31fe59e06168cbce749092b265284746",
+    "api/app/modules/invoicing/models.py": "8e0bf0c9d1234607e0383f2bba9a30235c999d5b1586f60b4302f1c8301ca0b2",
+    "api/app/modules/purchasing/models.py": "d58b3638d328a28a9cd3f885cac716deba89150ea5d7d8c0ba7bcc68130298a0",
+    "api/app/modules/sales/models.py": "bfb4d46b493a9e379e466f06a692ba9a5c2ca4aa128e1f75feb4f401f0da205b",
+    "api/app/shared/models.py": "d07ec0a4e6af2bb79b76d44bd8535d129d829fd165bab23c59bf934e8c09f0ab"
+  },
+  "tables": [
+    {
+      "legacy": "accounting.accounts",
+      "name": "accounting_accounts",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "parent_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "is_system",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "is_active",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "parent_id"
+          ],
+          "table": "accounting_accounts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "accounting.journal_entries",
+      "name": "accounting_journal_entries",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "entry_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "memo",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "source_type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "source_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "posted"
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "source_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "source_type"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "accounting.journal_lines",
+      "name": "accounting_journal_lines",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "entry_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "account_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "debit",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "credit",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "account_id"
+          ],
+          "table": "accounting_accounts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        },
+        {
+          "columns": [
+            "entry_id"
+          ],
+          "table": "accounting_journal_entries",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "account_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "entry_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "catalog.product_categories",
+      "name": "catalog_product_categories",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "parent_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "parent_id"
+          ],
+          "table": "catalog_product_categories",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "catalog.products",
+      "name": "catalog_products",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "sku",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "barcode",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 10,
+          "default": "goods"
+        },
+        {
+          "name": "category_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "uom_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "is_purchasable",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "is_sellable",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "track_inventory",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "sale_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        },
+        {
+          "name": "cost_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        },
+        {
+          "name": "sale_tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "purchase_tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "min_stock",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "image_key",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 300,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "active"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "sku"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "category_id"
+          ],
+          "table": "catalog_product_categories",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "purchase_tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "sale_tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "uom_id"
+          ],
+          "table": "catalog_uoms",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "sku"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "catalog.taxes",
+      "name": "catalog_taxes",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "rate_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": null
+        },
+        {
+          "name": "applies_to",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 10,
+          "default": "both"
+        },
+        {
+          "name": "is_default_sale",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "is_default_purchase",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "catalog.uoms",
+      "name": "catalog_uoms",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.ai_drafts",
+      "name": "core_ai_drafts",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "entity_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "field",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "draft_text",
+          "nullable": false,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "model",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "pending"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "entity_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "entity_type"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.audit_logs",
+      "name": "core_audit_logs",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "org_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "user_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "action",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "entity_type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "entity_id",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 64,
+          "default": null
+        },
+        {
+          "name": "before",
+          "nullable": true,
+          "kind": "json",
+          "default": null
+        },
+        {
+          "name": "after",
+          "nullable": true,
+          "kind": "json",
+          "default": null
+        },
+        {
+          "name": "ip",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 64,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "action"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "entity_type"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.branches",
+      "name": "core_branches",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "address",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "is_active",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "table": "core_organizations",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "legacy": "core.currencies",
+      "name": "core_currencies",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.document_sequences",
+      "name": "core_document_sequences",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "entity",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "year",
+          "nullable": false,
+          "kind": "int",
+          "default": null
+        },
+        {
+          "name": "last_number",
+          "nullable": false,
+          "kind": "int",
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "entity",
+          "year"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.fx_rates",
+      "name": "core_fx_rates",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": null
+        },
+        {
+          "name": "rate_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "currency",
+          "rate_date"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "currency"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "rate_date"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.notifications",
+      "name": "core_notifications",
+      "columns": [
+        {
+          "name": "user_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "title",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "body",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "link",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 300,
+          "default": null
+        },
+        {
+          "name": "payload",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": {}
+          }
+        },
+        {
+          "name": "read_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "table": "core_users",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.organizations",
+      "name": "core_organizations",
+      "columns": [
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "legal_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "base_currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "email",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "phone",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "address_line1",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "address_line2",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "city",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "country",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 2,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    {
+      "legacy": "core.permissions",
+      "name": "core_permissions",
+      "columns": [
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "module",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "action",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        },
+        {
+          "columns": [
+            "module"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.role_permissions",
+      "name": "core_role_permissions",
+      "columns": [
+        {
+          "name": "role_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "permission_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        }
+      ],
+      "primary_key": [
+        "role_id",
+        "permission_id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "permission_id"
+          ],
+          "table": "core_permissions",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "role_id"
+          ],
+          "table": "core_roles",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "legacy": "core.roles",
+      "name": "core_roles",
+      "columns": [
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "is_system",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "code"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    {
+      "legacy": "core.settings",
+      "name": "core_settings",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "key",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "value",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": {}
+          }
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "key"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "table": "core_organizations",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "core.user_roles",
+      "name": "core_user_roles",
+      "columns": [
+        {
+          "name": "user_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "role_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        }
+      ],
+      "primary_key": [
+        "user_id",
+        "role_id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "role_id"
+          ],
+          "table": "core_roles",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "table": "core_users",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "legacy": "core.users",
+      "name": "core_users",
+      "columns": [
+        {
+          "name": "email",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 255,
+          "default": null
+        },
+        {
+          "name": "hashed_password",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 255,
+          "default": null
+        },
+        {
+          "name": "full_name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "is_active",
+          "nullable": false,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "is_superuser",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "default_branch_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "email_prefs",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": {}
+          }
+        },
+        {
+          "name": "last_login_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "default_branch_id"
+          ],
+          "table": "core_branches",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "legacy": "crm.contacts",
+      "name": "crm_contacts",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "kind",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 10,
+          "default": "company"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "legal_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "is_customer",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "is_supplier",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "emails",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": []
+          }
+        },
+        {
+          "name": "phones",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": []
+          }
+        },
+        {
+          "name": "addresses",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": []
+          }
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "payment_terms_days",
+          "nullable": false,
+          "kind": "int",
+          "default": 30
+        },
+        {
+          "name": "credit_limit",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tags",
+          "nullable": false,
+          "kind": "json",
+          "default": {
+            "value": []
+          }
+        },
+        {
+          "name": "owner_user_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "active"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "owner_user_id"
+          ],
+          "table": "core_users",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "hr.departments",
+      "name": "hr_departments",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "manager_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "hr.employees",
+      "name": "hr_employees",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "full_name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "work_email",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 255,
+          "default": null
+        },
+        {
+          "name": "user_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "department_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "position",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "hired_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "terminated_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "active"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ],
+        [
+          "user_id"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "department_id"
+          ],
+          "table": "hr_departments",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "table": "core_users",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "number"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "hr.leave_requests",
+      "name": "hr_leave_requests",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "employee_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "type_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "date_from",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "date_to",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "days",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 1,
+          "default": null
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 300,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "pending"
+        },
+        {
+          "name": "approver_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "decided_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "approver_id"
+          ],
+          "table": "core_users",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "employee_id"
+          ],
+          "table": "hr_employees",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "type_id"
+          ],
+          "table": "hr_leave_types",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "employee_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "hr.leave_types",
+      "name": "hr_leave_types",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "days_per_year",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 1,
+          "default": 0
+        },
+        {
+          "name": "accrues",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "name"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.adjustment_lines",
+      "name": "inventory_adjustment_lines",
+      "columns": [
+        {
+          "name": "adjustment_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "adjustment_id"
+          ],
+          "table": "inventory_adjustments",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "adjustment_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.adjustments",
+      "name": "inventory_adjustments",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "warehouse_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "posted_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "posted_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "warehouse_id"
+          ],
+          "table": "inventory_warehouses",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.deliveries",
+      "name": "inventory_deliveries",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "warehouse_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "source_type",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "source_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "source_number",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "posted_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "posted_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "warehouse_id"
+          ],
+          "table": "inventory_warehouses",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.delivery_lines",
+      "name": "inventory_delivery_lines",
+      "columns": [
+        {
+          "name": "delivery_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "delivery_id"
+          ],
+          "table": "inventory_deliveries",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "delivery_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.receipt_lines",
+      "name": "inventory_receipt_lines",
+      "columns": [
+        {
+          "name": "receipt_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "receipt_id"
+          ],
+          "table": "inventory_receipts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "product_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "receipt_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.receipts",
+      "name": "inventory_receipts",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "warehouse_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "source_type",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "source_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "source_number",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "posted_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "posted_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "warehouse_id"
+          ],
+          "table": "inventory_warehouses",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.stock",
+      "name": "inventory_stock",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "warehouse_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "qty_on_hand",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "avg_cost",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        },
+        {
+          "name": "last_move_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "product_id",
+          "warehouse_id"
+        ]
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.stock_moves",
+      "name": "inventory_stock_moves",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "warehouse_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "move_type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "ref_type",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 50,
+          "default": null
+        },
+        {
+          "name": "ref_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "ref_number",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": 0
+        },
+        {
+          "name": "cogs",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "moved_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "reverses_move_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "move_type"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "reverses_move_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "inventory.warehouses",
+      "name": "inventory_warehouses",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "branch_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "is_default",
+          "nullable": false,
+          "kind": "bool",
+          "default": false
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "code"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "branch_id"
+          ],
+          "table": "core_branches",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "invoicing.invoice_lines",
+      "name": "invoicing_invoice_lines",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "invoice_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "position",
+          "nullable": false,
+          "kind": "int",
+          "default": 0
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "uom_code",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "unit_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": null
+        },
+        {
+          "name": "discount_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "tax_rate_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_tax",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "source_line_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "table": "invoicing_invoices",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "table": "catalog_products",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "invoicing.invoices",
+      "name": "invoicing_invoices",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "invoice_type",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 12,
+          "default": null
+        },
+        {
+          "name": "original_invoice_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "applied_credits",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "number",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "party_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "party_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "source_type",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "source_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "source_number",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "invoice_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "due_date",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "discount_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "fx_rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": 1
+        },
+        {
+          "name": "total_base",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "amount_paid",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "posted_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "posted_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "party_id"
+          ],
+          "table": "crm_contacts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "invoice_type"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "original_invoice_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "invoicing.payment_allocations",
+      "name": "invoicing_payment_allocations",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "payment_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "invoice_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "amount",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "table": "invoicing_invoices",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        },
+        {
+          "columns": [
+            "payment_id"
+          ],
+          "table": "invoicing_payments",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "payment_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "invoicing.payments",
+      "name": "invoicing_payments",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "direction",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 10,
+          "default": null
+        },
+        {
+          "name": "party_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "party_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "payment_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "fx_rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": 1
+        },
+        {
+          "name": "amount",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": null
+        },
+        {
+          "name": "amount_base",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "method",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "bank"
+        },
+        {
+          "name": "reference",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 100,
+          "default": null
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "recorded"
+        },
+        {
+          "name": "credit_note_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "voided_at",
+          "nullable": true,
+          "kind": "datetime",
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "party_id"
+          ],
+          "table": "crm_contacts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "credit_note_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "purchasing.purchase_order_lines",
+      "name": "purchasing_purchase_order_lines",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "order_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "position",
+          "nullable": false,
+          "kind": "int",
+          "default": 0
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "uom_code",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "unit_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": null
+        },
+        {
+          "name": "discount_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "tax_rate_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "qty_received",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "qty_invoiced",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "line_subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_tax",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "order_id"
+          ],
+          "table": "purchasing_purchase_orders",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "table": "catalog_products",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "order_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "purchasing.purchase_orders",
+      "name": "purchasing_purchase_orders",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "branch_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "supplier_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "supplier_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "order_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "expected_date",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "discount_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "fx_rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": 1
+        },
+        {
+          "name": "total_base",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "confirmed_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "confirmed_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "branch_id"
+          ],
+          "table": "core_branches",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "supplier_id"
+          ],
+          "table": "crm_contacts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "number"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "sales.quotation_lines",
+      "name": "sales_quotation_lines",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "quotation_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "position",
+          "nullable": false,
+          "kind": "int",
+          "default": 0
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "uom_code",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "unit_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": null
+        },
+        {
+          "name": "discount_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "tax_rate_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_tax",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "product_id"
+          ],
+          "table": "catalog_products",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "quotation_id"
+          ],
+          "table": "sales_quotations",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "quotation_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "sales.quotations",
+      "name": "sales_quotations",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "quote_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "valid_until",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "discount_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "fx_rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": 1
+        },
+        {
+          "name": "total_base",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "sent_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "accepted_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "converted_order_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "customer_id"
+          ],
+          "table": "crm_contacts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "number"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "sales.sales_order_lines",
+      "name": "sales_sales_order_lines",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        },
+        {
+          "name": "order_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "position",
+          "nullable": false,
+          "kind": "int",
+          "default": 0
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": null
+        },
+        {
+          "name": "uom_code",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 20,
+          "default": null
+        },
+        {
+          "name": "unit_price",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 6,
+          "default": null
+        },
+        {
+          "name": "discount_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "tax_rate_pct",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 5,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "qty_delivered",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "qty_invoiced",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 4,
+          "default": 0
+        },
+        {
+          "name": "line_subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_tax",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "line_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "order_id"
+          ],
+          "table": "sales_sales_orders",
+          "references": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "columns": [
+            "product_id"
+          ],
+          "table": "catalog_products",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "tax_id"
+          ],
+          "table": "catalog_taxes",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "order_id"
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "legacy": "sales.sales_orders",
+      "name": "sales_sales_orders",
+      "columns": [
+        {
+          "name": "org_id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "branch_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "number",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 30,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "nullable": true,
+          "kind": "str",
+          "max_length": 200,
+          "default": null
+        },
+        {
+          "name": "order_date",
+          "nullable": false,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "expected_date",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "currency",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 3,
+          "default": "USD"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "kind": "str",
+          "max_length": 20,
+          "default": "draft"
+        },
+        {
+          "name": "subtotal",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "discount_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "tax_total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "total",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "fx_rate",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 8,
+          "default": 1
+        },
+        {
+          "name": "total_base",
+          "nullable": false,
+          "kind": "decimal",
+          "precision": 18,
+          "scale": 2,
+          "default": 0
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "kind": "str",
+          "max_length": null,
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "confirmed_at",
+          "nullable": true,
+          "kind": "date",
+          "default": null
+        },
+        {
+          "name": "confirmed_by",
+          "nullable": true,
+          "kind": "uuid",
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "kind": "datetime",
+          "default": {
+            "factory": "now"
+          }
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "kind": "uuid",
+          "default": {
+            "factory": "uuid7"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "org_id",
+          "number"
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "branch_id"
+          ],
+          "table": "core_branches",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "columns": [
+            "customer_id"
+          ],
+          "table": "crm_contacts",
+          "references": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "number"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "org_id"
+          ],
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ]
+    }
+  ]
+}
