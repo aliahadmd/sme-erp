@@ -27,16 +27,12 @@ def test_schema_covers_all_current_models_and_source_files():
     assert len(expected) == 45
     db = database()
     actual = {row[0] for row in db.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
-    assert (
-        actual
-        - {
-            "cf_commands",
-            "cf_assertions",
-            "cf_outbox",
-            "platform_schema_migrations",
-        }
-        == expected
-    )
+    assert {name for name in actual if not name.startswith("platform_")} - {
+        "cf_commands",
+        "cf_assertions",
+        "cf_outbox",
+        "platform_schema_migrations",
+    } == expected
     for table in expected:
         assert "_revision" in {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []

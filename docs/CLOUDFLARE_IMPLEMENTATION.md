@@ -35,15 +35,16 @@ needed following the language/ORM discussion.
 - The target Cloudflare account is accessible through the connected plugin.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
-- The proof and full schema foundation have passed 28 local tests, with lint,
+- The proof, persistence foundation and authentication have passed 43 local tests, with lint,
   formatting, target-wheel installation and Build Output validation passing.
-- No existing deployment or production database has been modified.
+- The existing ERP production deployment and production database are unchanged.
 
 ## Observed remote evidence
 
 The authenticated feasibility Worker is deployed at
-`https://erp-feasibility.aliahad.workers.dev`. The latest verified runtime
-version is `b80c34c0-5db5-4794-bdec-055719249990`.
+`https://erp-feasibility.aliahad.workers.dev`. The financial command suite below
+was verified on version `b80c34c0-5db5-4794-bdec-055719249990`; the later password
+proof is recorded separately below.
 
 - FastAPI/Pydantic executes through the Workers ASGI entrypoint; D1 health,
   Decimal half-even rounding and proof authorization pass.
@@ -84,7 +85,10 @@ coverage. Proof-only tables live in fixtures outside application migrations.
 The generated schema has been applied to the isolated
 `erp-staging-20261113` D1 database. D1 reports all 45 business tables and no
 foreign-key-check violations; migration names/hashes are recorded there.
-This database has no demo business records or application traffic yet.
+This database now serves the isolated staging authentication application. It
+contains the fresh organization, branch, administrator, 84 permissions and
+seven system roles, plus synthetic session/audit verification records. Business
+workflow data and handlers remain unported.
 
 | Resource | Identifier |
 |---|---|
@@ -93,11 +97,59 @@ This database has no demo business records or application traffic yet.
 | Full-schema staging D1 | `0f278204-3190-49e1-96d2-a9312fa57e3d` |
 | Private proof R2 | `erp-feasibility-backups-20261113` |
 
+## Authentication and typed repositories
+
+The separate application Worker is deployed at
+`https://erp-migration-staging-20261113.aliahad.workers.dev`. The first verified
+application version is `1dfd4970-5dfb-462d-af03-f3470d61a204`.
+The latest authentication verifier also passes on version
+`5d0cdae7-0d0f-47ed-8801-fcd6bb514e95`.
+
+- Typed repositories cover all 45 modeled tables. Integer/decimal projections
+  use text; writes use integer casts and original precision/scale bounds.
+  Native batch plans include revisions, organization/parent ownership guards,
+  audit and idempotency. Local tests exercise stale writes, exact extremes and
+  cross-organization document-line access. Core authentication exercises the
+  UUID, boolean, JSON and datetime paths on actual D1.
+- The existing Pydantic schemas and permission catalog are reused in the Worker
+  bundle. Only portable source files are included. The original pagination
+  helper now imports AsyncSession for type checking only, avoiding an otherwise
+  eager greenlet dependency; its original pagination/schema interface was
+  verified with the original API environment.
+- Python `argon2-cffi==25.1.0` works with PyEmscripten binding/CFFI wheels.
+  Argon2id uses 19 MiB, two passes and one lane with independent salts. The
+  real Worker matches a native known vector and verifies correct/incorrect
+  passwords. One proof request containing four KDF operations recorded 505 ms
+  CPU and 515 ms wall time in Workers observability, on proof version
+  `10da67ca-df1d-4dbb-97ec-9dc6f5ea98db`. In-Worker clock readings do not measure
+  synchronous CPU time. [OWASP parameters](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- The 15-minute access-token and HTTP-only refresh-cookie contract is retained.
+  D1 stores hashed refresh credentials and authoritative sessions with absolute
+  seven-day expiry. Session rotation claims a token conditionally in one batch;
+  confirmed reuse revokes the family. Existing access authorization stops on
+  logout, reuse or account deactivation.
+- Native remote checks pass bootstrap, login/current-user permissions, cookie
+  flags, refresh rotation/reuse, competing refresh claims and logout. Fifteen
+  simultaneous unknown-account logins yield ten 401s and five 429s through the
+  persistent Durable Object failure budget. Local tests also force two refresh
+  readers to see the old token before either claim commits, and inject account
+  deactivation between validation and commit.
+- Login sessions, last-login timestamps and audit commit together. A D1 check
+  after the first verifier run showed three login audits for three sessions,
+  all revoked as expected, and no foreign-key violations. Four application
+  migrations are recorded by name/hash in the staging database.
+
+Staging credentials are generated in ignored files with mode 0600. The
+one-time bootstrap is secret-gated, staging-only and refuses an initialized
+database; it is not a replacement for the full business demo seed. The repeatable
+checks are `cloudflare/scripts/verify_auth_remote.py` and
+`cloudflare/scripts/verify_password_remote.py`.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, connect typed repositories and
-the existing Python business rules to the new schema, port authentication and
-all module handlers, and prove buy/sell/partial/credit/refund/FX workflows. Then
+The full ERP migration remains incomplete. Next, port core management and all
+business module handlers onto the typed repositories and atomic command path,
+and prove buy/sell/partial/credit/refund/FX workflows. Then
 complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,
 demo seeding, frontend and role parity, isolated application deployment,
 capacity acceptance, cutover and safe old-runtime retirement. The synthetic

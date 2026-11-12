@@ -1,6 +1,7 @@
 .cloudflare/
 .dev.vars
 .secrets.*.json
+.demo.*.json
 .python-version
 node_modules/
 .venv/

@@ -1,12 +1,16 @@
 """Pagination primitives shared by all list endpoints."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import Select, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass(frozen=True)

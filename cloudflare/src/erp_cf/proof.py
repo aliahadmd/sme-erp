@@ -218,3 +218,28 @@ async def backup_restore(env=Depends(environment)):
         return await round_trip(env, f"proof/{secrets.token_hex(16)}.json")
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/password-kdf")
+async def password_kdf(env=Depends(environment)):
+    from erp_cf.crypto import (
+        MEMORY_KIB,
+        PARALLELISM,
+        TIME_COST,
+        b64,
+        derive,
+        hash_password,
+        verify_password,
+    )
+
+    value = "Synthetic Workers password Δ"
+    encoded = await hash_password(value)
+    return {
+        "algorithm": "Argon2id",
+        "time_cost": TIME_COST,
+        "memory_kib": MEMORY_KIB,
+        "parallelism": PARALLELISM,
+        "correct": await verify_password(encoded, value),
+        "incorrect": await verify_password(encoded, "incorrect"),
+        "vector": b64(await derive(value, bytes(range(16)))),
+    }

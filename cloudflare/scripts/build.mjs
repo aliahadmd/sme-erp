@@ -14,12 +14,40 @@ await outputApi.cleanBuildOutputDir(root);
 const bundle = outputApi.getWorkerBundleDir(root);
 await fs.mkdir(bundle, { recursive: true });
 const modules = {};
+const mainModule = path.basename(configuration.worker.entrypoint);
 for (const item of await fs.readdir(path.join(root, "src"), { recursive: true })) {
   if (!item.endsWith(".py") && !item.endsWith(".json")) continue;
   const target = path.join(bundle, item);
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.copyFile(path.join(root, "src", item), target);
   modules[item] = { type: item.endsWith(".py") ? "python" : "data" };
+}
+// Reuse the ERP's existing Pydantic contracts and portable rules. Server
+// configuration, async sessions, old routers and native extensions are excluded.
+const api = path.join(root, "..", "api");
+const portable = [
+  "app/__init__.py", "app/modules/__init__.py", "app/shared/__init__.py",
+  "app/shared/money.py", "app/shared/pagination.py", "app/shared/totals.py",
+  "app/modules/core/permissions.py",
+];
+for (const name of await fs.readdir(path.join(api, "app/modules"))) {
+  const schema = `app/modules/${name}/schemas.py`;
+  if (await fs.stat(path.join(api, schema)).then(s => s.isFile()).catch(() => false)) portable.push(schema);
+}
+for (const name of portable) {
+  const target = path.join(bundle, name);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.copyFile(path.join(api, name), target);
+  modules[name] = { type: "python" };
+  let parent = path.dirname(name);
+  while (parent !== ".") {
+    const init = `${parent}/__init__.py`;
+    if (!(init in modules)) {
+      await fs.writeFile(path.join(bundle, init), "");
+      modules[init] = { type: "python" };
+    }
+    parent = path.dirname(parent);
+  }
 }
 // Match Cloudflare's Python packaging convention. Vendored Python and WASM
 // extension files are data modules; SDK JavaScript helpers remain ES modules.
@@ -38,7 +66,7 @@ await outputApi.writeRootConfig(root, { accountId: configuration.accountId }, co
 await outputApi.writeWorkerConfig({
   root,
   config: configuration.worker,
-  manifest: { type: "complete", mainModule: "entry.py", modules },
+  manifest: { type: "complete", mainModule, modules },
 });
 await outputApi.readBuildOutput(root);
 console.log(`Built ${configuration.worker.name} (${mode}) with ${Object.keys(modules).length} modules`);

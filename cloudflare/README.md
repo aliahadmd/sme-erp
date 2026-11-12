@@ -1,7 +1,8 @@
 # Python Workers migration
 
-This directory contains the isolated migration feasibility application. The
-existing ERP API and public deployment still use the original runtime.
+This directory contains the isolated financial proof and the ERP application
+being ported to Workers. The existing public deployment still uses the
+original runtime.
 See [implementation status](../docs/CLOUDFLARE_IMPLEMENTATION.md) for the full
 migration scope and unfinished work.
 
@@ -16,7 +17,7 @@ Run from this directory with Node 24, pnpm 12, uv, and authenticated `cf`:
 
 ```sh
 pnpm install --frozen-lockfile
-uv sync --frozen --python 3.13
+uv sync --frozen --python 3.14
 pnpm vendor
 pnpm test
 pnpm lint
@@ -28,13 +29,52 @@ uv run python -u scripts/verify_remote.py https://erp-feasibility.aliahad.worker
 The deployment requires the ignored `.secrets.staging.json` with a `PROOF_TOKEN`
 property. This credential must be a random secret, never a demo password. It is
 not included in generated bundles or logs. Proof endpoints require it as a
-Bearer token. The configuration rejects any mode other than `staging`.
+Bearer token. The `staging` mode selects only the proof Worker; `app-staging`
+selects the application Worker. Other modes are rejected until configured.
 
 `uv.lock` resolves host development dependencies; `pylock.toml` pins the
 Pyodide-compatible runtime wheels and hashes. `pnpm vendor` installs that
 existing target lock. Change it deliberately with
 `uv run python scripts/vendor.py --update-lock` and review the resulting diff.
 No host-native extension belongs in `python_modules/`.
+
+## Application authentication
+
+The application Worker is separate from the proof and uses the full business
+schema in `erp-staging-20261113`:
+
+```sh
+pnpm build:app-staging
+pnpm deploy:app-staging
+uv run python -u scripts/verify_auth_remote.py
+```
+
+`.secrets.app-staging.json` provides independent `JWT_SECRET` and
+`BOOTSTRAP_TOKEN` values. The ignored `.demo.app-staging.json` holds the fresh
+demo's `email`, `password` and `full_name`. Keep both private. On a new, empty
+application database, add `--bootstrap` to the verifier to initialize the
+organization, branch, administrator, 84 permissions and seven system roles.
+The bootstrap requires its secret and the staging-only enable flag, and
+rejects an initialized target. Production configuration must omit it.
+
+Authentication preserves the frontend's access-token/HTTP-only-cookie API.
+Password hashing retains Argon2id using pinned `argon2-cffi` and compatible
+Pyodide wheels: 19 MiB, two passes, one lane, 16-byte salts and 32-byte output.
+Only newly issued hashes with these parameters are accepted for this fresh
+demo; no legacy-hash import is provided. `verify_password_remote.py` verifies
+the WASM/native boundary with a synthetic vector.
+
+Access tokens last 15 minutes. Sessions have an absolute seven-day expiry.
+Refresh credentials are random and stored only as SHA-256 digests in D1;
+rotation is a guarded atomic batch. Reuse revokes the session, and each API
+authorization checks current session/account state and RBAC on D1's primary.
+Login creation, last-login update and audit commit together. A SQLite-backed
+Durable Object tracks failures and in-flight checks per hashed `(IP,email)`
+scope, with ten failures in a five-minute window.
+
+Only authentication and bootstrap have been ported so far. Core management,
+business module handlers, jobs, frontend assets and the full demo seed remain
+in progress. This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
 
@@ -85,5 +125,5 @@ migration for later schema changes rather than rewriting its history.
 
 `fixtures/0001_feasibility.sql` is excluded from application migrations. It must
 never be applied to the final ERP database. The full business schema has been
-created in the isolated `erp-staging-20261113` database; application handlers
-and demo seed data still need porting before this database can serve the ERP.
+created in the isolated `erp-staging-20261113` database; authentication now
+uses it. All business handlers and the full demo seed still need porting.
