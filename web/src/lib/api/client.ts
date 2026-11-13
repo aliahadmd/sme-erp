@@ -12,7 +12,12 @@ export class ApiError extends Error {
   readonly code: string
   readonly errors?: unknown[]
 
-  constructor(status: number, code: string, detail: string, errors?: unknown[]) {
+  constructor(
+    status: number,
+    code: string,
+    detail: string,
+    errors?: unknown[]
+  ) {
     super(detail)
     this.name = "ApiError"
     this.status = status
@@ -43,7 +48,7 @@ export function setTokenProvider(provider: Tokens) {
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { retry?: boolean } = {},
+  options: RequestInit & { retry?: boolean } = {}
 ): Promise<T> {
   const { retry = true, headers, ...rest } = options
 
@@ -51,6 +56,12 @@ export async function apiFetch<T>(
   finalHeaders.set("Accept", "application/json")
   if (rest.body && !finalHeaders.has("Content-Type")) {
     finalHeaders.set("Content-Type", "application/json")
+  }
+  if (
+    !["GET", "HEAD"].includes((rest.method ?? "GET").toUpperCase()) &&
+    !finalHeaders.has("Idempotency-Key")
+  ) {
+    finalHeaders.set("Idempotency-Key", crypto.randomUUID())
   }
   const token = tokenProvider.get()
   if (token) {
@@ -71,7 +82,11 @@ export async function apiFetch<T>(
   ) {
     const refreshed = await tokenProvider.refresh()
     if (refreshed) {
-      return apiFetch<T>(path, { ...options, retry: false })
+      return apiFetch<T>(path, {
+        ...options,
+        headers: finalHeaders,
+        retry: false,
+      })
     }
     tokenProvider.clear()
   }
@@ -81,7 +96,9 @@ export async function apiFetch<T>(
     let detail = `Request failed with status ${response.status}`
     let errors: unknown[] | undefined
     try {
-      const body = (await response.json()) as { error?: Record<string, unknown> }
+      const body = (await response.json()) as {
+        error?: Record<string, unknown>
+      }
       if (body.error) {
         code = String(body.error.code ?? code)
         detail = String(body.error.detail ?? detail)
@@ -108,8 +125,14 @@ export const api = {
       ...options,
     }),
   patch: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
+    apiFetch<T>(path, {
+      method: "PATCH",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
   put: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
+    apiFetch<T>(path, {
+      method: "PUT",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
 }

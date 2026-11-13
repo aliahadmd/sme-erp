@@ -9,7 +9,9 @@ migration scope and unfinished work.
 The proof uses FastAPI/Pydantic, Python Decimal, synchronous SQLAlchemy with
 `sqlalchemy-cloudflare-d1`, and native D1 batches. The adapter's `commit()` and
 `rollback()` do not provide atomic transactions. Financial commands always use
-the native batch path with SQL assertions and durable idempotency.
+the native batch path with SQL assertions and durable idempotency. The
+application uses typed native D1 repositories; it does not depend on ORM session
+transactions for business changes.
 
 ## Build and verify
 
@@ -38,7 +40,7 @@ existing target lock. Change it deliberately with
 `uv run python scripts/vendor.py --update-lock` and review the resulting diff.
 No host-native extension belongs in `python_modules/`.
 
-## Application authentication
+## Application authentication and management
 
 The application Worker is separate from the proof and uses the full business
 schema in `erp-staging-20261113`:
@@ -47,13 +49,17 @@ schema in `erp-staging-20261113`:
 pnpm build:app-staging
 pnpm deploy:app-staging
 uv run python -u scripts/verify_auth_remote.py
+uv run python -u scripts/verify_management_remote.py
 ```
 
-`.secrets.app-staging.json` provides independent `JWT_SECRET` and
-`BOOTSTRAP_TOKEN` values. The ignored `.demo.app-staging.json` holds the fresh
+`.secrets.app-staging.json` provides independent `JWT_SECRET`, `BOOTSTRAP_TOKEN`
+and `COMMAND_HASH_KEY` values. The command key must contain at least 32 random
+characters and must remain stable for receipt fingerprint verification. The
+ignored `.demo.app-staging.json` holds the fresh
 demo's `email`, `password` and `full_name`. Keep both private. On a new, empty
 application database, add `--bootstrap` to the verifier to initialize the
-organization, branch, administrator, 84 permissions and seven system roles.
+organization, branch, administrator, 84 permissions, seven system roles and
+minimal accounting/settings/base-currency defaults.
 The bootstrap requires its secret and the staging-only enable flag, and
 rejects an initialized target. Production configuration must omit it.
 
@@ -72,9 +78,18 @@ Login creation, last-login update and audit commit together. A SQLite-backed
 Durable Object tracks failures and in-flight checks per hashed `(IP,email)`
 scope, with ten failures in a five-minute window.
 
-Only authentication and bootstrap have been ported so far. Core management,
-business module handlers, jobs, frontend assets and the full demo seed remain
-in progress. This Worker is not yet the complete ERP.
+Core management, CRM contacts, catalog master data and currencies/FX rates have
+also been ported. Their writes go through the private `ERPCommands` Durable
+Object and commit records, numbering, revision assertions, audit and command
+receipts in one native D1 batch. Decimal values remain exact; Unicode search
+uses atomically maintained casefold keys. Client mutation keys survive an
+authentication retry. The management verifier creates synthetic staging data
+and checks these contracts, reference constraints and permission revocation.
+
+The last verification passed 69 backend and 13 frontend tests, plus frontend
+build/lint and backend lint/schema checks. Accounting and other financial
+workflows, HR/reporting, AI, overdue notifications, jobs, frontend assets and
+the full demo seed remain in progress. This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
 
@@ -125,5 +140,6 @@ migration for later schema changes rather than rewriting its history.
 
 `fixtures/0001_feasibility.sql` is excluded from application migrations. It must
 never be applied to the final ERP database. The full business schema has been
-created in the isolated `erp-staging-20261113` database; authentication now
-uses it. All business handlers and the full demo seed still need porting.
+created in the isolated `erp-staging-20261113` database; authentication and
+management now use it. Five application migrations are recorded there. The
+remaining business handlers and full demo seed still need porting.

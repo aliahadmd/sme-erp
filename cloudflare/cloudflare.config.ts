@@ -15,7 +15,10 @@ export default defineConfig(({ mode }) => {
       observability: { enabled: true, traces: { enabled: true } },
       exports: proof
         ? { OrganizationCommands: exports.durableObject({ storage: "sqlite" }) }
-        : { LoginGuard: exports.durableObject({ storage: "sqlite" }) },
+        : {
+          LoginGuard: exports.durableObject({ storage: "sqlite" }),
+          ERPCommands: exports.durableObject({ storage: "sqlite" }),
+        },
       env: proof ? {
         DB: bindings.d1({
           name: "erp-feasibility-20261113",
@@ -39,6 +42,10 @@ export default defineConfig(({ mode }) => {
         AUTH_LIMITERS: bindings.durableObject({
           worker: "erp-migration-staging-20261113",
           exportName: "LoginGuard",
+        }),
+        COMMANDS: bindings.durableObject({
+          worker: "erp-migration-staging-20261113",
+          exportName: "ERPCommands",
         }),
         ENVIRONMENT: bindings.text("staging"),
         PUBLIC_ORIGIN: bindings.text("https://erp-migration-staging-20261113.aliahad.workers.dev"),

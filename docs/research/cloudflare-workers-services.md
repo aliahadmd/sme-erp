@@ -12,7 +12,7 @@ Keep the existing React/Vite SPA and business modules. Move runtime code to a sm
 |---|---|---|
 | nginx serving the SPA and proxying `/api` | Workers Static Assets + API Worker | Existing SPA can remain; configure SPA navigation fallback and explicitly route `/api/*` to application code. No SSR conversion is required. |
 | FastAPI/uvicorn API process | Python Worker retaining FastAPI/Pydantic | Preferred feasibility path after the Python/ORM discussion; remove uvicorn and adapt runtime/persistence. |
-| Async SQLAlchemy/asyncpg | Synchronous SQLAlchemy 2 + `sqlalchemy-cloudflare-d1` candidate, with direct D1 batch repositories | Adapter remains provisional; its commit/rollback methods do not provide multi-statement transactions. |
+| Async SQLAlchemy/asyncpg | Typed native D1 repositories; optional synchronous SQLAlchemy 2 adapter | Application uses native batches. The adapter passes the basic proof; its commit/rollback methods do not provide multi-statement transactions. |
 | Redis/arq durable jobs | Queues + consumer Worker + dead-letter queue | Suited to email, AI drafts, notifications and bounded export tasks. Consumers must tolerate redelivery and reordering. |
 | arq cron | Cron Triggers invoking bounded jobs/queue fan-out | Scheduled work should be idempotent by job + period + organization; calculate business dates in an explicit organization timezone. |
 | Redis auth revocation | D1 sessions with atomic conditional refresh rotation, primary reads | Design recommendation: preserve strong correctness at the source of truth. KV is unsuitable for immediate revocation. |
@@ -33,6 +33,13 @@ Cloudflare currently supports FastAPI in Python Workers using its built-in ASGI 
 The important mismatch is the repository's async SQLAlchemy layer: Cloudflare documents synchronous SQLAlchemy support, while async SQLAlchemy ORM is unsupported because greenlet is unavailable. Current Hyperdrive docs demonstrate asyncpg itself working against PostgreSQL, but that does not make async SQLAlchemy work and does not turn asyncpg into a D1 driver. D1 requires a persistence/transaction redesign regardless of the API language. [Python SQLAlchemy compatibility](https://developers.cloudflare.com/hyperdrive/examples/python-workers/#sqlalchemy-support)
 
 **Updated recommendation:** retain Python/FastAPI/Pydantic, preserving Decimal financial logic and existing contracts. The ORM candidate is synchronous SQLAlchemy 2 with the community `sqlalchemy-cloudflare-d1` adapter's native binding integration. Use explicit native D1 batches for every atomic multi-statement operation. If broader adapter validation fails, direct D1 repositories remain a Python option; TypeScript/Hono is an alternative if the Python runtime itself proves unsuitable. The basic end-to-end Worker proof now passes concurrent ORM reads and single-statement writes with exact 18-digit values. Full ERP suitability remains provisional; see [current evidence](../CLOUDFLARE_IMPLEMENTATION.md). [Adapter documentation](https://github.com/CollierKing/sqlalchemy-cloudflare-d1)
+
+Implementation update, 13 November: the application uses typed native D1
+repositories for both reads and writes, retaining the existing Pydantic
+contracts and generated model metadata. The adapter remains available in the
+validated proof. Authentication, core management and master-data CRUD now pass
+isolated staging checks; the [implementation log](../CLOUDFLARE_IMPLEMENTATION.md)
+records the remaining workflow and operational gates.
 
 ### ORM candidate and its transaction boundary
 
@@ -104,11 +111,11 @@ Public USD rates checked on 12 November 2026; allowances are generally account-w
 | Workers AI | 10,000 neurons/day free; overage $0.011/1,000 neurons, model consumption varies | [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) |
 | Worker execution | 128 MB memory per isolate; Paid default 30s CPU, configurable to 5min. Stream backups/files; benchmark password hashing. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
 
-## Remaining pre-implementation evidence
+## Remaining validation
 
-- Validate the synchronous SQLAlchemy adapter inside FastAPI on Python Workers, including concurrent request isolation and exact type transport; use native D1 batches for atomic multi-statement commands regardless of the result.
+- The basic SQLAlchemy/FastAPI Worker proof passes concurrent exact-value reads and single writes. Continue validating application behavior as modules are ported; native D1 batches own atomic multi-statement commands.
 - Verify Email Sending Beta is enabled/onboardable for the target account, actual daily quota and intended domain. No account eligibility was inspected for this research.
-- Benchmark the selected password hash for newly seeded credentials and prove login/rehash behavior; importing legacy hashes is outside the initial fresh-demo scope.
-- Exercise retries, outbox crash windows, DLQ replay and ambiguous email acknowledgments in a disposable Cloudflare staging environment after implementation is authorized.
+- Argon2id native/WASM vectors, correct/incorrect passwords, login admission and refresh/revocation checks pass. Realistic login load/capacity acceptance remains open; importing legacy hashes is outside the initial fresh-demo scope.
+- Exercise retries, outbox crash windows, DLQ replay and ambiguous email acknowledgments in the disposable Cloudflare staging environment.
 - Check production backup sizes, file counts and export streaming duration; prove backup restoration and coordinated attachment retention.
 - Measure real requests, CPU, D1 row reads/writes, daily job counts and logging volume before making a savings forecast.

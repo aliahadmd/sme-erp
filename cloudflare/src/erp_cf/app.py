@@ -7,9 +7,11 @@ from fastapi.responses import JSONResponse
 
 from erp_cf.auth import router as auth_router
 from erp_cf.bootstrap import router as bootstrap_router
+from erp_cf.core_api import router as core_router
 from erp_cf.db import D1Database
 from erp_cf.errors import register_handlers
 from erp_cf.identity import environment
+from erp_cf.master_api import router as master_router
 
 
 def create_app(test_environment=None):
@@ -17,6 +19,8 @@ def create_app(test_environment=None):
     register_handlers(app)
     app.include_router(auth_router)
     app.include_router(bootstrap_router)
+    app.include_router(core_router)
+    app.include_router(master_router)
 
     @app.middleware("http")
     async def context(request: Request, call_next):
@@ -25,6 +29,8 @@ def create_app(test_environment=None):
         request_id = request.headers.get("x-request-id", "")[:128] or uuid.uuid4().hex
         response = await call_next(request)
         response.headers["x-request-id"] = request_id
+        if request.url.path.startswith(("/api/", "/internal/")):
+            response.headers["cache-control"] = "no-store"
         return response
 
     @app.get("/healthz")

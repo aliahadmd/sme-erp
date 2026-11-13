@@ -104,4 +104,9 @@ Time Travel is always on and provides point-in-time recovery. Paid history is 30
 5. Retry identical command IDs before/after response loss and object restart; produce exactly one financial outcome.
 6. Measure busiest-company command latency/throughput, report contention, storage growth, and backup duration on realistic data. The 10 GB hard cap includes tables and indexes, so set a headroom policy well before it is reached.
 
-These gates were not executed during research. Passing them is the evidence needed to call this a sound implementation for this particular ERP.
+These gates were not executed during the original research. Subsequent isolated
+implementation has verified exact transport, guarded rollback, competing stock
+commands, replay and a bounded eight-table recovery proof. Full buy/sell cycles,
+restarts/network loss and realistic capacity/recovery remain open; see the
+[current evidence](../CLOUDFLARE_IMPLEMENTATION.md). Passing the complete gates is
+still required for this particular ERP.

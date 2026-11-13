@@ -1,11 +1,6 @@
 """Multi-currency API: currencies + FX rates admin."""
 
-import uuid
-from datetime import date
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,36 +9,9 @@ from app.core.errors import ConflictError
 from app.modules.core.deps import CurrentUser, get_current_user, require
 from app.modules.core.service import get_organization, write_audit
 from app.modules.currencies.models import Currency, FxRate
+from app.modules.currencies.schemas import CurrencyIn, CurrencyOut, RateIn, RateOut
 
 router = APIRouter(prefix="/currencies", tags=["currencies"])
-
-
-class CurrencyIn(BaseModel):
-    code: str = Field(min_length=3, max_length=3)
-    name: str = Field(min_length=1, max_length=50)
-
-
-class CurrencyOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    code: str
-    name: str
-
-
-class RateIn(BaseModel):
-    currency: str = Field(min_length=3, max_length=3)
-    rate_date: date
-    rate: Decimal = Field(gt=0)
-
-
-class RateOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    currency: str
-    rate_date: date
-    rate: Decimal
 
 
 @router.get("", response_model=list[CurrencyOut])

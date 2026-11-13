@@ -1,6 +1,6 @@
 # ERP migration to Cloudflare: research and proposed architecture
 
-**Research date:** 12 November 2026. **Status updated:** 13 November 2026. Implementation is in progress, starting with the Python/D1 feasibility gate. The architecture below remains conditional on that gate; see [implementation evidence and outstanding work](CLOUDFLARE_IMPLEMENTATION.md).
+**Research date:** 12 November 2026. **Status updated:** 13 November 2026. Implementation is in progress: the basic Python/D1 proof, authentication and core/master-data handlers pass isolated staging checks. Full financial, recovery and capacity acceptance remains open; see [implementation evidence and outstanding work](CLOUDFLARE_IMPLEMENTATION.md).
 
 **Confirmed scope:** replace the Docker/VPS runtime with Cloudflare services, use D1 instead of PostgreSQL, replace Redis/arq, and use R2 instead of SeaweedFS/S3. A **fresh demo database is acceptable**, as confirmed during this investigation. Preserve the ERP's functionality and financial rules; retaining the existing demo records and password hashes is unnecessary.
 
@@ -10,11 +10,13 @@ Evaluate **Python Workers + FastAPI/Pydantic as the preferred feasibility path**
 
 The ORM candidate is **synchronous SQLAlchemy 2 with the community `sqlalchemy-cloudflare-d1` adapter**, using the native D1 binding. This is a candidate for models, reads, and suitable individual statements, not an approved replacement for transactional SQLAlchemy sessions. Operations that require multiple changes to commit together must use a dedicated native D1 batch path. The adapter remains subject to runtime, concurrency, type-mapping, and maintenance review. [Adapter documentation](https://github.com/CollierKing/sqlalchemy-cloudflare-d1), [adapter package/status](https://pypi.org/project/sqlalchemy-cloudflare-d1/)
 
-Use Cloudflare Email Sending for transactional mail, subject to its current beta onboarding and limits. Add Workflows only when a process actually needs durable multi-step execution. Workers AI can replace the current externally hosted model inference after quality testing. Feasibility implementation has begun; the preferred language and ORM path above remains provisional until the proof passes.
+The basic runtime proof has passed. The application now uses typed native D1 repositories for reads and writes, reusing the original Pydantic contracts and generated model metadata. SQLAlchemy remains a validated adapter option rather than the application's transaction mechanism. This is a persistence choice within the recommended Python architecture; see [the implementation log](CLOUDFLARE_IMPLEMENTATION.md#core-management-and-master-data).
+
+Use Cloudflare Email Sending for transactional mail, subject to its current beta onboarding and limits. Add Workflows only when a process actually needs durable multi-step execution. Workers AI can replace the current externally hosted model inference after quality testing.
 
 Keep the modular monolith: CRM, catalog, sales, purchasing, inventory, invoicing, accounting, HR, and core remain business modules. Separate public HTTP, background processing, and command coordination as execution entrypoints; do not turn each module into an independent database or microservice.
 
-**D1 is a conditional fit, rather than an automatic replacement for PostgreSQL.** It provides atomic SQL batches, but its API, concurrency model, integer transport, and database limits require deliberate changes to this ERP. A small, isolated financial proof is under development. Proceed with the full port only when that proof passes concurrency, failure, precision, and recovery tests. This assessment is based on documentation and repository inspection, not a completed deployed D1 benchmark. [D1 batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+**D1 remains a conditional fit for the full ERP.** It provides atomic SQL batches, but its API, concurrency model, integer transport, and database limits require deliberate changes. The isolated financial proof now passes exact-value transport, guarded rollback, competing-stock commands, idempotent replay and bounded R2/D1 recovery checks. That evidence supports continuing the port; it does not establish full workflow parity, restart resilience, realistic capacity or production-scale recovery. See [observed remote evidence](CLOUDFLARE_IMPLEMENTATION.md#observed-remote-evidence). [D1 batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
 
 ## 2. What the existing application requires
 
@@ -39,7 +41,7 @@ Primary repository references: [developer guide](DEVELOPMENT.md), [transaction e
 | VPS, Docker Compose, uvicorn | Cloudflare Workers | Stateless HTTP and event execution; no always-running application server |
 | nginx serving the React build | Workers Static Assets | Retain React, Vite, React Router, Tailwind, shadcn, and TanStack Query |
 | FastAPI/Pydantic API | Python Worker running FastAPI/Pydantic | Preferred feasibility path; retain API contracts and remove the uvicorn server dependency |
-| Async SQLAlchemy + asyncpg | Synchronous SQLAlchemy 2 + `sqlalchemy-cloudflare-d1` candidate; native D1 repositories for atomic commands | Validate native binding integration; ORM commit/rollback does not provide multi-statement atomicity |
+| Async SQLAlchemy + asyncpg | Typed native D1 repositories; optional synchronous SQLAlchemy 2 adapter | Native batches own atomic commands; the adapter passes the basic proof, but ORM commit/rollback does not provide multi-statement atomicity |
 | PostgreSQL | D1 | One business database per environment for the current company; table prefixes retain module ownership |
 | Alembic | Versioned D1 SQL migrations | Build a clean final schema and new demo seed |
 | arq queue + Redis broker | Queues + queue consumer Worker | Durable async delivery, bounded retries, dead-letter queues, idempotent consumers |
@@ -180,8 +182,8 @@ The community `sqlalchemy-cloudflare-d1` package documents `create_engine_from_b
 
 | Option | Advantages | Costs and fit |
 |---|---|---|
-| Python/FastAPI/Pydantic + synchronous SQLAlchemy D1 adapter candidate | Preserve more endpoint structure, validation, models, and Decimal algorithms | Preferred feasibility path; adapter is provisional, and atomic multi-statement writes use native D1 batches |
-| Python/FastAPI/Pydantic + direct D1 repositories | Retain Python business logic with explicit persistence and batch control | Fallback if the ORM adapter fails; requires more SQL/repository code |
+| Python/FastAPI/Pydantic + synchronous SQLAlchemy D1 adapter candidate | Preserve more endpoint structure, validation, models, and Decimal algorithms | Basic runtime proof passes; broader adapter suitability remains provisional, and atomic writes use native D1 batches |
+| Python/FastAPI/Pydantic + direct D1 repositories | Retain Python business logic with explicit persistence and batch control | Current application implementation, preserving original contracts/metadata; requires explicit SQL/repository code |
 | TypeScript/Hono + D1, optionally Drizzle for routine queries | Direct Workers bindings, shared frontend types and tooling | Alternative if Python proves unsuitable; requires porting financial domain logic and tests |
 | Workers + Hyperdrive + managed PostgreSQL | Retain PostgreSQL semantics and broader capacity | External database remains; outside requested all-Cloudflare target |
 | Cloudflare Containers | Can preserve more Linux runtime behavior | Retains containers and does not solve the D1 transaction port; outside the requested Workers-only approach |
@@ -236,7 +238,7 @@ Foreign-key checks, migration review, and real runtime tests remain necessary ev
 
 ## 13. Decision and remaining unknowns
 
-**Implementation direction:** proceed with the Cloudflare migration, beginning with Python-first feasibility before committing to the final persistence implementation. The desired all-Cloudflare stack is plausible for the current SME/demo scope. The synchronous SQLAlchemy adapter is a candidate; runtime compatibility and D1 financial semantics remain technical gates. TypeScript/Hono is an alternative, not a prerequisite.
+**Implementation direction:** continue the Python Workers migration using typed native D1 repositories and guarded atomic batches. The desired all-Cloudflare stack remains plausible for the current SME/demo scope. The synchronous SQLAlchemy adapter passed the basic proof and remains optional; full ERP financial, recovery and capacity acceptance remains open. TypeScript/Hono is an alternative, not a prerequisite.
 
 Known: a fresh demo database is acceptable; current source is single-organization; the UI and workflows can largely be retained. Unmeasured: intended production traffic, peak company write rate, document size distribution, future data retention/residency needs, account-level quotas/usage, and Email Sending eligibility. The initial investigation was read-only. Subsequent implementation has created an isolated feasibility D1 database and local proof code; existing deployments and production data remain unchanged. Live financial acceptance is still pending; current evidence belongs in the [implementation log](CLOUDFLARE_IMPLEMENTATION.md).
 

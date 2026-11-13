@@ -23,7 +23,7 @@ class ContactIn(BaseModel):
     # Omitted → the organization's base currency.
     currency: CurrencyCode | None = None
     payment_terms_days: int = Field(30, ge=0, le=365)
-    credit_limit: Decimal = Field(0, ge=0)
+    credit_limit: Decimal = Field(Decimal("0"), ge=0)
     tags: list[str] = []
     owner_user_id: uuid.UUID | None = None
     notes: str | None = None

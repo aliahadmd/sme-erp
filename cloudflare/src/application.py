@@ -3,6 +3,7 @@
 from workers import asgi
 
 from erp_cf.app import create_app
+from erp_cf.command_worker import ERPCommands as ERPCommands
 from erp_cf.limits_worker import LoginGuard as LoginGuard
 
 app = create_app()

@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from erp_cf.crypto import hash_password
 from erp_cf.db import D1Database, Statement, assertion
 from erp_cf.errors import ConflictError, NotFoundError, PermissionDeniedError
+from erp_cf.foundation import records
 from erp_cf.identity import environment
 from erp_cf.store import tables
 
@@ -46,6 +47,8 @@ async def seed(env, body: BootstrapInput):
     )
     org = add("core_organizations", {"id": str(env.ORG_ID), "name": body.organization_name})
     branch = add("core_branches", {"org_id": org["id"], "code": "HQ", "name": "Head Office"})
+    for name, data in records(org):
+        add(name, data)
     permissions = {
         code: add(
             "core_permissions",
@@ -110,10 +113,21 @@ async def seed(env, body: BootstrapInput):
 @router.post("/internal/bootstrap", status_code=201)
 async def bootstrap(body: BootstrapInput, request: Request):
     env = environment(request)
+    staging_secret(env, request.headers.get("authorization", "").removeprefix("Bearer "))
+    return await seed(env, body)
+
+
+def staging_secret(env, provided):
     if env.ENVIRONMENT != "staging" or getattr(env, "BOOTSTRAP_ENABLED", "false") != "true":
         raise NotFoundError()
     expected = str(getattr(env, "BOOTSTRAP_TOKEN", ""))
-    provided = request.headers.get("authorization", "").removeprefix("Bearer ")
     if not expected or not hmac.compare_digest(expected.encode(), provided.encode()):
         raise PermissionDeniedError()
-    return await seed(env, body)
+
+
+@router.post("/internal/seed-foundation")
+async def seed_foundation(request: Request):
+    from erp_cf.command_bus import invoke
+
+    staging_secret(environment(request), request.headers.get("x-bootstrap-token", ""))
+    return await invoke(request, "core.initialize", {})

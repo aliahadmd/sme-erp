@@ -9,6 +9,7 @@ import pytest_asyncio
 
 from erp_cf.app import create_app
 from erp_cf.bootstrap import BootstrapInput, seed
+from erp_cf.command_bus import Coordinator
 from erp_cf.crypto import token_hash
 from erp_cf.login_budget import LoginBudget
 from tests.fakes import SQLiteD1
@@ -37,11 +38,20 @@ class Limiters:
         return self.objects[name]
 
 
+class Commands:
+    def __init__(self, env):
+        self.coordinator = Coordinator(env)
+
+    def getByName(self, name):
+        return self.coordinator
+
+
 @pytest_asyncio.fixture
 async def env():
     environment = SimpleNamespace(
         DB=SQLiteD1(),
         JWT_SECRET="test-secret-for-tests-only-" * 3,
+        COMMAND_HASH_KEY="test-command-fingerprint-key-" * 3,
         PUBLIC_ORIGIN="https://erp.test",
         ORG_ID=str(uuid.uuid7()),
         ENVIRONMENT="staging",
@@ -49,6 +59,7 @@ async def env():
         BOOTSTRAP_ENABLED="true",
         BOOTSTRAP_TOKEN="test-bootstrap-token",
     )
+    environment.COMMANDS = Commands(environment)
     await seed(
         environment,
         BootstrapInput(email="admin@example.com", password="admin123", full_name="Admin"),

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.security import hash_password, verify_password
+from app.modules.core.defaults import DEFAULT_SETTINGS as DEFAULT_SETTINGS
 from app.modules.core.models import (
     AuditLog,
     Notification,
@@ -154,27 +155,6 @@ async def write_audit(
 
 
 # ----------------------------------------------------------------- settings
-DEFAULT_SETTINGS: dict[str, dict] = {
-    "company.info": {"legal_name": "", "tax_id": "", "email": "", "phone": ""},
-    "numbering.prefixes": {
-        "contact": "C",
-        "quotation": "QT",
-        "sales_order": "SO",
-        "purchase_order": "PO",
-        "receipt": "RCV",
-        "delivery": "DLV",
-        "adjustment": "ADJ",
-        "ar_invoice": "INV",
-        "ap_invoice": "BILL",
-        "ar_credit": "CRN",
-        "ap_credit": "SCN",
-        "customer_payment": "PAY",
-        "supplier_payment": "SPAY",
-        "journal_entry": "JE",
-    },
-    "invoicing.defaults": {"payment_terms_days": 30, "default_sale_tax": None},
-    "inventory.guard": {"allow_negative": False},
-}
 
 
 async def get_setting(session: AsyncSession, org_id: uuid.UUID, key: str) -> dict | None:

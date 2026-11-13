@@ -6,6 +6,8 @@ All SQL fragments passed here are application code; user values are parameters.
 """
 
 import copy
+import hashlib
+import hmac
 import json
 import uuid
 from dataclasses import dataclass
@@ -20,6 +22,11 @@ from pydantic import BaseModel
 from erp_cf.db import AtomicCommands, CommandConflict, Statement, assertion
 from erp_cf.errors import ConflictError, NotFoundError, ValidationError
 from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coefficient
+
+SEARCH_COLUMNS = {
+    "crm_contacts": {"name": "_name_fold", "code": "_code_fold", "legal_name": "_legal_fold"},
+    "catalog_products": {"name": "_name_fold", "sku": "_sku_fold"},
+}
 
 
 def now() -> datetime:
@@ -271,14 +278,29 @@ class Repository:
 
 
 class UnitOfWork:
-    def __init__(self, db, org_id: str, actor_id: str, key: str, operation: str, payload: dict):
+    def __init__(
+        self,
+        db,
+        org_id: str,
+        actor_id: str,
+        key: str,
+        operation: str,
+        payload: dict,
+        *,
+        fingerprint_key: str | None = None,
+    ):
         self.db = db
         self.org_id = org_id
         self.actor_id = actor_id
         self.commands = AtomicCommands(db)
         self.identity = self.commands.identity(org_id, actor_id, key)
         self.request_hash = self.commands.request_hash(operation, wire(payload))
+        if fingerprint_key is not None:
+            self.request_hash = hmac.new(
+                fingerprint_key.encode(), self.request_hash.encode(), hashlib.sha256
+            ).hexdigest()
         self.statements: list[Statement] = []
+        self.pending_numbers: dict[tuple, dict] = {}
 
     def repository(self, name: str):
         return Repository(self.db, name, self.org_id)
@@ -293,7 +315,20 @@ class UnitOfWork:
             raise ValidationError(str(exc)) from exc
         self.ownership_guard(table, row)
         self.statements.append(statement)
+        self.search_keys(name, row)
         return row
+
+    def search_keys(self, name, row):
+        fields = SEARCH_COLUMNS.get(name)
+        if fields:
+            self.statements.append(
+                Statement(
+                    f"UPDATE {quote(name)} SET "
+                    + ",".join(quote(v) + "=?" for v in fields.values())
+                    + " WHERE id=?",
+                    (*(str(row.get(k) or "").casefold() for k in fields), row["id"]),
+                )
+            )
 
     def ownership_guard(self, table: Table, row: dict):
         if "org_id" in table.fields and row["org_id"] != self.org_id:
@@ -341,11 +376,13 @@ class UnitOfWork:
                 (*encoded.values(), *(row[k] for k in table.primary)),
             )
         )
-        return {
+        updated = {
             **row,
             **{k: fields[k].decode(v) for k, v in encoded.items()},
             "_revision": row["_revision"] + 1,
         }
+        self.search_keys(name, updated)
+        return updated
 
     def delete(self, name: str, row: dict):
         self.guard(name, row)

@@ -68,11 +68,11 @@ class ProductIn(BaseModel):
     is_purchasable: bool = True
     is_sellable: bool = True
     track_inventory: bool = True
-    sale_price: Decimal = Field(0, ge=0)
-    cost_price: Decimal = Field(0, ge=0)
+    sale_price: Decimal = Field(Decimal("0"), ge=0)
+    cost_price: Decimal = Field(Decimal("0"), ge=0)
     sale_tax_id: uuid.UUID | None = None
     purchase_tax_id: uuid.UUID | None = None
-    min_stock: Decimal = Field(0, ge=0)
+    min_stock: Decimal = Field(Decimal("0"), ge=0)
     tags: list[str] = []
 
 
