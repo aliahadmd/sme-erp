@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI and mail delivery have passed 274 local backend
+  AI, mail delivery and write-pause guards have passed 284 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -685,6 +685,56 @@ the native queue. D1 recorded eight `already_processed` prepare receipts; the
 four intents and four test attempts were unchanged. Foreign-key checks were
 clean, SQL assertions were empty, and the account still reported zero sends.
 No real email has been sent by this migration work.
+
+## Full backup write-pause foundation
+
+Migration `0015_maintenance.sql` is applied in staging with SHA-256
+`1c60742155e6ed8356e5786783da207e7baeae24137cde55a614eeb5df80f96e`.
+Worker `e6a5ffe5-4b94-4d2a-9153-64a13011e9a6` reports a 2,348 ms startup.
+The database contains 186 DML guards: insert/update/delete on all 62 business,
+authentication and operational tables. Only the maintenance control row and
+ephemeral SQL assertions are exempt. This is a foundation for full backup,
+not a completed backup/recovery service.
+
+- A private, database-wide lease carries an owner, increasing fence and bounded
+  10-900 second lifetime. Each protected read/renew/release must prove the
+  current owner/fence and unexpired lease inside its D1 batch. A stale controller
+  cannot renew/release a replacement lease or publish a valid continued snapshot.
+  Process/DO restarts do not reopen writes; lease expiry does so without requiring
+  a live alarm/controller. A resumed expired backup must discard its partial run.
+- Database triggers block every guarded writer, including code bypassing the
+  Python adapter and commands planned before the pause. Reads remain available.
+  The public error is `503 maintenance`. `/api/jobs/status` exposes active state,
+  expiry and fence to settings readers, without exposing the owner token.
+- Acquisition waits for active mail claims to settle; new mail cannot commit a
+  pre-send claim while paused. Queue transport may already have accepted event
+  IDs before a blocked dispatch-metadata update. D1 effects remain paused and
+  durable outbox recovery handles those duplicate IDs after release.
+- Backup acquisition checks the actual schema's trigger definitions. A new or
+  modified table/guard causes explicit failure until its protection is installed.
+  Future snapshot pages must exclude ephemeral assertions/control state, project
+  integers as text and validate the same lease through final manifest creation.
+
+Ten local cases exercise competing lease claims, stale fences, expiry/restarts,
+lost committed/uncommitted responses, active mail draining, blocked sends,
+unguarded schema rejection and auth/command/transport rollback. The complete
+backend suite passes 284 tests, with lint, formatting and schema checks.
+The staging-native pause proof verifies read availability and maintenance
+responses for business updates, login, refresh and logout. Its temporary lease
+has been released; normal updates and authentication then passed, and the proof
+sessions were revoked. All 186 stored trigger definitions match the expected
+guards, foreign-key checks are clean and no SQL assertions remain.
+The complete native invoicing/payment regression also passed on this version:
+FX residuals and reversals, credits/refunds, duplicate/concurrent payments,
+18-digit values and the full buy/sell/pay cycle returned to its original
+stock and books.
+`scripts/verify_maintenance_remote.py` prepares/checks/revokes
+an isolated proof session around an operator-held staging lease.
+
+Full paginated R2 capture, resumable manifests/scheduling/retention, restoration
+into a separate D1 database, session invalidation and pending-side-effect
+reconciliation are still required. No automatic pause or backup schedule is
+enabled by this foundation alone.
 
 ## HTTP surface coverage
 

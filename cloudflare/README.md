@@ -137,7 +137,7 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last backend verification passed 274 tests and lint/schema checks. The
+The last backend verification passed 284 tests and lint/schema checks. The
 frontend passes 14 tests and build/lint. Real Queue and Cron
 checks verify notifications, deduplication, DLQ replay, quote expiry and audit
 retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
@@ -178,8 +178,12 @@ Append `--recovery` to the remote verifier only when the configured recovery
 database is empty. The endpoint rejects an occupied target and never resets
 it. It supports only the proof's TEXT/INTEGER tables, up to 4 MiB and 400 restore
 statements. This establishes exact-value recovery for the feasibility dataset;
-the production backup still needs pagination, write quiescence, retention and
-restore reconciliation for all ERP tables.
+the full backup still needs pagination, integration of the write-pause guards,
+retention and restore reconciliation for all ERP tables. The application now
+has database-enforced expiring leases covering commands, authentication and
+background writes. Reads stay available and writes return `503 maintenance`;
+no automatic pause or full backup schedule is enabled yet. See the
+[write-pause evidence](../docs/CLOUDFLARE_IMPLEMENTATION.md#full-backup-write-pause-foundation).
 
 ## Business schema foundation
 
@@ -204,6 +208,6 @@ migration for later schema changes rather than rewriting its history.
 never be applied to the final ERP database. The full business schema has been
 created in the isolated `erp-staging-20261113` database; authentication,
 management, accounting, orders/quotations, inventory, invoicing/payments, HR,
-reporting and background/AI APIs now use it. Fourteen application migrations
+reporting and background/AI APIs now use it. Fifteen application migrations
 are recorded there. Full recovery, the demo seed and complete deployment/acceptance
 remain unfinished.

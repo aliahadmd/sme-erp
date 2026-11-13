@@ -15,6 +15,7 @@ from erp_cf.command_bus import invoke
 from erp_cf.db import D1Database, Statement, plain
 from erp_cf.errors import NotFoundError, PermissionDeniedError, ValidationError
 from erp_cf.identity import current_actor, environment, require
+from erp_cf.maintenance import state as maintenance_state
 
 router = APIRouter()
 
@@ -68,6 +69,7 @@ async def status(request: Request):
     return {
         "enabled": str(getattr(env, "JOBS_ENABLED", "false")) == "true",
         "email_mode": str(getattr(env, "EMAIL_MODE", "disabled")),
+        "maintenance": await maintenance_state(db),
         "outbox": counts(0),
         "mail": counts(1),
         "ai": ai,

@@ -9,6 +9,17 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from erp_cf.errors import DomainError
+
+
+def maintenance_error(exc):
+    if "erp_maintenance" in str(exc):
+        raise DomainError(
+            "Database writes are paused for a consistent backup; try again shortly",
+            code="maintenance",
+            status=503,
+        ) from exc
+
 
 @dataclass(frozen=True)
 class Statement:
@@ -40,7 +51,11 @@ class D1Database:
         return prepared
 
     async def all(self, sql: str, params: tuple = ()) -> list[dict]:
-        result = plain(await self.prepare(Statement(sql, params)).all())
+        try:
+            result = plain(await self.prepare(Statement(sql, params)).all())
+        except Exception as exc:
+            maintenance_error(exc)
+            raise
         return [plain(row) for row in result["results"]]
 
     async def first(self, sql: str, params: tuple = ()) -> dict | None:
@@ -52,7 +67,11 @@ class D1Database:
         # raw to_js() creates borrowed Python proxies that expire before D1
         # consumes the array, so pass the native Python list to the SDK.
         prepared = [self.prepare(statement) for statement in statements]
-        return [plain(result) for result in await self.binding.batch(prepared)]
+        try:
+            return [plain(result) for result in await self.binding.batch(prepared)]
+        except Exception as exc:
+            maintenance_error(exc)
+            raise
 
 
 class CommandConflict(Exception):

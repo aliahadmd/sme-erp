@@ -161,7 +161,9 @@ async def precision_cycle(call, create, party, books, baseline):
 async def main(failure_probe=False, trade_only=False, precision_only=False):
     credentials = json.loads((ROOT / ".demo.app-staging.json").read_text())
     run = uuid.uuid4().hex[:10]
-    async with httpx.AsyncClient(base_url=URL, timeout=180) as client:
+    async with httpx.AsyncClient(
+        base_url=URL, timeout=180, transport=httpx.AsyncHTTPTransport(retries=3)
+    ) as client:
         login = await client.post(
             "/api/auth/login",
             json={"email": credentials["email"], "password": credentials["password"]},
