@@ -19,7 +19,14 @@ from types import MappingProxyType
 
 from pydantic import BaseModel
 
-from erp_cf.db import AtomicCommands, CommandConflict, Statement, assertion, plain
+from erp_cf.db import (
+    AtomicCommands,
+    CommandConflict,
+    Statement,
+    advance_business_epoch,
+    assertion,
+    plain,
+)
 from erp_cf.errors import ConflictError, NotFoundError, ValidationError
 from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coefficient, quantize
 
@@ -480,7 +487,7 @@ class UnitOfWork:
             return await self.commands.execute(
                 identity=self.identity,
                 request_hash=self.request_hash,
-                statements=self.statements,
+                statements=[*self.statements, advance_business_epoch(self.org_id)],
                 response=wire(response),
             )
         except CommandConflict as exc:

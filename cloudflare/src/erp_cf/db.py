@@ -16,6 +16,14 @@ class Statement:
     params: tuple = ()
 
 
+def advance_business_epoch(org_id):
+    return Statement(
+        "INSERT INTO cf_business_epochs(org_id,version) VALUES (?,1) "
+        "ON CONFLICT(org_id) DO UPDATE SET version=version+1",
+        (org_id,),
+    )
+
+
 def plain(value):
     return value.to_py() if hasattr(value, "to_py") else value
 

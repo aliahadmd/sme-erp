@@ -37,7 +37,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
-  orders/quotations, inventory, invoicing/payments and HR have passed 167 local backend
+  orders/quotations, inventory, invoicing/payments, HR and reporting have passed 184 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -93,8 +93,8 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers, accounting, orders/quotations, inventory, invoicing/payments and HR now use it.
-Ten application migrations are recorded
+handlers, accounting, orders/quotations, inventory, invoicing/payments, HR and reporting now use it.
+Eleven application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -409,11 +409,81 @@ and date helper remain importable through the legacy HR router. HR browser/role
 acceptance remains part of the overall frontend milestone. Readiness and the
 91-path OpenAPI document both serve successfully after the remote checks.
 
+## Reporting and consistent paged reads
+
+Application version `e25b15c6-4be7-41db-b297-aed78231a6f4` passes the complete
+`cloudflare/scripts/verify_reporting_remote.py` on isolated staging. The later
+version `5c88a82f-b8b3-452a-8117-009909aad0af` adds a guarded interleaving proof
+and passes `cloudflare/scripts/verify_report_interleaving_remote.py`. Its reported
+startup is 2,684 ms; this is an individual deployment observation, not capacity
+acceptance or a comparison of cold-start performance across environments.
+
+- Dashboard, sales by customer, purchases by supplier, stock valuation, aging and
+  tax summary preserve their existing response fields, base-currency rules and
+  `reports.view` checks. Drafts/voids are excluded; credits net against their side;
+  normal-invoice counts and inclusive date filters are retained. The original tax
+  direction regression now also runs unchanged against the native application.
+- SQL projects coefficients/cursors as text. Paged reads return at most 500 rows;
+  Python integers accumulate money/quantity totals without SQLite `SUM` overflow.
+  Tax conversion groups by stored FX rate and uses exact rational cents, rounding
+  half-even once after aggregation. Stock quantity/cost multiplication is exact
+  and rounds once per warehouse, preserving the existing report's rule.
+- Open base balances use immutable settlement effects, including residual cents.
+  For a 0.05 invoice at rate 3, a 0.01 partial payment clears zero base cents;
+  aging correctly retains 0.02 instead of re-dividing 0.04 and reporting 0.01.
+  Aging excludes unused credits/on-account payments as before; the dashboard nets
+  open credit notes and excludes on-account payments from its open-document sum.
+- The dashboard emits twelve complete weeks plus the current week, correcting
+  the original unused future point. Low-stock counts include never-stocked
+  product/warehouse pairs, with count arithmetic rather than a Cartesian scan.
+- Migration `0011` adds the business commit epoch and report-date index.
+  `UnitOfWork` advances the epoch in the same atomic batch as each business
+  command; bootstrap does too. Replays/lost commit responses advance it once;
+  failed batches leave it unchanged. Reports retry if it changes between pages,
+  and return a retryable `503 report_busy` after three unstable attempts.
+- This is application-level validation on primary reads, not a D1 snapshot API.
+  Future business/job writers must use the same unit of work. Direct maintenance
+  and restore writes must quiesce readers/writers or advance the epoch in their
+  atomic batch. Authentication/session-only writes do not alter report inputs.
+  D1 Sessions provide sequential consistency, which alone does not pin every page
+  to one database version. [D1 Sessions](https://developers.cloudflare.com/d1/best-practices/read-replication/)
+- Local checks force a void and a final payment between report pages, verify
+  complete retries, exercise busy responses and composite settlement pagination,
+  and check role/organization scope, FX/tax snapshots, exact rounding and aggregate
+  overflow. The complete remote verifier is also exercised against the native
+  test binding.
+- On real D1, a customer total of `100000000000000111.90` returns exactly. A direct
+  SQL `SUM` over the corresponding valid stored coefficients fails with integer
+  overflow. Remote checks also cover all six reports, dated/credit totals,
+  original tax-rate groups, never-stocked counts, 601-line paging and permissions.
+  Reversing the proof documents restores the starting monetary reports and stock.
+- Concurrent report/void calls returned the complete pre-void value in that run.
+  The additional staging-only proof deliberately commits a real private-command
+  void after reading part of a 501-line document. The epoch changes, the partial
+  result is discarded, and the complete retry excludes the voided document. This
+  path requires staging mode, the bootstrap secret and a current superuser session;
+  production/missing-secret/non-admin cases reject without voiding the document.
+
+There are no active proof invoices, leftover assertions, failure triggers or
+foreign-key violations after verification. The business epoch is 76 at this
+checkpoint. Readiness and the 98-path OpenAPI document serve successfully.
+Shared schemas remain importable through the legacy report router. The frontend's
+report contracts are retained; deployed browser acceptance is pending.
+
+## Remaining HTTP surface
+
+The original application's current OpenAPI inventory contains 139 method/path
+pairs. The native Worker contains 131 of those plus three staging-only operations.
+The eight missing operations are all AI-related: draft listing/accept/discard,
+search, echo, report summarization and individual/bulk product-description
+generation. The captured inventory is `cloudflare/fixtures/reference_routes.json`;
+a route-presence regression test tracks this explicit unfinished set. Route
+presence is not proof of behavior, notification delivery or full-system parity.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port the remaining reporting
-handlers onto the typed repositories with exact, consistent aggregates. Then
-complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,
+The full ERP migration remains incomplete. Next, complete Queues/Cron,
+R2 production backup/recovery, Email Sending, Workers AI and the remaining AI APIs,
 overdue notifications, demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs

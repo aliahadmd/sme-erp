@@ -33,7 +33,6 @@ AUDIT = load_suite("test_audit_fixes")
 PENDING_AUDIT = {
     "test_c2_failed_posting_rolls_back_document",  # Original server monkeypatch.
     "test_h2_h3_invoice_email_queues_and_notification_survives",  # Queue consumers.
-    "test_h5_tax_summary_splits_output_and_input",  # Remaining reports.
     "test_m4_credit_notes_are_never_overdue",  # Overdue notification jobs.
 }
 CASES = [

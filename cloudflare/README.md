@@ -125,8 +125,15 @@ Employee revisions serialize competing plans; in-app notifications and audit
 share the request's atomic batch. Real D1 checks cover forced rollback,
 concurrent decisions, ownership, cross-year allowances and cancellation.
 
-The last verification passed 167 backend and 14 frontend tests, plus frontend
-build/lint and backend lint/schema checks. Remaining reporting, AI,
+All six reporting endpoints now use bounded D1 reads and exact integer/rational
+aggregates. An atomic business commit epoch detects changes between pages and
+retries the complete report; future jobs/maintenance must preserve this writer
+contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
+paging and an intentionally interleaved void that discards the stale partial read.
+
+The last verification passed 184 backend and 14 frontend tests, plus frontend
+build/lint and backend lint/schema checks. The eight remaining HTTP operations
+are AI-related. AI,
 overdue notifications, jobs,
 frontend assets and the full demo seed remain in progress. This Worker is not
 yet the complete ERP.

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from erp_cf.crypto import hash_password
-from erp_cf.db import D1Database, Statement, assertion
+from erp_cf.db import D1Database, Statement, advance_business_epoch, assertion
 from erp_cf.errors import ConflictError, NotFoundError, PermissionDeniedError
 from erp_cf.foundation import records
 from erp_cf.identity import environment
@@ -93,6 +93,7 @@ async def seed(env, body: BootstrapInput):
             "entity_id": org["id"],
         },
     )
+    statements.append(advance_business_epoch(org["id"]))
     statements.append(Statement("DELETE FROM cf_assertions WHERE command_id=?", (identity,)))
     try:
         await db.batch(statements)

@@ -10,59 +10,22 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.modules.core.deps import CurrentUser, require
 from app.modules.core.service import get_organization
+from app.modules.reporting.schemas import (
+    AgingRow,
+    ByCustomerRow,
+    DashboardOut,
+    StockValuationRow,
+    TaxSummaryRow,
+    WeekPoint,
+)
 
 router = APIRouter(prefix="/reports")
-
-
-class WeekPoint(BaseModel):
-    week_start: str
-    sales: Decimal
-    purchases: Decimal
-
-
-class DashboardOut(BaseModel):
-    sales_mtd: Decimal
-    purchases_mtd: Decimal
-    open_ar: Decimal
-    open_ap: Decimal
-    low_stock_count: int
-    weeks: list[WeekPoint]
-
-
-class ByCustomerRow(BaseModel):
-    party_id: uuid.UUID | None
-    party_name: str
-    invoice_count: int
-    total: Decimal
-
-
-class AgingRow(BaseModel):
-    bucket: str
-    amount: Decimal
-
-
-class StockValuationRow(BaseModel):
-    warehouse_code: str
-    warehouse_name: str
-    products: int
-    qty_on_hand: Decimal
-    value: Decimal
-
-
-class TaxSummaryRow(BaseModel):
-    direction: str  # output (sales, credit notes netted) | input (purchases)
-    tax_code: str | None
-    tax_name: str | None
-    rate_pct: Decimal | None
-    net: Decimal
-    tax: Decimal
 
 
 # All report amounts are BASE currency (stored *_base snapshots or document
