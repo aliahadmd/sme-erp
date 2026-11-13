@@ -5,6 +5,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from erp_cf.accounting_api import router as accounting_router
 from erp_cf.auth import router as auth_router
 from erp_cf.bootstrap import router as bootstrap_router
 from erp_cf.core_api import router as core_router
@@ -21,6 +22,7 @@ def create_app(test_environment=None):
     app.include_router(bootstrap_router)
     app.include_router(core_router)
     app.include_router(master_router)
+    app.include_router(accounting_router)
 
     @app.middleware("http")
     async def context(request: Request, call_next):

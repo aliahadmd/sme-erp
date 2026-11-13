@@ -1,6 +1,6 @@
 # ERP migration to Cloudflare: research and proposed architecture
 
-**Research date:** 12 November 2026. **Status updated:** 13 November 2026. Implementation is in progress: the basic Python/D1 proof, authentication and core/master-data handlers pass isolated staging checks. Full financial, recovery and capacity acceptance remains open; see [implementation evidence and outstanding work](CLOUDFLARE_IMPLEMENTATION.md).
+**Research date:** 12 November 2026. **Status updated:** 13 November 2026. Implementation is in progress: the basic Python/D1 proof, authentication, core/master data and manual accounting pass isolated staging checks. Full financial workflows, recovery and capacity acceptance remain open; see [implementation evidence and outstanding work](CLOUDFLARE_IMPLEMENTATION.md).
 
 **Confirmed scope:** replace the Docker/VPS runtime with Cloudflare services, use D1 instead of PostgreSQL, replace Redis/arq, and use R2 instead of SeaweedFS/S3. A **fresh demo database is acceptable**, as confirmed during this investigation. Preserve the ERP's functionality and financial rules; retaining the existing demo records and password hashes is unnecessary.
 

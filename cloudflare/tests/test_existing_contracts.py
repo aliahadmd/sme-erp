@@ -23,6 +23,7 @@ def load_suite(name):
 
 CORE = load_suite("test_core")
 MASTER = load_suite("test_master_data")
+ACCOUNTING = load_suite("test_accounting")
 CASES = [
     function
     for suite in [CORE, MASTER]
@@ -32,6 +33,7 @@ CASES = [
     and set(inspect.signature(function).parameters) == {"client"}
     and name != "test_ai_description_disabled_without_key"
 ]
+CASES.append(ACCOUNTING.test_manual_entry_must_balance)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda f: f.__name__)
@@ -42,3 +44,8 @@ async def test_original_http_contract(case, client):
 async def test_original_login_validation_variants(client):
     await CORE.test_login_validation(client, "not-an-email", "longenough1")
     await CORE.test_login_validation(client, "admin@example.com", "")
+
+
+async def test_original_ledger_contract_after_manual_post(client):
+    await ACCOUNTING.test_manual_entry_must_balance(client)
+    await ACCOUNTING.test_ledger_running_balance(client)

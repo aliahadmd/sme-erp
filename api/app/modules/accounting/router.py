@@ -5,7 +5,6 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,96 +12,22 @@ from sqlalchemy.orm import selectinload
 from app.core.db import get_session
 from app.core.errors import NotFoundError, ValidationError
 from app.modules.accounting.models import Account, JournalEntry, JournalLine
+from app.modules.accounting.schemas import (
+    AccountIn,
+    AccountOut,
+    AccountUpdateIn,
+    JournalEntryOut,
+    JournalEntryPage,
+    LedgerRow,
+    ManualEntryIn,
+    TrialBalanceRow,
+)
 from app.modules.accounting.service import post_entry
 from app.modules.core.deps import CurrentUser, require
 from app.modules.core.service import get_organization, write_audit
 from app.shared.pagination import PageParamsDep, paginate
 
 router = APIRouter(prefix="/accounting")
-
-
-# ------------------------------------------------------------------ schemas
-class AccountOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    code: str
-    name: str
-    type: str
-    is_system: bool
-    is_active: bool
-
-
-class AccountIn(BaseModel):
-    code: str = Field(min_length=1, max_length=20)
-    name: str = Field(min_length=1, max_length=100)
-    type: str = Field(pattern=r"^(asset|liability|equity|income|expense)$")
-
-
-class JournalLineOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    account_id: uuid.UUID
-    account_code: str | None = None
-    account_name: str | None = None
-    debit: Decimal
-    credit: Decimal
-
-
-class JournalEntryOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    number: str
-    entry_date: date
-    memo: str | None
-    source_type: str
-    source_id: uuid.UUID | None
-    lines: list[JournalLineOut] = []
-
-
-class ManualLineIn(BaseModel):
-    account_id: uuid.UUID
-    debit: Decimal = Field(0, ge=0)
-    credit: Decimal = Field(0, ge=0)
-
-
-class ManualEntryIn(BaseModel):
-    entry_date: date | None = None
-    memo: str = Field(min_length=1)
-    lines: list[ManualLineIn] = []
-
-
-class LedgerRow(BaseModel):
-    entry_number: str
-    entry_date: date
-    memo: str | None
-    debit: Decimal
-    credit: Decimal
-    balance: Decimal
-
-
-class AccountUpdateIn(BaseModel):
-    name: str | None = Field(None, min_length=1, max_length=100)
-    is_active: bool | None = None
-
-
-class JournalEntryPage(BaseModel):
-    items: list[JournalEntryOut]
-    total: int
-    limit: int
-    offset: int
-
-
-class TrialBalanceRow(BaseModel):
-    account_id: uuid.UUID
-    code: str
-    name: str
-    type: str
-    total_debit: Decimal
-    total_credit: Decimal
-    balance: Decimal
 
 
 # --------------------------------------------------------------- endpoints

@@ -21,12 +21,13 @@ class Coordinator:
         self.lock = asyncio.Lock()
 
     async def execute(self, envelope):
+        from erp_cf.accounting_commands import COMMANDS as ACCOUNTING
         from erp_cf.core_commands import COMMANDS as CORE
         from erp_cf.master_commands import COMMANDS as MASTER
 
         operation = envelope.get("operation", "")
         try:
-            spec = (CORE | MASTER).get(operation)
+            spec = (CORE | MASTER | ACCOUNTING).get(operation)
             if spec is None:
                 raise NotFoundError("Unknown command")
             async with self.lock:

@@ -50,6 +50,7 @@ pnpm build:app-staging
 pnpm deploy:app-staging
 uv run python -u scripts/verify_auth_remote.py
 uv run python -u scripts/verify_management_remote.py
+uv run python -u scripts/verify_accounting_remote.py
 ```
 
 `.secrets.app-staging.json` provides independent `JWT_SECRET`, `BOOTSTRAP_TOKEN`
@@ -86,10 +87,20 @@ uses atomically maintained casefold keys. Client mutation keys survive an
 authentication retry. The management verifier creates synthetic staging data
 and checks these contracts, reference constraints and permission revocation.
 
-The last verification passed 69 backend and 13 frontend tests, plus frontend
-build/lint and backend lint/schema checks. Accounting and other financial
-workflows, HR/reporting, AI, overdue notifications, jobs, frontend assets and
-the full demo seed remain in progress. This Worker is not yet the complete ERP.
+Accounting now includes chart-of-account writes, balanced manual journal
+posting, journal browsing, ledger and dated trial-balance reads. The reusable
+`Ledger` plans financial entries in the caller's batch and reverses stored
+source lines exactly. Database triggers protect posted history; report reads
+use immutable high-water marks and paged Python integer-cent accumulation to
+avoid SQLite SUM overflow. The accounting verifier posts synthetic books in
+dedicated staging accounts, including a 600-line journal and exact totals beyond
+signed 64-bit aggregate range. Posted proof history is immutable.
+
+The last verification passed 79 backend and 13 frontend tests, plus frontend
+build/lint and backend lint/schema checks. Buy/sell/payment workflows and their
+automatic postings, HR/remaining reporting, AI, overdue notifications, jobs,
+frontend assets and the full demo seed remain in progress. This Worker is not
+yet the complete ERP.
 
 ## CLI packaging workaround
 
@@ -141,5 +152,5 @@ migration for later schema changes rather than rewriting its history.
 `fixtures/0001_feasibility.sql` is excluded from application migrations. It must
 never be applied to the final ERP database. The full business schema has been
 created in the isolated `erp-staging-20261113` database; authentication and
-management now use it. Five application migrations are recorded there. The
-remaining business handlers and full demo seed still need porting.
+management/manual accounting now use it. Six application migrations are recorded
+there. The remaining business handlers and full demo seed still need porting.

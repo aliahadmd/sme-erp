@@ -36,8 +36,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The target Cloudflare account is accessible through the connected plugin.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
-- The proof, persistence foundation, authentication and management modules have
-  passed 69 local backend tests. The frontend has passed 13 tests, its TypeScript/
+- The proof, persistence foundation, authentication, management and accounting have
+  passed 79 local backend tests. The frontend has passed 13 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -92,8 +92,9 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers now use it; financial workflows remain unported. Five application
-migrations are recorded by name/hash, including Unicode search keys.
+handlers and manual accounting now use it; buy/sell financial workflows remain
+unported. Six application migrations are recorded by name/hash, including
+Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
 |---|---|
@@ -185,10 +186,49 @@ Catalog AI endpoints and overdue-notification generation remain pending with
 the AI/background-job phase. Notification count/read APIs alone do not provide
 that behavior. The minimal foundation seed is not the complete business demo.
 
+## Accounting journal and exact reports
+
+Application version `762f2b21-c83f-49db-be40-0064b233f86f` passes
+`cloudflare/scripts/verify_accounting_remote.py --failure-probe` on staging.
+
+- Chart-of-account creation/update, balanced manual journals, journal browsing,
+  the account ledger and dated trial balance retain the original API contracts.
+  Portable accounting schemas are shared with the old server. Two original
+  manual-entry/ledger scenarios run unchanged against the Worker application.
+- The reusable `Ledger` plans journal headers/lines in its caller's D1 batch.
+  Numbering, current account/authorization guards and manual-entry audit share
+  that commit. Explicit per-command account caches carry newly planned system
+  accounts without pretending pending writes are visible to D1 reads.
+- Source reversal mirrors every original line and account, independent of
+  subsequent mappings/rates. Local tests check multiple original entries,
+  duplicate reversal rejection and exact return to the original balances. This
+  helper still needs integration with the remaining document/payment modules.
+- Journal UPDATE/DELETE operations are rejected by database triggers. Exact
+  report accumulation uses Python integer cents, with immutable header/line
+  high-water marks and 500-row reads so a later backdated posting cannot enter
+  an in-flight report. No monetary SQL SUM or floating-point aggregation is used.
+- Local checks inject a failure at every manual-journal batch boundary, race
+  duplicate/distinct commands, force account deactivation before commit, reject
+  invalid/empty/overflow journals and verify snapshot paging and half-even ties.
+- On real D1, a temporary staging trigger forced failure after journal-line
+  insertion. Header, lines and receipt rolled back; a retry with that key
+  committed. Six concurrent identical requests then produced one 20-line entry
+  with maximum 18-digit coefficients, and its exact totals exceeded SQLite's
+  integer-SUM range. A separate 600-line entry committed atomically, and ledger,
+  date-filtered trial balance and stored journal detail matched the exact values.
+
+The temporary fault trigger was removed after verification. This verification
+added four synthetic journal entries and 624 lines in dedicated proof accounts; the
+production database is unchanged. Journal immutability and foreign-key checks
+also pass on D1. The failure-probe option requires
+`cloudflare/fixtures/accounting_fault_probe.sql` on isolated staging;
+normal verifier runs omit it. These checks do not establish production capacity
+or complete buy/sell workflow parity.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port accounting, sales,
-purchasing, inventory, invoicing, HR and reporting handlers onto the typed
+The full ERP migration remains incomplete. Next, port sales, purchasing,
+inventory, invoicing, HR and the remaining reporting handlers onto the typed
 repositories and atomic command path, and prove buy/sell/partial/credit/refund/FX
 workflows. Then
 complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,
