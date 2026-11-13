@@ -27,17 +27,31 @@ ACCOUNTING = load_suite("test_accounting")
 DOCUMENTS = load_suite("test_documents")
 QUOTES = load_suite("test_quotations")
 INVENTORY = load_suite("test_inventory")
+INVOICING = load_suite("test_invoicing")
+AUDIT = load_suite("test_audit_fixes")
+PENDING_AUDIT = {
+    "test_c2_failed_posting_rolls_back_document",  # Original server monkeypatch.
+    "test_h2_h3_invoice_email_queues_and_notification_survives",  # Queue consumers.
+    "test_h5_tax_summary_splits_output_and_input",  # Remaining reports.
+    "test_m4_credit_notes_are_never_overdue",  # Overdue notification jobs.
+    "test_m6_leave_working_days_reject_and_cancel",  # HR.
+    "test_m6_self_service_employee_requests_own_leave",  # HR.
+}
 CASES = [
     function
-    for suite in [CORE, MASTER, QUOTES]
+    for suite in [CORE, MASTER, QUOTES, INVOICING, AUDIT]
     for name, function in vars(suite).items()
     if name.startswith("test_")
     and inspect.iscoroutinefunction(function)
     and set(inspect.signature(function).parameters) == {"client"}
     and name
     not in {"test_ai_description_disabled_without_key", "test_expired_quote_cannot_be_accepted"}
+    and name not in PENDING_AUDIT
 ]
 CASES.append(ACCOUNTING.test_manual_entry_must_balance)
+CASES.extend(
+    [ACCOUNTING.test_business_events_post_balanced_journals, ACCOUNTING.test_void_invoice_reverses]
+)
 DOCUMENT_CASES = [
     function
     for name, function in vars(DOCUMENTS).items()

@@ -101,7 +101,7 @@ signed 64-bit aggregate range. Posted proof history is immutable.
 Sales/purchase orders and quotations now preserve their CRUD/lifecycle APIs,
 catalog and dated FX snapshots, Unicode search and exact totals. Quote conversion
 and both audits commit together. Order progress helpers support repeated planned
-changes and releases; inventory now uses them, with invoicing integration pending.
+changes and releases; inventory and invoicing now use them.
 Order confirmation events are stored in the outbox, with queue dispatch still pending.
 The bounded quote-expiry planner also awaits Cron wiring.
 
@@ -112,9 +112,16 @@ Voids use original costs; consumed receipts that would leave residual inventory
 value require dependent documents to be voided first. The remote verifier checks
 forced rollback, stock races, exact costs and a 360-line post/void cycle.
 
-The last verification passed 111 backend and 13 frontend tests, plus frontend
-build/lint and backend lint/schema checks. Invoice/payment workflows and their
-automatic postings, HR/remaining reporting, AI, overdue notifications, jobs,
+Invoicing now includes source-order billing, AR/AP posting, credits, payments,
+on-account allocations, refunds, statements and exact voids. Immutable clearing
+effects preserve original FX and residual base cents. The payment UI restricts
+FIFO allocations by currency. Real D1 checks cover forced rollback, retries,
+refunds, 18-digit values and a full buy/sell/pay cycle with exact stock/book reversals.
+Invoice email requests are durable outbox records; actual delivery is pending.
+
+The last verification passed 155 backend and 14 frontend tests, plus frontend
+build/lint and backend lint/schema checks. HR/remaining reporting, AI,
+overdue notifications, jobs,
 frontend assets and the full demo seed remain in progress. This Worker is not
 yet the complete ERP.
 

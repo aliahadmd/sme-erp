@@ -6,7 +6,17 @@ from erp_cf.store import tables
 
 
 async def read_documents(
-    db, org_id, kind, *, limit=100, offset=0, identity=None, status=None, q=None, party_id=None
+    db,
+    org_id,
+    kind,
+    *,
+    limit=100,
+    offset=0,
+    identity=None,
+    status=None,
+    q=None,
+    party_id=None,
+    filters=(),
 ):
     conditions, values = ["d.org_id=?"], [org_id]
     if identity:
@@ -21,6 +31,12 @@ async def read_documents(
     if party_id:
         conditions.append(f"d.{kind.party}=?")
         values.append(str(party_id))
+    for field, value in filters:
+        if field not in tables()[kind.table].fields:
+            raise ValueError("Unknown document filter")
+        choices = value if isinstance(value, list | tuple) else [value]
+        conditions.append(f'd."{field}" IN (' + ",".join("?" for _ in choices) + ")")
+        values.extend(choices)
     where = " AND ".join(conditions)
     selected = (
         f"FROM {kind.table} d WHERE {where} ORDER BY d.created_at DESC,d.id DESC LIMIT ? OFFSET ?"

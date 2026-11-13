@@ -29,6 +29,7 @@ const portable = [
   "app/__init__.py", "app/modules/__init__.py", "app/shared/__init__.py",
   "app/shared/money.py", "app/shared/pagination.py", "app/shared/totals.py",
   "app/shared/document_states.py", "app/shared/order_progress.py",
+  "app/shared/notification_text.py",
   "app/modules/core/permissions.py",
   "app/modules/core/defaults.py", "app/modules/accounting/defaults.py",
 ];

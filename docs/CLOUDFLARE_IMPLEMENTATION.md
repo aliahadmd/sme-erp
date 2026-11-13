@@ -37,8 +37,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
-  orders/quotations and inventory have passed 111 local backend tests. The frontend
-  has passed 13 tests, its TypeScript/
+  orders/quotations, inventory and invoicing/payments have passed 155 local backend
+  tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -93,8 +93,8 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers, manual accounting, orders/quotations and inventory now use it;
-invoice/payment workflows remain unported. Eight application migrations are recorded
+handlers, accounting, orders/quotations, inventory and invoicing/payments now use it.
+Nine application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -249,7 +249,7 @@ Application version `124d60e4-2d2c-413b-a91d-349d6210947c` passes
   one command. Local tests cover duplicate-product FIFO, free-text billing,
   partial movement/invoicing, closure, releases, stale competing commands and
   cancellation guards for both sales and purchasing. Inventory now integrates
-  them with receipt/delivery endpoints; invoice/payment integration remains open.
+  them with receipt/delivery endpoints; invoices also use this guarded progress path.
 - Confirmation events are persisted in the transactional outbox. Staging has
   one event per confirmed sales/purchase order despite retries. Queue dispatch
   is pending. The bounded quotation-expiry planner is tested; Cron wiring is
@@ -316,15 +316,63 @@ The failure-probe option requires
 `cloudflare/fixtures/inventory_fault_probe.sql` on isolated staging and removal
 afterward; normal runs omit it. Inventory notification events are durable in
 the outbox, but queue delivery/low-stock notifications are not operational yet.
-The full buy/sell cycle still requires invoice/payment integration and its
-acceptance tests. No production traffic or database was changed.
+The integrated buy/sell cycle is recorded below. No production traffic or
+database was changed.
+
+## Invoices, payments and settlement
+
+Application version `3c607e2b-8c38-46bd-a462-eae04f5552ea` passes the invoicing
+acceptance scenarios on the isolated staging Worker/D1. Cloudflare reported
+4,387 ms startup for this version.
+
+- Invoice CRUD, source-order billing, AR/AP posting and voids, credit notes,
+  incoming/outgoing payments, on-account allocations, refunds and statements
+  preserve the original contracts and permission checks. Nine original invoice
+  scenarios and additional original accounting/audit cases run unchanged locally.
+- Numbering, invoice/payment balances, source progress, ledger entries, audit,
+  outbox and command receipts share one guarded D1 batch. Stale competing payment
+  plans and credit-cap plans have one complete winner, including credits of an
+  already-paid invoice. Explicit source-line IDs preserve free-text and duplicate
+  product order progress through draft edits and voids.
+- Migration `0009` records immutable base-currency clearing effects. Partial
+  settlements retain their original amounts; the last settlement clears the
+  remaining base cents. Credit application and late allocation book FX differences;
+  voids reverse stored journals rather than today's rates. Database guards protect
+  posted financial content, invoice lines, payments and allocation/effect history.
+- Statements expose document currency, base balance and per-currency totals rather
+  than adding unlike currencies. The payment UI selects currency and limits FIFO
+  allocation to matching invoices; refunds use their credit note's currency.
+- Local checks inject failures at each invoice/payment commit stage and verify
+  unchanged numbering, source progress, balances, books, audit, outbox and receipts.
+  Additional cases cover residual cents after arbitrary payment voids, credit FX,
+  125-invoice allocations under the binding limit and 360-line invoices.
+- Real D1 journal-line faults roll back invoice progress and payment settlements.
+  Reusing each failed key for the corrected operation commits once. Six concurrent
+  payment retries return the same result, while different keys cannot overallocate.
+  Credit refunds, late allocations, changed FX and their exact reversals pass.
+- The maximum valid six-place unit price with a quantity of 10,000 produces
+  `9999999999999999.99`; invoice, payment and reversal preserve it exactly. The
+  initial verifier incorrectly supplied that money amount as a unit price, which
+  correctly rejected its precision; the valid price/quantity check now passes.
+- A complete real buy/sell/pay cycle exercises billing before receipt and billing
+  after delivery. Both orders close, AR/AP/GRNI clear, inventory and COGS reconcile,
+  paid-invoice voids reject, and dependent voids restore original stock/books and
+  reopen source progress. No foreign-key violations or residual assertions remain.
+
+The verifier is `cloudflare/scripts/verify_invoicing_remote.py`. The initial
+`--failure-probe` run passed rollback, settlement, FX, refund and concurrency cases;
+the corrected `--precision-only` and `--trade-only` runs passed on the same version.
+The temporary `cf_invoicing_rollback_probe` trigger was removed and its absence
+verified. Future complete runs use the corrected default suite; failure injection
+requires `cloudflare/fixtures/invoicing_fault_probe.sql` only on isolated staging.
+Customer email requests currently persist in the outbox; queue dispatch and actual
+delivery remain pending. The frontend is built/tested locally, with full browser
+and role acceptance still open. This milestone does not complete the migration.
 
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port invoicing/payments,
-HR and the remaining reporting handlers onto the typed
-repositories and atomic command path, and prove buy/sell/partial/credit/refund/FX
-workflows. Then
+The full ERP migration remains incomplete. Next, port HR and the remaining
+reporting handlers onto the typed repositories and atomic command path. Then
 complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,
 overdue notifications, demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and

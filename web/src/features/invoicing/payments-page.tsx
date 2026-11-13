@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { invoicingApi, type Payment, type Statement } from "@/features/invoicing/api"
+import {
+  invoicingApi,
+  type Payment,
+  type Statement,
+} from "@/features/invoicing/api"
+import { openInvoicesFor } from "@/features/invoicing/payment-allocation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,18 +43,11 @@ function errorMessage(error: unknown): string {
 
 type StatementLine = Statement["invoices"][number]
 
-/** Open invoices of the side a payment settles (AR for money in, AP for out). */
-function openInvoicesFor(statement: Statement | undefined, direction: "in" | "out") {
-  const side = direction === "in" ? "ar" : "ap"
-  return (statement?.invoices ?? []).filter(
-    (line) => line.invoice_type === side && moneyToCents(line.balance) > 0n,
-  )
-}
-
 /** Posted credit notes with a refundable balance (statement shows them negative). */
 function refundableCredits(statement: Statement | undefined) {
   return (statement?.invoices ?? []).filter(
-    (line) => line.invoice_type.endsWith("_credit") && moneyToCents(line.balance) < 0n,
+    (line) =>
+      line.invoice_type.endsWith("_credit") && moneyToCents(line.balance) < 0n
   )
 }
 
@@ -82,8 +80,8 @@ export function PaymentsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Payments</h1>
           <p className="text-sm text-muted-foreground">
-            Money in (customer) and out (supplier), allocated to invoices — or refunds of credit
-            notes
+            Money in (customer) and out (supplier), allocated to invoices — or
+            refunds of credit notes
           </p>
         </div>
         <Button onClick={() => setRecordOpen(true)}>Record payment</Button>
@@ -107,14 +105,20 @@ export function PaymentsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={9}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={9}
+                  className="text-center text-muted-foreground"
+                >
                   No payments recorded
                 </TableCell>
               </TableRow>
@@ -130,33 +134,54 @@ export function PaymentsPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={payment.direction === "in" ? "default" : "secondary"}>
+                  <Badge
+                    variant={
+                      payment.direction === "in" ? "default" : "secondary"
+                    }
+                  >
                     {payment.direction}
                   </Badge>
                 </TableCell>
                 <TableCell>{payment.party_name}</TableCell>
-                <TableCell className="text-sm">{payment.payment_date}</TableCell>
+                <TableCell className="text-sm">
+                  {payment.payment_date}
+                </TableCell>
                 <TableCell className="text-sm">{payment.method}</TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {formatMoney(payment.amount)} {payment.currency}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {moneyToCents(payment.unallocated) > 0n ? formatMoney(payment.unallocated) : "—"}
+                  {moneyToCents(payment.unallocated) > 0n
+                    ? formatMoney(payment.unallocated)
+                    : "—"}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={payment.status === "void" ? "destructive" : "outline"}>
+                  <Badge
+                    variant={
+                      payment.status === "void" ? "destructive" : "outline"
+                    }
+                  >
                     {payment.status}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap justify-end gap-1">
-                    {payment.status === "recorded" && moneyToCents(payment.unallocated) > 0n && (
-                      <Button size="sm" variant="outline" onClick={() => setAllocating(payment)}>
-                        Allocate
-                      </Button>
-                    )}
+                    {payment.status === "recorded" &&
+                      moneyToCents(payment.unallocated) > 0n && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setAllocating(payment)}
+                        >
+                          Allocate
+                        </Button>
+                      )}
                     {payment.status === "recorded" && (
-                      <Button size="sm" variant="ghost" onClick={() => voidPay.mutate(payment.id)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => voidPay.mutate(payment.id)}
+                      >
                         Void
                       </Button>
                     )}
@@ -168,8 +193,16 @@ export function PaymentsPage() {
         </Table>
       </div>
 
-      <RecordPaymentDialog open={recordOpen} onOpenChange={setRecordOpen} onDone={invalidate} />
-      <AllocateDialog payment={allocating} onClose={() => setAllocating(null)} onDone={invalidate} />
+      <RecordPaymentDialog
+        open={recordOpen}
+        onOpenChange={setRecordOpen}
+        onDone={invalidate}
+      />
+      <AllocateDialog
+        payment={allocating}
+        onClose={() => setAllocating(null)}
+        onDone={invalidate}
+      />
     </div>
   )
 }
@@ -198,7 +231,7 @@ function AllocationPreview({
         {lines.map(({ item, amount: take }) => (
           <div key={item.invoice_id} className="flex justify-between text-sm">
             <span className="font-mono text-xs">
-              {item.number} (open {formatMoney(item.balance)})
+              {item.number} (open {formatMoney(item.balance)} {item.currency})
             </span>
             <span className="font-mono">{take}</span>
           </div>
@@ -220,6 +253,7 @@ function RecordPaymentDialog({
   const [mode, setMode] = useState<"payment" | "refund">("payment")
   const [direction, setDirection] = useState<"in" | "out">("in")
   const [partyId, setPartyId] = useState("")
+  const [selectedCurrency, setSelectedCurrency] = useState("")
   const [creditNoteId, setCreditNoteId] = useState("")
   const [amount, setAmount] = useState("")
   const [method, setMethod] = useState("bank")
@@ -232,7 +266,11 @@ function RecordPaymentDialog({
     enabled: open,
   })
   const contacts = (contactsQuery.data?.items ?? []).filter((c) =>
-    mode === "refund" ? true : direction === "in" ? c.is_customer : c.is_supplier,
+    mode === "refund"
+      ? true
+      : direction === "in"
+        ? c.is_customer
+        : c.is_supplier
   )
 
   const statementQuery = useQuery({
@@ -241,15 +279,39 @@ function RecordPaymentDialog({
     enabled: open && !!partyId,
   })
   const statement = statementQuery.data
+  const currenciesQuery = useQuery({
+    queryKey: ["currencies"],
+    queryFn: () => invoicingApi.currencies(),
+    enabled: open,
+  })
+  const currency =
+    selectedCurrency ||
+    contacts.find((contact) => contact.id === partyId)?.currency ||
+    statement?.currency ||
+    ""
+  const currencies = Array.from(
+    new Set([
+      ...(currenciesQuery.data ?? []).map((item) => item.code),
+      ...(statement?.invoices ?? []).flatMap((line) =>
+        line.currency ? [line.currency] : []
+      ),
+      ...(currency ? [currency] : []),
+    ])
+  ).sort()
   const credits = refundableCredits(statement)
   const creditNote = credits.find((c) => c.invoice_id === creditNoteId)
   const allocations =
     mode === "payment"
-      ? allocateFifo(amount || "0", openInvoicesFor(statement, direction), (l) => l.balance)
+      ? allocateFifo(
+          amount || "0",
+          openInvoicesFor(statement, direction, currency),
+          (l) => l.balance
+        )
       : []
 
   const reset = () => {
     setPartyId("")
+    setSelectedCurrency("")
     setCreditNoteId("")
     setAmount("")
   }
@@ -267,6 +329,7 @@ function RecordPaymentDialog({
           amount,
           method,
           credit_note_id: creditNote.invoice_id,
+          currency: creditNote.currency,
           allocations: [],
         })
         toast.success("Refund recorded")
@@ -276,7 +339,11 @@ function RecordPaymentDialog({
           party_id: partyId,
           amount,
           method,
-          allocations: allocations.map((a) => ({ invoice_id: a.item.invoice_id, amount: a.amount })),
+          currency: currency || undefined,
+          allocations: allocations.map((a) => ({
+            invoice_id: a.item.invoice_id,
+            amount: a.amount,
+          })),
         })
         toast.success("Payment recorded")
       }
@@ -284,7 +351,11 @@ function RecordPaymentDialog({
       onOpenChange(false)
       reset()
     } catch (err) {
-      setError(err instanceof Error && !(err instanceof ApiError) ? err.message : errorMessage(err))
+      setError(
+        err instanceof Error && !(err instanceof ApiError)
+          ? err.message
+          : errorMessage(err)
+      )
     } finally {
       setSaving(false)
     }
@@ -294,7 +365,9 @@ function RecordPaymentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{mode === "refund" ? "Refund a credit note" : "Record payment"}</DialogTitle>
+          <DialogTitle>
+            {mode === "refund" ? "Refund a credit note" : "Record payment"}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
@@ -318,13 +391,18 @@ function RecordPaymentDialog({
                 <SelectContent>
                   <SelectItem value="in">Money in (customer)</SelectItem>
                   <SelectItem value="out">Money out (supplier)</SelectItem>
-                  <SelectItem value="refund">Refund of a credit note</SelectItem>
+                  <SelectItem value="refund">
+                    Refund of a credit note
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label>Method</Label>
-              <Select value={method} onValueChange={(v) => setMethod(v ?? "bank")}>
+              <Select
+                value={method}
+                onValueChange={(v) => setMethod(v ?? "bank")}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -345,6 +423,7 @@ function RecordPaymentDialog({
                 value={partyId}
                 onValueChange={(v) => {
                   setPartyId(v ?? "")
+                  setSelectedCurrency("")
                   setCreditNoteId("")
                 }}
               >
@@ -372,6 +451,27 @@ function RecordPaymentDialog({
             </div>
           </div>
 
+          {mode === "payment" && partyId && (
+            <div className="flex flex-col gap-2">
+              <Label>Currency</Label>
+              <Select
+                value={currency}
+                onValueChange={(value) => setSelectedCurrency(value ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select currency…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {mode === "refund" && partyId && (
             <div className="flex flex-col gap-2">
               <Label>Credit note *</Label>
@@ -381,16 +481,22 @@ function RecordPaymentDialog({
                   const id = v ?? ""
                   setCreditNoteId(id)
                   const picked = credits.find((c) => c.invoice_id === id)
-                  if (picked) setAmount(formatMoney(picked.balance).replace("-", ""))
+                  if (picked)
+                    setAmount(formatMoney(picked.balance).replace("-", ""))
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={credits.length ? "Select…" : "No refundable credit"} />
+                  <SelectValue
+                    placeholder={
+                      credits.length ? "Select…" : "No refundable credit"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {credits.map((c) => (
                     <SelectItem key={c.invoice_id} value={c.invoice_id}>
-                      {c.number} — refundable {formatMoney(c.balance).replace("-", "")}
+                      {c.number} — refundable{" "}
+                      {formatMoney(c.balance).replace("-", "")} {c.currency}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -398,7 +504,14 @@ function RecordPaymentDialog({
             </div>
           )}
 
-          {mode === "payment" && partyId && <AllocationPreview lines={allocations} amount={amount} />}
+          {mode === "payment" && partyId && (
+            <AllocationPreview lines={allocations} amount={amount} />
+          )}
+          {statementQuery.error && (
+            <p className="text-xs text-destructive">
+              {errorMessage(statementQuery.error)}
+            </p>
+          )}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter>
@@ -406,10 +519,21 @@ function RecordPaymentDialog({
             Cancel
           </Button>
           <Button
-            disabled={!partyId || !amount || saving || (mode === "refund" && !creditNoteId)}
+            disabled={
+              !partyId ||
+              !amount ||
+              saving ||
+              statementQuery.isLoading ||
+              !!statementQuery.error ||
+              (mode === "refund" && !creditNoteId)
+            }
             onClick={() => void save()}
           >
-            {saving ? "Saving…" : mode === "refund" ? "Record refund" : "Record payment"}
+            {saving
+              ? "Saving…"
+              : mode === "refund"
+                ? "Record refund"
+                : "Record payment"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -437,8 +561,8 @@ function AllocateDialog({
   const lines = payment
     ? allocateFifo(
         payment.unallocated,
-        openInvoicesFor(statementQuery.data, direction),
-        (line) => line.balance,
+        openInvoicesFor(statementQuery.data, direction, payment.currency),
+        (line) => line.balance
       )
     : []
 
@@ -449,7 +573,7 @@ function AllocateDialog({
     try {
       await invoicingApi.allocatePayment(
         payment.id,
-        lines.map((l) => ({ invoice_id: l.item.invoice_id, amount: l.amount })),
+        lines.map((l) => ({ invoice_id: l.item.invoice_id, amount: l.amount }))
       )
       toast.success("Payment allocated")
       onDone()
@@ -465,15 +589,30 @@ function AllocateDialog({
     <Dialog open={!!payment} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Allocate {payment?.number}</DialogTitle>
+          <DialogTitle>
+            Allocate {payment?.number} ({payment?.currency})
+          </DialogTitle>
         </DialogHeader>
         <AllocationPreview lines={lines} amount={payment?.unallocated ?? "0"} />
+        {statementQuery.error && (
+          <p className="text-xs text-destructive">
+            {errorMessage(statementQuery.error)}
+          </p>
+        )}
         {error && <p className="text-xs text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!lines.length || saving} onClick={() => void save()}>
+          <Button
+            disabled={
+              !lines.length ||
+              saving ||
+              statementQuery.isLoading ||
+              !!statementQuery.error
+            }
+            onClick={() => void save()}
+          >
             {saving ? "Allocating…" : "Allocate"}
           </Button>
         </DialogFooter>

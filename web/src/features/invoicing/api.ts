@@ -33,6 +33,7 @@ export type Invoice = {
   open_balance: string
   lines: {
     id: string
+    source_line_id?: string | null
     product_name: string | null
     description: string | null
     qty: string
@@ -63,6 +64,11 @@ export type Statement = {
   party_name: string | null
   open_balance: string
   unapplied_payments: string
+  currency?: string
+  base_currency?: string
+  base_open_balance?: string
+  balances_by_currency?: Record<string, string>
+  unapplied_by_currency?: Record<string, string>
   invoices: {
     invoice_id: string
     invoice_type: InvoiceType
@@ -73,17 +79,29 @@ export type Statement = {
     amount_paid: string
     balance: string
     status: string
+    currency?: string
+    balance_base?: string
   }[]
 }
 
 export const invoicingApi = {
   invoices: (
-    params: { side?: "ar" | "ap"; invoice_type?: string; status?: string; limit?: number } = {},
+    params: {
+      side?: "ar" | "ap"
+      invoice_type?: string
+      status?: string
+      limit?: number
+    } = {}
   ) => {
     const clean = Object.fromEntries(
-      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [string, string][],
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [
+        string,
+        string,
+      ][]
     )
-    return api.get<Page<Invoice>>(`/api/invoicing/invoices?${new URLSearchParams(clean)}`)
+    return api.get<Page<Invoice>>(
+      `/api/invoicing/invoices?${new URLSearchParams(clean)}`
+    )
   },
   createInvoice: (body: {
     invoice_type: InvoiceType
@@ -91,34 +109,60 @@ export const invoicingApi = {
     source_order_id?: string
     original_invoice_id?: string
     currency?: string
-    lines?: { product_id?: string | null; description?: string; qty: string; unit_price?: string }[]
+    lines?: {
+      product_id?: string | null
+      description?: string
+      qty: string
+      unit_price?: string
+    }[]
   }) => api.post<Invoice>("/api/invoicing/invoices", body),
-  postInvoice: (id: string) => api.post<Invoice>(`/api/invoicing/invoices/${id}/post`, undefined),
-  voidInvoice: (id: string) => api.post<Invoice>(`/api/invoicing/invoices/${id}/void`, undefined),
-  deleteDraft: (id: string) => api.delete<void>(`/api/invoicing/invoices/${id}`),
+  postInvoice: (id: string) =>
+    api.post<Invoice>(`/api/invoicing/invoices/${id}/post`, undefined),
+  voidInvoice: (id: string) =>
+    api.post<Invoice>(`/api/invoicing/invoices/${id}/void`, undefined),
+  deleteDraft: (id: string) =>
+    api.delete<void>(`/api/invoicing/invoices/${id}`),
   emailInvoice: (id: string) =>
-    api.post<{ status: string; to: string }>(`/api/invoicing/invoices/${id}/send-email`, undefined),
+    api.post<{ status: string; to: string }>(
+      `/api/invoicing/invoices/${id}/send-email`,
+      undefined
+    ),
 
   payments: (params: { direction?: string; limit?: number } = {}) => {
     const clean = Object.fromEntries(
-      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [string, string][],
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [
+        string,
+        string,
+      ][]
     )
-    return api.get<Page<Payment>>(`/api/invoicing/payments?${new URLSearchParams(clean)}`)
+    return api.get<Page<Payment>>(
+      `/api/invoicing/payments?${new URLSearchParams(clean)}`
+    )
   },
   recordPayment: (body: {
     direction: "in" | "out"
     party_id: string
     amount: string
+    currency?: string
     method: string
     credit_note_id?: string
     allocations: { invoice_id: string; amount: string }[]
   }) => api.post<Payment>("/api/invoicing/payments", body),
-  allocatePayment: (id: string, allocations: { invoice_id: string; amount: string }[]) =>
-    api.post<Payment>(`/api/invoicing/payments/${id}/allocate`, { allocations }),
-  voidPayment: (id: string) => api.post<Payment>(`/api/invoicing/payments/${id}/void`, undefined),
+  allocatePayment: (
+    id: string,
+    allocations: { invoice_id: string; amount: string }[]
+  ) =>
+    api.post<Payment>(`/api/invoicing/payments/${id}/allocate`, {
+      allocations,
+    }),
+  voidPayment: (id: string) =>
+    api.post<Payment>(`/api/invoicing/payments/${id}/void`, undefined),
 
-  statement: (partyId: string) => api.get<Statement>(`/api/invoicing/statement/${partyId}`),
+  statement: (partyId: string) =>
+    api.get<Statement>(`/api/invoicing/statement/${partyId}`),
+  currencies: () => api.get<{ code: string }[]>("/api/currencies"),
   contacts: () => api.get<Page<Contact>>("/api/crm/contacts?limit=100"),
   salesOrders: () => api.get<Page<Order>>("/api/sales/orders?limit=100"),
-  purchaseOrders: () => api.get<Page<Order>>("/api/purchasing/orders?limit=100"),
+  purchaseOrders: () =>
+    api.get<Page<Order>>("/api/purchasing/orders?limit=100"),
 }

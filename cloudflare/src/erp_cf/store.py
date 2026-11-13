@@ -29,6 +29,7 @@ SEARCH_COLUMNS = {
     "sales_sales_orders": {"number": "_number_fold", "customer_name": "_party_fold"},
     "purchasing_purchase_orders": {"number": "_number_fold", "supplier_name": "_party_fold"},
     "sales_quotations": {"number": "_number_fold", "customer_name": "_party_fold"},
+    "invoicing_invoices": {"number": "_number_fold", "party_name": "_party_fold"},
 }
 
 
@@ -422,7 +423,8 @@ class UnitOfWork:
             **{k: fields[k].decode(v) for k, v in encoded.items()},
             "_revision": row["_revision"] + 1,
         }
-        self.search_keys(name, updated)
+        if set(changes) & SEARCH_COLUMNS.get(name, {}).keys():
+            self.search_keys(name, updated)
         return updated
 
     def delete(self, name: str, row: dict):

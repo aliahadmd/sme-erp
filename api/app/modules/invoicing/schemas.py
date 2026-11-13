@@ -11,11 +11,12 @@ from app.shared.pagination import Page
 
 
 class InvoiceLineIn(BaseModel):
+    source_line_id: uuid.UUID | None = None
     product_id: uuid.UUID | None = None
     description: str | None = None
     qty: Decimal = Field(gt=0)
     unit_price: Decimal | None = Field(None, ge=0)
-    discount_pct: Decimal = Field(0, ge=0, le=100)
+    discount_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
     tax_id: uuid.UUID | None = None
 
 
@@ -73,6 +74,7 @@ class InvoiceLineOut(BaseModel):
 
     id: uuid.UUID
     position: int
+    source_line_id: uuid.UUID | None = None
     product_id: uuid.UUID | None
     product_name: str | None
     description: str | None
@@ -100,15 +102,15 @@ class InvoiceOut(BaseModel):
     invoice_date: date
     due_date: date | None
     currency: str
-    fx_rate: Decimal = 1
+    fx_rate: Decimal = Decimal("1")
     status: str
     subtotal: Decimal
     discount_total: Decimal
     tax_total: Decimal
     total: Decimal
-    total_base: Decimal = 0
-    amount_paid: Decimal = 0
-    applied_credits: Decimal = 0
+    total_base: Decimal = Decimal("0")
+    amount_paid: Decimal = Decimal("0")
+    applied_credits: Decimal = Decimal("0")
     original_invoice_id: uuid.UUID | None = None
     notes: str | None
     posted_at: datetime | None
@@ -138,7 +140,7 @@ class PaymentOut(BaseModel):
     party_name: str | None
     payment_date: date
     currency: str
-    fx_rate: Decimal = 1
+    fx_rate: Decimal = Decimal("1")
     amount: Decimal
     method: str
     reference: str | None
@@ -166,10 +168,12 @@ class StatementLine(BaseModel):
     invoice_date: date
     due_date: date | None
     total: Decimal
-    total_base: Decimal = 0
-    amount_paid: Decimal = 0
+    total_base: Decimal = Decimal("0")
+    amount_paid: Decimal = Decimal("0")
     balance: Decimal
     status: str
+    currency: str | None = None
+    balance_base: Decimal | None = None
 
 
 class StatementOut(BaseModel):
@@ -178,3 +182,8 @@ class StatementOut(BaseModel):
     open_balance: Decimal
     unapplied_payments: Decimal = Decimal("0")
     invoices: list[StatementLine]
+    currency: str | None = None
+    base_currency: str | None = None
+    base_open_balance: Decimal = Decimal("0")
+    balances_by_currency: dict[str, Decimal] = Field(default_factory=dict)
+    unapplied_by_currency: dict[str, Decimal] = Field(default_factory=dict)
