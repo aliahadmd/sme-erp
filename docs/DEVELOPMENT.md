@@ -1,5 +1,9 @@
 # Developer guide — SME ERP
 
+> This guide describes the current Docker/VPS reference runtime. The migration's
+> Python Workers/D1 implementation, demo environments and build commands are in
+> [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
+
 > Looking for the live demo and login details? See the [project README](../README.md).
 
 A general-purpose ERP for small and medium-sized enterprises, built as a

@@ -1,0 +1,44 @@
+name: Cloudflare application
+
+on:
+  push:
+    branches: [main, codex/cloudflare-python-d1]
+    paths: ["cloudflare/**", "web/**", "api/app/**", ".github/workflows/cloudflare.yml"]
+  pull_request:
+    paths: ["cloudflare/**", "web/**", "api/app/**", ".github/workflows/cloudflare.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: cloudflare
+    env:
+      CF_MODE: demo-staging
+      UV_LINK_MODE: copy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+      - run: npm install --global pnpm@12.8.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.11"
+          python-version: "3.14"
+          enable-cache: true
+          working-directory: cloudflare
+          cache-dependency-glob: cloudflare/uv.lock
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm quality

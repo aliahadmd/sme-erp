@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery and full backup/recovery have passed 306 local backend
+  AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 309 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -848,6 +848,85 @@ The new native SDK mail-payload conversion also passed the Queue test-mode proof
 four intents/attempt receipts, idempotent manual request, and source invoice
 reversal, without an outbound email call.
 
+## Fresh demo and native role acceptance
+
+The new `demo-staging` mode serves
+`https://erp-demo-staging-20261114.aliahad.workers.dev` using D1
+`71ee20e1-b6de-4f2a-8f8f-4a5ecd070225`, the private R2 bucket
+`erp-demo-staging-backups-20261114`, independent event/DLQ queues and four new
+Durable Object namespaces. It uses organization
+`01a1d6bf-eca3-7654-b225-ae37c723ed96`; the earlier verification data is unchanged.
+The bucket's managed public domain is disabled. No recovery database is bound
+to the demo and restoration is disabled there.
+
+`scripts/apply_migrations.py` applies reviewed SQL and SHA-256 receipts atomically
+through the pinned `cf` CLI, rejecting changed/missing/noncontiguous history and
+unreceipted occupied targets. A lost response is reconciled against its receipt.
+Its SQL arguments preserve leading comments explicitly; the CLI otherwise
+interprets them as flags. All 16 migrations and 69 tables are verified in this
+fresh D1. Two local cases cover history drift, occupied targets, lost responses
+and rollback of failed DDL.
+
+`scripts/demo_seed.py` and `scripts/seed_demo_remote.py` create the coherent demo
+through public business commands, with durable step checkpoints and idempotency
+keys. The initial bootstrap uses a temporary build flag with ordinary jobs off;
+the final build closes bootstrap and enables jobs/daily backups. The private
+credential files contain independent random keys/passwords and remain ignored
+at mode 0600. No default production password is introduced.
+
+The 95-step native recipe creates ten users (nine active profiles and one
+disabled account), eight role definitions, four contacts/products, one warehouse,
+purchase receipts/bills, full and partial sales/deliveries/invoicing, payments,
+customer/supplier price credits, damage, editable drafts and quotations. HR has
+three linked employees, two leave types and five requests covering pending,
+approved, rejected and cancelled states. A second pending employee request lets
+the ownership test exercise cancellation authorization on a cancellable record.
+
+Verified business totals are stock `2220.60`, open AR `543.96`, open AP `2372.00`
+and one low-stock product. Inventory quantities are cable 88, mouse 53 and
+keyboard 27. Ten invoices and five payments are present; journals balance.
+The local recipe test loses an already committed payment response, resumes it,
+and reruns the recipe without duplicating financial records or moves.
+
+Version `821101fc-7cd9-464a-8814-1a5cc00869c4` reports 6,926 ms startup;
+the initialization version reported 3,467 ms. Startup/capacity acceptance remains
+open. The final deployment has bootstrap off, jobs on, test email, daily backups
+at 02:00 UTC+08:00 and restoration off. A valid bootstrap request returns 404.
+The native Cron reports success with no error/pending outbox events, foreign
+keys are clean, and SQL assertions are empty.
+
+`scripts/verify_demo_roles_remote.py` passes 112 API permission/ownership checks
+for admin, accountant, sales, purchasing, warehouse, HR, viewer and two employee
+profiles; disabled login is rejected. Forbidden CRM mutations committed no rows.
+Employee reads remain scoped to their linked records, and cross-employee create
+and pending-request cancellation are forbidden. Every completed proof session
+was revoked. Its ignored checkpoint supports resume; `--ipv4` is an optional
+verification workaround for this machine's failing IPv6 TLS path. No TLS checks
+are disabled.
+
+A real Chrome login displayed the exact demo dashboard balances/low-stock count
+and signed out. The private screenshot is
+`cloudflare/.cloudflare/verification/demo-browser/dashboard.png`. Full browser
+role/action walkthroughs remain open; API-role coverage alone does not prove
+that every role's UI hides or handles every unavailable action correctly.
+
+## Shared quality gate and prepared CI
+
+`pnpm quality` passes 309 backend tests, 14 frontend tests, lint/formatting, the
+45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
+Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
+legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
+pnpm 12.8.1 are declared for the build.
+
+`.github/workflows/cloudflare.yml` runs that gate without database services,
+Cloudflare secrets, deployment or migrations, using pinned action commits.
+`scripts/deploy_from_env.py` validates the exact closed-bootstrap demo build and
+runtime secrets; optional deployment uses a temporary 0600 secrets file, removed
+afterward. Its read-only check passes with the existing private keys. Hosted CI
+execution and repository-triggered Workers Builds remain unverified/unactivated:
+this branch has not been pushed. Build settings and secret names are documented
+in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
+
 ## HTTP surface coverage
 
 The original application's current OpenAPI inventory contains 139 method/path
@@ -862,7 +941,7 @@ presence is not proof of full workflow, role or operational parity.
 
 The full ERP migration remains incomplete. Next, complete
 realistic backup/recovery capacity and operational alerts, live email acceptance/delivery,
-fresh demo seeding and complete browser/role parity,
-production environment and CI configuration, capacity acceptance, cutover and
+complete browser/role parity, hosted CI/Workers Builds activation,
+production environment, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs
 also remain open. The synthetic proof is not the migrated ERP.

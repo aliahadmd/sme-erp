@@ -106,7 +106,9 @@ The public deployment still uses this Docker stack. The Cloudflare migration
 retains Python/FastAPI and React, with native D1 repositories, Queues, Durable
 Objects and Workers AI verified in isolated staging. See the
 [migration status](docs/CLOUDFLARE_IMPLEMENTATION.md) for completed checks and
-remaining deployment, integration and acceptance work.
+remaining deployment, integration and acceptance work. A fresh isolated
+Cloudflare demo is deployed; its architecture, environment and quality commands
+are in the [Cloudflare developer guide](docs/CLOUDFLARE_DEVELOPMENT.md).
 
 Developers: setup, architecture and deployment notes are in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

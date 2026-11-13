@@ -32,7 +32,9 @@ The deployment requires the ignored `.secrets.staging.json` with a `PROOF_TOKEN`
 property. This credential must be a random secret, never a demo password. It is
 not included in generated bundles or logs. Proof endpoints require it as a
 Bearer token. The `staging` mode selects only the proof Worker; `app-staging`
-selects the application Worker. Other modes are rejected until configured.
+selects the verification application Worker. `demo-staging` selects the fresh
+demo; production is not configured. See
+[the Cloudflare developer guide](../docs/CLOUDFLARE_DEVELOPMENT.md).
 
 `uv.lock` resolves host development dependencies; `pylock.toml` pins the
 Pyodide-compatible runtime wheels and hashes. `pnpm vendor` installs that
@@ -138,7 +140,7 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last backend verification passed 306 tests and lint/schema checks. The
+The last backend verification passed 309 tests and lint/schema checks. The
 frontend passes 14 tests and build/lint. Real Queue and Cron
 checks verify notifications, deduplication, DLQ replay, quote expiry and audit
 retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
@@ -157,8 +159,26 @@ browser login/refresh pass. Run `uv run python -u scripts/verify_frontend_remote
 for the deployed routing check. Daily backups are enabled at 02:00 UTC+08:00;
 full native recovery, scheduled capture, failed-capture retention and archive
 metadata import pass. Live mail, realistic recovery/capacity acceptance, full
-browser/role acceptance and the fresh demo seed remain unfinished.
+browser/role acceptance and hosted CI/cutover acceptance remain unfinished.
 This Worker is not yet the complete ERP.
+
+## Fresh demo
+
+`demo-staging` serves `https://erp-demo-staging-20261114.aliahad.workers.dev` with
+its own D1, private R2, queues and Durable Objects. The coherent dataset and 112
+API role/ownership checks pass. Bootstrap is closed, jobs/daily backups are on,
+email remains in test mode and restoration is disabled. The ignored
+`.demo.demo-staging.json` contains private demo credentials. The seed checkpoint
+supports resumable, idempotent public API commands:
+
+```sh
+uv run python -u scripts/seed_demo_remote.py
+uv run python -u scripts/verify_demo_roles_remote.py --resume
+```
+
+Use `--ipv4` on these verifiers only if the local IPv6 path fails. Run
+`pnpm quality` for the shared frozen build/test gate. See the developer guide
+for initialization, schema migrations, CI settings and the remaining acceptance.
 
 ## CLI packaging workaround
 

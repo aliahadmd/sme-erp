@@ -1,17 +1,20 @@
 import { bindings, defineConfig, exports, triggers } from "cf/config";
 
 export default defineConfig(({ mode }) => {
-  if (mode !== "staging" && mode !== "app-staging") {
-    throw new Error("Only --mode staging (proof) and --mode app-staging are configured.");
+  if (!["staging", "app-staging", "demo-staging"].includes(mode)) {
+    throw new Error("Select staging (proof), app-staging (verification), or demo-staging.");
   }
   const proof = mode === "staging";
-  const eventQueue = "erp-staging-events-20261113";
-  const deadQueue = "erp-staging-events-dlq-20261113";
+  const demo = mode === "demo-staging";
+  const initializing = demo && process.env.ERP_DEMO_BOOTSTRAP === "true";
+  const application = demo ? "erp-demo-staging-20261114" : "erp-migration-staging-20261113";
+  const eventQueue = demo ? "erp-demo-staging-events-20261114" : "erp-staging-events-20261113";
+  const deadQueue = demo ? "erp-demo-staging-events-dlq-20261114" : "erp-staging-events-dlq-20261113";
   const maxRetries = 3;
   return {
     accountId: "4287bb6da0c60bbcc12c01a34718fb86",
     worker: {
-      name: proof ? "erp-feasibility" : "erp-migration-staging-20261113",
+      name: proof ? "erp-feasibility" : application,
       entrypoint: proof ? "./src/entry.py" : "./src/application.py",
       compatibilityDate: "2026-11-12",
       compatibilityFlags: ["python_workers"],
@@ -55,23 +58,23 @@ export default defineConfig(({ mode }) => {
         ENVIRONMENT: bindings.text("feasibility"),
       } : {
         DB: bindings.d1({
-          name: "erp-staging-20261113",
-          id: "0f278204-3190-49e1-96d2-a9312fa57e3d",
+          name: demo ? "erp-demo-staging-20261114" : "erp-staging-20261113",
+          id: demo ? "71ee20e1-b6de-4f2a-8f8f-4a5ecd070225" : "0f278204-3190-49e1-96d2-a9312fa57e3d",
         }),
         AUTH_LIMITERS: bindings.durableObject({
-          worker: "erp-migration-staging-20261113",
+          worker: application,
           exportName: "LoginGuard",
         }),
         COMMANDS: bindings.durableObject({
-          worker: "erp-migration-staging-20261113",
+          worker: application,
           exportName: "ERPCommands",
         }),
         ENVIRONMENT: bindings.text("staging"),
-        PUBLIC_ORIGIN: bindings.text("https://erp-migration-staging-20261113.aliahad.workers.dev"),
-        ORG_ID: bindings.text("019a78e1-6d80-7000-8000-000000000001"),
-        BOOTSTRAP_ENABLED: bindings.text("true"),
+        PUBLIC_ORIGIN: bindings.text(`https://${application}.aliahad.workers.dev`),
+        ORG_ID: bindings.text(demo ? "01a1d6bf-eca3-7654-b225-ae37c723ed96" : "019a78e1-6d80-7000-8000-000000000001"),
+        BOOTSTRAP_ENABLED: bindings.text(demo ? String(initializing) : "true"),
         EVENTS: bindings.queue({ name: eventQueue }),
-        JOBS_ENABLED: bindings.text("true"),
+        JOBS_ENABLED: bindings.text(String(!initializing)),
         EVENT_QUEUE_NAME: bindings.text(eventQueue),
         DEAD_LETTER_QUEUE_NAME: bindings.text(deadQueue),
         QUEUE_MAX_RETRIES: bindings.text(String(maxRetries)),
@@ -82,22 +85,24 @@ export default defineConfig(({ mode }) => {
         BUSINESS_UTC_OFFSET_MINUTES: bindings.text("480"),
         AI: bindings.ai(),
         AI_BUDGETS: bindings.durableObject({
-          worker: "erp-migration-staging-20261113", exportName: "AIBudget",
+          worker: application, exportName: "AIBudget",
         }),
         AI_ENABLED: bindings.text("true"),
         AI_MODEL: bindings.text("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
         AI_DAILY_REQUEST_LIMIT: bindings.text("200"),
-        BACKUPS: bindings.r2({ name: "erp-staging-backups-20261113" }),
+        BACKUPS: bindings.r2({ name: demo ? "erp-demo-staging-backups-20261114" : "erp-staging-backups-20261113" }),
         BACKUP_CONTROL: bindings.durableObject({
-          worker: "erp-migration-staging-20261113", exportName: "ERPBackups",
+          worker: application, exportName: "ERPBackups",
         }),
-        RESTORE_DB: bindings.d1({
-          name: "erp-recovery-staging-20261113", id: "d7bb688c-8009-4eb0-a21f-993310c23fcc",
-        }),
+        ...(!demo ? {
+          RESTORE_DB: bindings.d1({
+            name: "erp-recovery-staging-20261113", id: "d7bb688c-8009-4eb0-a21f-993310c23fcc",
+          }),
+          RESTORE_DATABASE_ID: bindings.text("d7bb688c-8009-4eb0-a21f-993310c23fcc"),
+        } : {}),
         BACKUPS_ENABLED: bindings.text("true"),
-        RESTORE_ENABLED: bindings.text("true"),
-        RESTORE_DATABASE_ID: bindings.text("d7bb688c-8009-4eb0-a21f-993310c23fcc"),
-        BACKUP_SCHEDULE_ENABLED: bindings.text("true"),
+        RESTORE_ENABLED: bindings.text(String(!demo)),
+        BACKUP_SCHEDULE_ENABLED: bindings.text(String(!initializing)),
         BACKUP_HOUR_LOCAL: bindings.text("2"),
         BACKUP_RETENTION_DAYS: bindings.text("35"),
         BACKUP_MAX_PAUSE_SECONDS: bindings.text("600"),

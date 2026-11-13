@@ -1,15 +1,19 @@
 {
   "name": "erp-cloudflare",
   "private": true,
+  "packageManager": "pnpm@12.8.1",
   "type": "module",
   "scripts": {
     "vendor": "uv run python scripts/vendor.py",
     "build": "node scripts/build.mjs",
     "build:app-staging": "CF_MODE=app-staging node scripts/build.mjs",
+    "build:demo-staging": "CF_MODE=demo-staging node scripts/build.mjs",
     "deploy:staging": "cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
     "deploy:app-staging": "cf deploy --prebuilt --mode app-staging --secrets-file .secrets.app-staging.json",
+    "deploy:demo-staging": "cf deploy --prebuilt --mode demo-staging --secrets-file .secrets.demo-staging.json",
     "test": "uv run pytest -q",
-    "lint": "uv run ruff check src tests scripts"
+    "lint": "uv run ruff check src tests scripts",
+    "quality": "node scripts/quality.mjs"
   },
   "devDependencies": {
     "@cloudflare/build-output-utils": "0.8.0",
