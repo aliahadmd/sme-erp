@@ -20,8 +20,11 @@ async def main():
     credentials = json.loads((ROOT / ".demo.app-staging.json").read_text())
     run = uuid.uuid4().hex[:10]
     checkpoint = ROOT / ".cloudflare/verification/mail-pending.json"
+    assert not checkpoint.exists(), "Inspect and finish the existing mail proof before rerunning"
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    async with httpx.AsyncClient(base_url=URL, timeout=180) as client:
+    async with httpx.AsyncClient(
+        base_url=URL, timeout=180, transport=httpx.AsyncHTTPTransport(retries=3)
+    ) as client:
         response = await client.post("/api/auth/login", json=credentials)
         assert response.status_code == 200, f"Login returned {response.status_code}"
         auth = {"Authorization": "Bearer " + response.json()["access_token"]}

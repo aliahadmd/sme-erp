@@ -46,6 +46,7 @@ The application Worker is separate from the proof and uses the full business
 schema in `erp-staging-20261113`:
 
 ```sh
+pnpm --dir ../web install --frozen-lockfile
 pnpm build:app-staging
 pnpm deploy:app-staging
 uv run python -u scripts/verify_auth_remote.py
@@ -150,8 +151,14 @@ One daily Durable Object budget covers every actual inference attempt. Quota
 exhaustion defers bulk work in D1 for Cron to resume. Run
 `uv run python -u scripts/verify_ai_remote.py` for the real-model staging proof.
 Login budgets now expire through alarms while preserving in-flight checks.
-Live mail, full recovery acceptance, frontend assets, browser/role acceptance and the
-full demo seed remain unfinished. This Worker is not yet the complete ERP.
+The application build also compiles the existing React SPA into Workers Static
+Assets with same-origin API calls. Native deep links/API routing and initial
+browser login/refresh pass. Run `uv run python -u scripts/verify_frontend_remote.py`
+for the deployed routing check. Daily backups are enabled at 02:00 UTC+08:00;
+full native recovery, scheduled capture, failed-capture retention and archive
+metadata import pass. Live mail, realistic recovery/capacity acceptance, full
+browser/role acceptance and the fresh demo seed remain unfinished.
+This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
 

@@ -798,11 +798,55 @@ rows. It failed with `maintenance_lease_lost`, published no discovery entry,
 and released normal authentication/writes. Only that failed probe's timestamp
 was aged to exercise retention. Native Cron then requested one
 `daily:2026-11-14` backup during a temporary current-hour schedule window;
-capture continues across the redeploy. The final deployed schedule is enabled
-at 02:00 UTC+08:00. Scheduled completion, partial-file cleanup and native
-lost-metadata import are still being verified. See the
+capture continued across the redeploy. That archive completed 6,634 rows in 178
+pages/3,606,445 bytes in 383 seconds. Cron then deleted the expired probe's R2
+files and page ledger; its terminal metadata remains for diagnosis. The final
+deployed schedule is enabled at 02:00 UTC+08:00.
+
+For native lost-metadata acceptance, only the scheduled archive's control row
+and 178 page receipts were removed under a SQL assertion after verifying zero
+restore references. Its private R2 contents stayed intact. Archive discovery
+and import rebuilt all receipts with the same SHA-256
+`f65dce0d4b1ba44fb1dea6f7055514c81943f8e7dd2a4558c0f1f2da6ecbe977`,
+row/byte totals and manifest. Repeating import returned the completed archive.
+Source foreign keys remain clean and SQL assertions are empty. This probe did
+not reset or reuse the occupied recovery D1. See the
 [operator runbook](CLOUDFLARE_RECOVERY.md) and the ignored verification checkpoints
 before resuming an interrupted proof.
+
+## Existing React frontend on Workers Static Assets
+
+The application build now compiles the existing React/Vite SPA and copies its
+fresh output into the versioned Build Output assets directory. It explicitly
+sets `VITE_API_URL` to an empty string so browser API calls and refresh cookies
+use the same Worker origin. The feasibility mode retains its API-only build.
+The application config sends `/api`, `/api/*`, `/internal`, `/internal/*`, health,
+OpenAPI and ReDoc requests to Python before asset fallback. Other deep links
+use Workers' single-page-application handling. The existing UI and routing
+framework are retained.
+
+Version `9cc053d1-c2a3-48b3-9c23-284437fe8abc` reports 3,778 ms startup and serves
+the frontend at the existing isolated staging Worker URL. All 14 frontend tests,
+lint and TypeScript/Vite compilation pass. The build retains its existing
+large-bundle and Vite-config deprecation notices; this migration does not claim
+a frontend performance optimization.
+
+`scripts/verify_frontend_remote.py` verifies the deployed HTML, JavaScript/CSS,
+same-origin configuration and deep-link fallback. Unknown API/internal routes
+and protected requests remain JSON even with browser-navigation headers, with
+no-store on API/internal paths. Health and OpenAPI stay reachable. Asset output
+was scanned for the known private Worker secret values.
+
+A real Chrome browser used the existing sign-in form successfully, received a
+secure HTTP-only refresh cookie, and restored the session after page reload.
+CRM, products, sales and purchasing navigation loaded their real APIs without
+JavaScript errors or failed API calls. A synthetic contact was created, searched,
+edited and archived through the existing UI. Sign-out revoked the test session
+and removed its refresh cookie. This is initial browser integration evidence,
+not complete role/workflow parity.
+The new native SDK mail-payload conversion also passed the Queue test-mode proof:
+four intents/attempt receipts, idempotent manual request, and source invoice
+reversal, without an outbound email call.
 
 ## HTTP surface coverage
 
@@ -817,8 +861,8 @@ presence is not proof of full workflow, role or operational parity.
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
-backup scheduling/retention acceptance and realistic recovery capacity, live email acceptance/delivery,
-demo seeding, frontend assets and browser/role parity,
+realistic backup/recovery capacity and operational alerts, live email acceptance/delivery,
+fresh demo seeding and complete browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs
 also remain open. The synthetic proof is not the migrated ERP.

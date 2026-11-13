@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: "2026-11-12",
       compatibilityFlags: ["python_workers"],
       observability: { enabled: true, traces: { enabled: true } },
+      assets: proof ? undefined : {
+        notFoundHandling: "single-page-application",
+        runWorkerFirst: [
+          "/api", "/api/*", "/internal", "/internal/*",
+          "/healthz", "/readyz", "/openapi.json", "/redoc",
+        ],
+      },
       triggers: proof ? [] : [
         triggers.queue({ name: eventQueue, deadLetterQueue: deadQueue,
           maxBatchSize: 10, maxBatchTimeout: 1, maxConcurrency: 2, maxRetries }),

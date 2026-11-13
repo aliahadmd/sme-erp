@@ -1,6 +1,7 @@
 /** Build native Python modules into cf's versioned Build Output format. */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import * as configApi from "@cloudflare/config";
 import * as outputApi from "@cloudflare/build-output-utils";
 
@@ -10,6 +11,15 @@ const context = { isPreview: false, mode };
 const loaded = await configApi.loadAndParseConfig(path.join(root, "cloudflare.config.ts"), context);
 if (!loaded.result.success) throw new Error(JSON.stringify(loaded.result.error));
 const configuration = loaded.result.data;
+const web = path.join(root, "..", "web");
+if (configuration.worker.assets) {
+  // This SPA and API share one origin, including refresh cookies. Override
+  // local/VPS API settings deliberately so deployed assets cannot call localhost.
+  execFileSync("pnpm", ["--dir", web, "build"], {
+    stdio: "inherit",
+    env: { ...process.env, VITE_API_URL: "" },
+  });
+}
 await outputApi.cleanBuildOutputDir(root);
 const bundle = outputApi.getWorkerBundleDir(root);
 await fs.mkdir(bundle, { recursive: true });
@@ -72,5 +82,8 @@ await outputApi.writeWorkerConfig({
   config: configuration.worker,
   manifest: { type: "complete", mainModule, modules },
 });
+if (configuration.worker.assets) {
+  await outputApi.writeAssets({ root, sourceDirectory: path.join(web, "dist") });
+}
 await outputApi.readBuildOutput(root);
 console.log(`Built ${configuration.worker.name} (${mode}) with ${Object.keys(modules).length} modules`);
