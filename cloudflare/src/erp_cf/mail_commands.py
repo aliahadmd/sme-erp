@@ -11,7 +11,15 @@ from erp_cf.business_clock import business_time
 from erp_cf.db import Statement, assertion
 from erp_cf.errors import ConflictError, NotFoundError, ValidationError
 from erp_cf.job_commands import complete_event
-from erp_cf.mail_provider import PERMANENT, THROTTLED, build_message, mode, payload_hash
+from erp_cf.mail_provider import (
+    PERMANENT,
+    THROTTLED,
+    build_message,
+    mode,
+    native_payload,
+    payload_hash,
+)
+from erp_cf.recovery_policy import mail_held
 from erp_cf.settlement import SETTLEABLE, balance
 from erp_cf.store import now
 
@@ -158,7 +166,18 @@ async def prepare(plan, env, payload):
     reason = await eligible(plan, env, row)
     if reason:
         return terminal(plan, event, row, "cancelled", reason)
+    event_data = json.loads(event["payload_json"])
+    if await mail_held(
+        plan,
+        source_id=row["source_id"],
+        overdue=row["kind"] == "overdue" or row["preference"] == "overdue_reminder",
+        sticky=bool(event_data.get("recovery_hold")),
+        released=bool(event_data.get("recovery_release")),
+    ):
+        return terminal(plan, event, row, "uncertain", "recovery_review_required")
     message = build_message(env, row)
+    if current_mode == "test":
+        native_payload(message)
     if current_mode == "live" and not hasattr(env, "EMAIL"):
         from erp_cf.errors import DomainError
 
@@ -350,7 +369,9 @@ async def resolve(plan, actor, payload):
     )
     status = {"retry": "pending", "mark_sent": "sent", "cancel": "cancelled"}[action]
     delivery = (
-        plan.emit("mail.delivery.requested", {"mail_id": row["id"]}) if action == "retry" else None
+        plan.emit("mail.delivery.requested", {"mail_id": row["id"], "recovery_release": True})
+        if action == "retry"
+        else None
     )
     plan.statements.append(
         Statement(

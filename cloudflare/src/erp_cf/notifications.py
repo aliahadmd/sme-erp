@@ -9,6 +9,7 @@ from app.shared.notification_text import document_email, party_email
 from erp_cf.business_clock import business_time
 from erp_cf.db import Statement
 from erp_cf.errors import ValidationError
+from erp_cf.recovery_policy import mail_held
 from erp_cf.settlement import SETTLEABLE, balance
 from erp_cf.store import now, tables
 
@@ -26,8 +27,9 @@ def label(invoice_type):
 
 
 class Notifications:
-    def __init__(self, plan, env, *, event_id=None):
+    def __init__(self, plan, env, *, event_id=None, recovery_hold=False):
         self.plan, self.env, self.event_id = plan, env, event_id
+        self.recovery_hold = recovery_hold
         self.recipient_cache, self.keys, self.mail_ids = {}, set(), set()
 
     async def recipients(self, permission):
@@ -74,7 +76,14 @@ class Notifications:
         mode = str(getattr(self.env, "EMAIL_MODE", "disabled"))
         if mode not in {"disabled", "test", "live"}:
             raise ValidationError("Invalid email delivery mode")
-        status, timestamp = ("disabled" if mode == "disabled" else "pending"), now().isoformat()
+        held = await mail_held(
+            self.plan,
+            source_id=str(source_id) if source_id else None,
+            overdue=kind == "overdue" or preference == "overdue_reminder",
+            sticky=self.recovery_hold,
+        )
+        status = "uncertain" if held else "disabled" if mode == "disabled" else "pending"
+        timestamp = now().isoformat()
         self.plan.statements.append(
             Statement(
                 "INSERT INTO cf_mail_outbox(id,org_id,event_id,recipient,user_id,preference,"
@@ -93,11 +102,18 @@ class Notifications:
                     str(source_id) if source_id else None,
                     status,
                     timestamp,
-                    timestamp if mode == "disabled" else None,
+                    timestamp if status == "disabled" else None,
                 ),
             )
         )
-        if mode != "disabled":
+        if held:
+            self.plan.statements.append(
+                Statement(
+                    "UPDATE cf_mail_outbox SET last_error='recovery_review_required' WHERE id=?",
+                    (identity,),
+                )
+            )
+        elif mode != "disabled":
             event = self.plan.emit("mail.delivery.requested", {"mail_id": identity})
             self.plan.statements.append(
                 Statement(

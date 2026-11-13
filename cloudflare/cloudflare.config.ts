@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
           LoginGuard: exports.durableObject({ storage: "sqlite" }),
           ERPCommands: exports.durableObject({ storage: "sqlite" }),
           AIBudget: exports.durableObject({ storage: "sqlite" }),
+          ERPBackups: exports.durableObject({ storage: "sqlite" }),
         },
       env: proof ? {
         DB: bindings.d1({
@@ -79,6 +80,20 @@ export default defineConfig(({ mode }) => {
         AI_ENABLED: bindings.text("true"),
         AI_MODEL: bindings.text("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
         AI_DAILY_REQUEST_LIMIT: bindings.text("200"),
+        BACKUPS: bindings.r2({ name: "erp-staging-backups-20261113" }),
+        BACKUP_CONTROL: bindings.durableObject({
+          worker: "erp-migration-staging-20261113", exportName: "ERPBackups",
+        }),
+        RESTORE_DB: bindings.d1({
+          name: "erp-recovery-staging-20261113", id: "d7bb688c-8009-4eb0-a21f-993310c23fcc",
+        }),
+        BACKUPS_ENABLED: bindings.text("true"),
+        RESTORE_ENABLED: bindings.text("true"),
+        RESTORE_DATABASE_ID: bindings.text("d7bb688c-8009-4eb0-a21f-993310c23fcc"),
+        BACKUP_SCHEDULE_ENABLED: bindings.text("true"),
+        BACKUP_HOUR_LOCAL: bindings.text("2"),
+        BACKUP_RETENTION_DAYS: bindings.text("35"),
+        BACKUP_MAX_PAUSE_SECONDS: bindings.text("600"),
       },
     },
   };

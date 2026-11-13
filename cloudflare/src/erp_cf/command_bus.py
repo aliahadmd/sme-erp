@@ -23,6 +23,7 @@ class Coordinator:
     async def execute(self, envelope):
         from erp_cf.accounting_commands import COMMANDS as ACCOUNTING
         from erp_cf.ai_commands import COMMANDS as AI
+        from erp_cf.backup_commands import COMMANDS as BACKUPS
         from erp_cf.core_commands import COMMANDS as CORE
         from erp_cf.documents import COMMANDS as DOCUMENTS
         from erp_cf.hr_commands import COMMANDS as HR
@@ -45,6 +46,7 @@ class Coordinator:
                 | JOBS
                 | AI
                 | MAIL
+                | BACKUPS
             ).get(operation)
             if spec is None:
                 raise NotFoundError("Unknown command")
@@ -88,12 +90,15 @@ class Coordinator:
     async def run_system(self, envelope):
         """Trusted binding-only dispatch. Public execute() cannot select these handlers."""
         from erp_cf.ai_commands import finish_task
+        from erp_cf.backup_commands import SYSTEM_COMMANDS as BACKUPS
         from erp_cf.job_commands import SYSTEM_COMMANDS
         from erp_cf.mail_commands import SYSTEM_COMMANDS as MAIL
 
         operation = envelope.get("operation", "")
         try:
-            handler = (SYSTEM_COMMANDS | MAIL | {"ai.task.finish": finish_task}).get(operation)
+            handler = (SYSTEM_COMMANDS | MAIL | BACKUPS | {"ai.task.finish": finish_task}).get(
+                operation
+            )
             if handler is None:
                 raise NotFoundError("Unknown system command")
             key, payload = envelope.get("key", ""), envelope.get("payload", {})

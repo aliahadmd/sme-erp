@@ -12,7 +12,15 @@ from erp_cf.db import Statement, assertion, plain
 from erp_cf.errors import ConflictError, DomainError, ValidationError
 
 CLOCK_SQL = "CAST(strftime('%s','now') AS INTEGER)*1000"
-EXEMPT = {"cf_assertions", "platform_maintenance"}
+EXEMPT = {
+    "cf_assertions",
+    "platform_maintenance",
+    "platform_backup_runs",
+    "platform_backup_pages",
+    "platform_restore_runs",
+    "platform_restore_receipts",
+    "platform_recovery_policy",
+}
 TABLES_SQL = (
     "SELECT name FROM sqlite_schema WHERE type='table' "
     "AND name NOT GLOB 'sqlite_*' AND name NOT GLOB '_cf_*' ORDER BY name"

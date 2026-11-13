@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass
 
-from erp_cf.db import plain
+from erp_cf.db import D1Database, plain
 from erp_cf.errors import DomainError, ValidationError
 
 DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
@@ -48,6 +48,13 @@ class AIClient:
 
     async def complete(self, *, system, prompt):
         model = self.require_enabled()
+        policy = await D1Database(self.env.DB).first(
+            "SELECT hold_external FROM platform_recovery_policy WHERE singleton=1"
+        )
+        if policy and policy["hold_external"]:
+            raise DomainError(
+                "AI requires recovery review before restarting", code="ai_recovery_hold", status=503
+            )
         if len((system + prompt).encode()) > 32000:
             raise ValidationError("AI input exceeds 32,000 bytes")
         try:

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from erp_cf.accounting_api import router as accounting_router
 from erp_cf.ai_api import router as ai_router
 from erp_cf.auth import router as auth_router
+from erp_cf.backup_api import router as backup_router
 from erp_cf.bootstrap import router as bootstrap_router
 from erp_cf.core_api import router as core_router
 from erp_cf.db import D1Database
@@ -27,6 +28,7 @@ def create_app(test_environment=None):
     app = FastAPI(title="SME ERP", version="0.1.0", docs_url="/api/docs")
     register_handlers(app)
     app.include_router(auth_router)
+    app.include_router(backup_router)
     app.include_router(bootstrap_router)
     app.include_router(core_router)
     app.include_router(master_router)

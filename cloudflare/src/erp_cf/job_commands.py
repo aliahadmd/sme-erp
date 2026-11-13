@@ -36,7 +36,9 @@ async def consume_event(plan, env, payload):
     if int(event["generation"]) != payload["generation"]:
         return {"outcome": "superseded"}
     data = json.loads(event["payload_json"])
-    notices = Notifications(plan, env, event_id=event["id"])
+    notices = Notifications(
+        plan, env, event_id=event["id"], recovery_hold=bool(data.get("recovery_hold"))
+    )
     kind = event["event_type"]
     if kind == "invoice.posted":
         outcome = await notices.invoice(data)

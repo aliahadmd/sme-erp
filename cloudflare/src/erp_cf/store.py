@@ -270,7 +270,21 @@ class Repository:
         where, params = self.condition(where, params)
         sql = f"SELECT {self.table.projection()} FROM {quote(self.table.name)} WHERE {where}"
         if order_by:
-            sql += " ORDER BY " + order_by
+            ordering = []
+            for item in order_by.split(","):
+                parts = item.split()
+                if (
+                    not 1 <= len(parts) <= 2
+                    or parts[0] not in self.table.fields
+                    or len(parts) == 2
+                    and parts[1].upper() not in {"ASC", "DESC"}
+                ):
+                    raise ValueError("Repository ordering requires known fields and ASC/DESC")
+                direction = " " + parts[1].upper() if len(parts) == 2 else ""
+                # Output aliases are TEXT for lossless transport. Qualify the
+                # real column so SQLite still sorts integers numerically.
+                ordering.append(quote(self.table.name) + "." + quote(parts[0]) + direction)
+            sql += " ORDER BY " + ",".join(ordering)
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params = (*params, limit, offset)

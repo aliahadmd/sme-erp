@@ -137,7 +137,7 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last backend verification passed 284 tests and lint/schema checks. The
+The last backend verification passed 306 tests and lint/schema checks. The
 frontend passes 14 tests and build/lint. Real Queue and Cron
 checks verify notifications, deduplication, DLQ replay, quote expiry and audit
 retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
@@ -150,7 +150,7 @@ One daily Durable Object budget covers every actual inference attempt. Quota
 exhaustion defers bulk work in D1 for Cron to resume. Run
 `uv run python -u scripts/verify_ai_remote.py` for the real-model staging proof.
 Login budgets now expire through alarms while preserving in-flight checks.
-Live mail, full backup/recovery, frontend assets, browser/role acceptance and the
+Live mail, full recovery acceptance, frontend assets, browser/role acceptance and the
 full demo seed remain unfinished. This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
@@ -178,12 +178,20 @@ Append `--recovery` to the remote verifier only when the configured recovery
 database is empty. The endpoint rejects an occupied target and never resets
 it. It supports only the proof's TEXT/INTEGER tables, up to 4 MiB and 400 restore
 statements. This establishes exact-value recovery for the feasibility dataset;
-the full backup still needs pagination, integration of the write-pause guards,
-retention and restore reconciliation for all ERP tables. The application now
-has database-enforced expiring leases covering commands, authentication and
-background writes. Reads stay available and writes return `503 maintenance`;
-no automatic pause or full backup schedule is enabled yet. See the
-[write-pause evidence](../docs/CLOUDFLARE_IMPLEMENTATION.md#full-backup-write-pause-foundation).
+the separate application backup now provides pagination, fenced write pauses,
+retention and restore reconciliation for all ERP data tables. Reads stay
+available and protected writes return `503 maintenance` during capture.
+See the [full recovery evidence](../docs/CLOUDFLARE_IMPLEMENTATION.md#full-r2-backup-and-isolated-d1-recovery)
+and [operator runbook](../docs/CLOUDFLARE_RECOVERY.md). The application proof is:
+
+```sh
+uv run python -u scripts/verify_backups_remote.py
+```
+
+Resume an interrupted proof with `--resume`; use `--backup-only` when the
+configured recovery target already contains a prior accepted recovery. Never
+reset that database to rerun a verifier. The script checkpoints fixture/job IDs
+and reverses its synthetic source invoice/payment after success.
 
 ## Business schema foundation
 
@@ -208,6 +216,6 @@ migration for later schema changes rather than rewriting its history.
 never be applied to the final ERP database. The full business schema has been
 created in the isolated `erp-staging-20261113` database; authentication,
 management, accounting, orders/quotations, inventory, invoicing/payments, HR,
-reporting and background/AI APIs now use it. Fifteen application migrations
-are recorded there. Full recovery, the demo seed and complete deployment/acceptance
+reporting and background/AI APIs now use it. Sixteen application migrations
+are recorded there. Full recovery acceptance, the demo seed and complete deployment/acceptance
 remain unfinished.

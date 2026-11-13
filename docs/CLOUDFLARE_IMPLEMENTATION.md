@@ -5,7 +5,7 @@ Status: in progress. The active objective is the complete migration described in
 functionality. A fresh demo database is authorized. This file records evidence
 and outstanding work; the feasibility slice is a gate, not the final deliverable.
 
-Last updated: 13 November 2026. The architecture remains Python Workers with
+Last updated: 14 November 2026 (UTC+08:00). The architecture remains Python Workers with
 FastAPI/Pydantic and D1. The synchronous SQLAlchemy adapter passed the isolated
 runtime proof; the application currently uses typed native D1 repositories and
 batches for explicit persistence and atomic multi-statement commands. No
@@ -14,7 +14,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 ## Execution stages
 
 - [x] Prove basic Python/FastAPI/Pydantic and SQLAlchemy D1 adapter execution in Workers.
-- [ ] Prove exact 18-digit storage/transport, guarded atomic commands, concurrency,
+- [x] Prove exact 18-digit storage/transport, guarded atomic commands, concurrency,
       idempotency, and exact backup/restore on D1.
 - [ ] Adapt the full API and business modules to the new persistence/runtime.
 - [ ] Replace Redis/arq with D1 sessions, Durable Objects, Queues and Cron.
@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery and write-pause guards have passed 284 local backend
+  AI, mail delivery and full backup/recovery have passed 306 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -731,17 +731,85 @@ stock and books.
 `scripts/verify_maintenance_remote.py` prepares/checks/revokes
 an isolated proof session around an operator-held staging lease.
 
-Full paginated R2 capture, resumable manifests/scheduling/retention, restoration
-into a separate D1 database, session invalidation and pending-side-effect
-reconciliation are still required. No automatic pause or backup schedule is
-enabled by this foundation alone.
+The following phase integrates these guards with full capture, isolated
+recovery and operational reconciliation.
+
+## Full R2 backup and isolated D1 recovery
+
+Migration `0016_full_backups.sql` is applied in staging with SHA-256
+`bfe6f5cbb6e1f653bb5fe9945cc7bc5e36b690b6eb62c23117ee87ea74775311`.
+Worker version `b24d4c24-d39d-4bcd-9a28-2af8ed78f9ca` reports 3,512 ms startup.
+The private `erp-staging-backups-20261113` R2 bucket has its managed public
+domain disabled. Recovery targets the separate D1 database
+`d7bb688c-8009-4eb0-a21f-993310c23fcc`; an occupied target is never reset.
+
+- A separate `ERPBackups` Durable Object advances bounded work. It performs R2
+  I/O outside the financial command coordinator. D1 fences, version guards and
+  durable checkpoints remain authoritative across controller recreation.
+- Snapshots cover the complete schema and all 62 business/authentication/job
+  data tables. Seven control/assertion tables are excluded from captured rows,
+  including the backup's own progress and restore receipts. The schema contains
+  69 tables and retains all 186 maintenance DML guards.
+- Data pages preserve row IDs and exact INTEGER coefficients as text. The
+  source query bounds page size before crossing the native binding boundary.
+  Pages and manifests carry SHA-256 checksums. D1 seals the final consistent
+  manifest and releases writers atomically; only then does R2 receive a commit
+  marker and private discovery index. A provisional manifest is insufficient
+  for recovery.
+- Recovery requires an empty target or its own matching anchor. Atomic target
+  receipts make DDL/data steps resumable after a lost commit response. Rows load
+  in dependency order; nullable self references are repaired in a second pass.
+  Every captured page, table count, schema definition and foreign key is checked
+  before operational reconciliation. Financial immutability triggers are then
+  active in the restored database.
+- Reconciliation revokes captured sessions, holds external delivery and AI,
+  marks ambiguous mail for operator review, and gives pending restored events a
+  sticky recovery flag. Old overdue reminders remain held after global policy
+  release until deliberately reviewed. Database restoration does not retract
+  external effects delivered after the capture point.
+- Minute Cron advances jobs. Daily requests use a business-date idempotency key.
+  Retention defaults to 35 days, protects active restores, removes discovery
+  markers before data, and deletes through paginated native R2 listings.
+  Administrators can cancel an unsealed capture; failed/expired captures cannot
+  publish a valid archive.
+
+Twenty-two local backup cases bring the complete suite to 306 passing tests.
+They cover full schema/value recovery, 18-digit amounts and int64 row IDs,
+nullable self references, lost R2/target/seal responses, controller recreation,
+lease expiry, maximum pause duration, corruption, provisional manifests,
+occupied/changed targets, cancellation, retention, archive import and roles.
+Native R2 metadata contains opaque JavaScript objects inside the list result;
+the adapter handles those attributes explicitly. RPC preserves structured
+domain errors across Python/JavaScript boundaries.
+
+The first native archive committed 6,591 rows in 176 pages (3,589,998 data bytes).
+Capture/publication took 387 seconds in this staging dataset. This measurement
+does not establish production-scale recovery or a maximum-data operating limit.
+The full native restore completed in 17 minutes 37 seconds, including client
+interruption and continued Cron-driven progress. Its result verifies all 62
+data tables/176 pages, exact rows, schema and foreign keys before reconciliation.
+Independent target reads confirmed the 18-digit `999999999999999999` coefficient,
+one cent paid, twelve correctly ordered invoice lines, zero live captured
+sessions and the external recovery hold. The source payment and invoice were
+then voided, with no residual SQL assertions. The target remains isolated.
+These are staging measurements, not accepted production RPO/RTO guarantees.
+An additional native capture was expired deliberately after seven pages/298
+rows. It failed with `maintenance_lease_lost`, published no discovery entry,
+and released normal authentication/writes. Only that failed probe's timestamp
+was aged to exercise retention. Native Cron then requested one
+`daily:2026-11-14` backup during a temporary current-hour schedule window;
+capture continues across the redeploy. The final deployed schedule is enabled
+at 02:00 UTC+08:00. Scheduled completion, partial-file cleanup and native
+lost-metadata import are still being verified. See the
+[operator runbook](CLOUDFLARE_RECOVERY.md) and the ignored verification checkpoints
+before resuming an interrupted proof.
 
 ## HTTP surface coverage
 
 The original application's current OpenAPI inventory contains 139 method/path
-pairs. The native Worker now contains all 139, six job-operations endpoints
-and four staging-only operations: 149 operations
-across 113 OpenAPI paths.
+pairs. The native Worker now contains all 139, six job-operations endpoints,
+nine backup/recovery operations and four staging-only operations: 158 operations
+across 121 OpenAPI paths.
 The captured inventory is `cloudflare/fixtures/reference_routes.json`; the
 route-presence regression test requires no missing original operation. Route
 presence is not proof of full workflow, role or operational parity.
@@ -749,7 +817,7 @@ presence is not proof of full workflow, role or operational parity.
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
-R2 production backup/recovery and scheduling, live email acceptance/delivery,
+backup scheduling/retention acceptance and realistic recovery capacity, live email acceptance/delivery,
 demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs

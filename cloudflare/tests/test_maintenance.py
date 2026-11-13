@@ -148,7 +148,7 @@ async def test_competing_acquisitions_have_one_winner(env):
 
 async def test_new_or_modified_schema_cannot_be_backed_up_without_all_guards(env):
     db = D1Database(env.DB)
-    assert len(await coverage(db)) == 64
+    assert len(await coverage(db)) == 69
     env.DB.connection.execute("CREATE TABLE unguarded(id TEXT PRIMARY KEY) STRICT")
     with pytest.raises(DomainError, match="missing a verified"):
         await acquire(db, "unsafe-backup")

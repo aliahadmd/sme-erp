@@ -33,12 +33,12 @@ class Prepared:
 
 
 class SQLiteD1:
-    def __init__(self):
+    def __init__(self, *, empty=False):
         self.connection = sqlite3.connect(":memory:", isolation_level=None)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.before_batch = None
-        for path in sorted((ROOT / "migrations").glob("*.sql")):
+        for path in [] if empty else sorted((ROOT / "migrations").glob("*.sql")):
             self.connection.executescript(path.read_text())
 
     def prepare(self, sql):

@@ -7,6 +7,8 @@ from workers import WorkerEntrypoint, asgi
 from erp_cf.ai_worker import AIBudget as AIBudget
 from erp_cf.app import create_app
 from erp_cf.background import consume, dispatch_best_effort, tick
+from erp_cf.backup_schedule import run as run_backups
+from erp_cf.backup_worker import ERPBackups as ERPBackups
 from erp_cf.command_worker import ERPCommands as ERPCommands
 from erp_cf.limits_worker import LoginGuard as LoginGuard
 
@@ -32,4 +34,6 @@ class Default(WorkerEntrypoint):
 
     async def scheduled(self, controller, env, ctx):
         # Python's scheduled entrypoint requires all four arguments.
-        await tick(self.env, int(controller.scheduledTime))
+        scheduled = int(controller.scheduledTime)
+        if not await run_backups(self.env, scheduled):
+            await tick(self.env, scheduled)

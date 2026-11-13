@@ -33,6 +33,16 @@ PERMANENT = {
 THROTTLED = {"E_RATE_LIMIT_EXCEEDED", "E_DAILY_LIMIT_EXCEEDED"}
 
 
+def native_payload(payload):
+    # This SDK does not wrap the SendEmail binding. Fully owned JS JSON avoids
+    # passing a borrowed Python dict proxy to its structured message builder.
+    try:
+        from js import JSON
+    except ImportError:
+        return payload
+    return JSON.parse(json.dumps(payload, ensure_ascii=False))
+
+
 def mode(env):
     value = str(getattr(env, "EMAIL_MODE", "disabled"))
     if value not in {"disabled", "test", "live"}:
@@ -80,7 +90,7 @@ async def send(env, payload):
     if mode(env) != "live":
         raise DomainError("Live email is disabled", code="email_disabled", status=503)
     try:
-        result = plain(await asyncio.wait_for(env.EMAIL.send(payload), timeout=60))
+        result = plain(await asyncio.wait_for(env.EMAIL.send(native_payload(payload)), timeout=60))
         identity = result["messageId"]
         if not isinstance(identity, str) or not identity.strip() or len(identity) > 256:
             raise ValueError("Invalid email acceptance response")
