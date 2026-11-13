@@ -24,13 +24,16 @@ class Coordinator:
         from erp_cf.accounting_commands import COMMANDS as ACCOUNTING
         from erp_cf.core_commands import COMMANDS as CORE
         from erp_cf.documents import COMMANDS as DOCUMENTS
+        from erp_cf.hr_commands import COMMANDS as HR
         from erp_cf.inventory_commands import COMMANDS as INVENTORY
         from erp_cf.invoicing_commands import COMMANDS as INVOICING
         from erp_cf.master_commands import COMMANDS as MASTER
 
         operation = envelope.get("operation", "")
         try:
-            spec = (CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING).get(operation)
+            spec = (CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING | HR).get(
+                operation
+            )
             if spec is None:
                 raise NotFoundError("Unknown command")
             async with self.lock:

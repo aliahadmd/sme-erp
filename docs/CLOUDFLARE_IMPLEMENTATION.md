@@ -37,7 +37,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
-  orders/quotations, inventory and invoicing/payments have passed 155 local backend
+  orders/quotations, inventory, invoicing/payments and HR have passed 167 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -93,8 +93,8 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers, accounting, orders/quotations, inventory and invoicing/payments now use it.
-Nine application migrations are recorded
+handlers, accounting, orders/quotations, inventory, invoicing/payments and HR now use it.
+Ten application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -369,10 +369,50 @@ Customer email requests currently persist in the outbox; queue dispatch and actu
 delivery remain pending. The frontend is built/tested locally, with full browser
 and role acceptance still open. This milestone does not complete the migration.
 
+## HR and leave ownership
+
+Application version `c92d36d9-8362-4501-a461-3be3c3f7e091` passes
+`cloudflare/scripts/verify_hr_remote.py --failure-probe` on isolated staging.
+This deployment reported an 8,311 ms startup; capacity/startup headroom acceptance
+remains open as the remaining modules are added.
+
+- Departments, employees, login-to-employee links, leave types, annual allowances,
+  requests and approve/reject/cancel actions preserve the original API shapes.
+  The original three HR scenarios and two self-service/audit regressions pass
+  unchanged against the native D1 application.
+- Employees see and request their own leave; approvers can manage other employees'
+  requests, and cannot decide their own. Decisions notify the linked employee.
+  Request creation notifies active approvers, including superusers. These in-app
+  notifications, employee/request revisions, audit and receipt commit together;
+  this path sends no external email.
+- Every request creation or decision touches its employee revision in the same
+  batch. Direct competing overlap/allowance plans and final decisions have one
+  winner independently of the coordinator lock. Pending and
+  approved commitments count against each calendar year's allowance.
+- The shared Monday-Friday date helper now computes by weeks/year rather than
+  iterating every day; leap-year and date-boundary oracle checks agree. Public
+  holidays remain outside the existing model. Leave-type accrual configuration
+  is retained, and days use exact one-place storage/transport.
+- Migration `0010` adds supporting indexes and protects request content/final
+  decisions from mutation/deletion. Real D1 rejects even a no-op update to a
+  finalized request. Local failures at each request commit stage leave employee
+  state, requests, notifications, audits and receipts unchanged.
+- Real D1 notification-insertion failure rolls back the request and its command
+  claim; a corrected request with that key succeeds once. Concurrent retries,
+  competing decisions, overlap/weekend guards, allowance exhaustion, cross-year
+  requests, cancellation, role-scoped reads and no-self-approval all pass.
+
+The temporary `cf_hr_rollback_probe` trigger has been removed and its absence
+verified. Synthetic test users were deactivated and their sessions revoked;
+foreign-key checks and residual-assertion checks are clean. The shared schemas
+and date helper remain importable through the legacy HR router. HR browser/role
+acceptance remains part of the overall frontend milestone. Readiness and the
+91-path OpenAPI document both serve successfully after the remote checks.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port HR and the remaining
-reporting handlers onto the typed repositories and atomic command path. Then
+The full ERP migration remains incomplete. Next, port the remaining reporting
+handlers onto the typed repositories with exact, consistent aggregates. Then
 complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,
 overdue notifications, demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and

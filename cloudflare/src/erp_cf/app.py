@@ -12,6 +12,7 @@ from erp_cf.core_api import router as core_router
 from erp_cf.db import D1Database
 from erp_cf.document_api import routers as document_routers
 from erp_cf.errors import register_handlers
+from erp_cf.hr_api import router as hr_router
 from erp_cf.identity import environment
 from erp_cf.inventory_api import router as inventory_router
 from erp_cf.invoicing_api import router as invoicing_router
@@ -28,6 +29,7 @@ def create_app(test_environment=None):
     app.include_router(accounting_router)
     app.include_router(inventory_router)
     app.include_router(invoicing_router)
+    app.include_router(hr_router)
     for router in document_routers:
         app.include_router(router)
 

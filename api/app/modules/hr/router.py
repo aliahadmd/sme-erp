@@ -1,11 +1,10 @@
 """HR module API — employees, departments, leave requests."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +19,18 @@ from app.modules.hr.models import (
     LeaveRequest,
     LeaveType,
 )
+from app.modules.hr.schemas import (
+    DepartmentIn,
+    DepartmentOut,
+    EmployeeIn,
+    EmployeeOut,
+    LeaveRequestIn,
+    LeaveRequestOut,
+    LeaveTypeIn,
+    LeaveTypeOut,
+)
 from app.shared.numbering import next_number
+from app.shared.working_days import working_days_by_year as working_days_by_year
 
 router = APIRouter(prefix="/hr")
 
@@ -35,15 +45,6 @@ async def _employee_or_404(
 
 
 # ---------------------------------------------------------------- departments
-class DepartmentIn(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-
-
-class DepartmentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    name: str
 
 
 @router.get("/departments", response_model=list[DepartmentOut])
@@ -82,28 +83,6 @@ async def create_department(
 
 
 # ------------------------------------------------------------------ employees
-class EmployeeIn(BaseModel):
-    full_name: str = Field(min_length=1, max_length=200)
-    work_email: str | None = None
-    department_id: uuid.UUID | None = None
-    position: str | None = None
-    hired_at: date | None = None
-    # Link to a login so the employee can request their own leave.
-    user_id: uuid.UUID | None = None
-
-
-class EmployeeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    number: str
-    full_name: str
-    work_email: str | None
-    department_id: uuid.UUID | None
-    position: str | None
-    hired_at: date | None
-    status: str
-    user_id: uuid.UUID | None = None
 
 
 @router.get("/employees/me", response_model=EmployeeOut)
@@ -178,19 +157,6 @@ async def create_employee(
 
 
 # ---------------------------------------------------------------------- leave
-class LeaveTypeIn(BaseModel):
-    name: str = Field(min_length=1, max_length=50)
-    days_per_year: Decimal = Field(0, ge=0, le=365)
-    accrues: bool = False
-
-
-class LeaveTypeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    name: str
-    days_per_year: Decimal
-    accrues: bool
 
 
 @router.get("/leave-types", response_model=list[LeaveTypeOut])
@@ -230,27 +196,6 @@ async def create_leave_type(
 
 
 # ---------------------------------------------------------------------- leave
-class LeaveRequestIn(BaseModel):
-    employee_id: uuid.UUID
-    type_id: uuid.UUID
-    date_from: date
-    date_to: date
-    reason: str | None = Field(None, max_length=300)
-
-
-class LeaveRequestOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    employee_id: uuid.UUID
-    type_id: uuid.UUID
-    date_from: date
-    date_to: date
-    days: Decimal
-    reason: str | None
-    status: str
-    approver_id: uuid.UUID | None
-    decided_at: date | None
 
 
 async def _has_permission(session: AsyncSession, user_id: uuid.UUID, code: str) -> bool:
@@ -298,18 +243,6 @@ async def list_leave_requests(
             return []
         stmt = stmt.where(LeaveRequest.employee_id == own.id)
     return list((await session.scalars(stmt)).all())
-
-
-def working_days_by_year(date_from: date, date_to: date) -> dict[int, Decimal]:
-    """Monday–Friday days in [date_from, date_to], split per calendar year
-    (public holidays are not modelled yet)."""
-    days: dict[int, Decimal] = {}
-    current = date_from
-    while current <= date_to:
-        if current.weekday() < 5:
-            days[current.year] = days.get(current.year, Decimal("0")) + 1
-        current += timedelta(days=1)
-    return days
 
 
 async def _check_allowance(

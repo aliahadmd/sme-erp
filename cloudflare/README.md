@@ -119,8 +119,14 @@ FIFO allocations by currency. Real D1 checks cover forced rollback, retries,
 refunds, 18-digit values and a full buy/sell/pay cycle with exact stock/book reversals.
 Invoice email requests are durable outbox records; actual delivery is pending.
 
-The last verification passed 155 backend and 14 frontend tests, plus frontend
-build/lint and backend lint/schema checks. HR/remaining reporting, AI,
+HR now includes departments/employees, linked self-service identities, leave
+types and requests, yearly allowance/overlap guards and immutable decisions.
+Employee revisions serialize competing plans; in-app notifications and audit
+share the request's atomic batch. Real D1 checks cover forced rollback,
+concurrent decisions, ownership, cross-year allowances and cancellation.
+
+The last verification passed 167 backend and 14 frontend tests, plus frontend
+build/lint and backend lint/schema checks. Remaining reporting, AI,
 overdue notifications, jobs,
 frontend assets and the full demo seed remain in progress. This Worker is not
 yet the complete ERP.
