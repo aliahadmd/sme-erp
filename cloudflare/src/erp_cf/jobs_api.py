@@ -3,16 +3,17 @@
 import re
 import time
 import uuid
+from typing import Literal
 
 from app.shared.pagination import PageParamsDep
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from erp_cf.background import tick
 from erp_cf.bootstrap import staging_secret
 from erp_cf.command_bus import invoke
 from erp_cf.db import D1Database, Statement, plain
-from erp_cf.errors import PermissionDeniedError, ValidationError
+from erp_cf.errors import NotFoundError, PermissionDeniedError, ValidationError
 from erp_cf.identity import current_actor, environment, require
 
 router = APIRouter()
@@ -107,6 +108,84 @@ async def replay(identity: str, request: Request):
     if not re.fullmatch(r"[0-9a-f]{64}", identity):
         raise ValidationError("Invalid dead letter ID")
     return await invoke(request, "jobs.dead_letter.replay", {"id": identity})
+
+
+def mail_id(identity):
+    if not re.fullmatch(r"[0-9a-f]{64}", identity):
+        raise ValidationError("Invalid mail ID")
+
+
+@router.get("/api/jobs/mail", dependencies=[Depends(require("core.settings.read"))])
+async def mail_status(request: Request, params: PageParamsDep):
+    env = environment(request)
+    result = await D1Database(env.DB).batch(
+        [
+            Statement(
+                "SELECT id,status,kind,source_id,attempt_id,provider_id,last_error,claim_until,"
+                "created_at,completed_at,CAST(version AS TEXT) AS version "
+                "FROM cf_mail_outbox WHERE org_id=? ORDER BY created_at DESC,id DESC "
+                "LIMIT ? OFFSET ?",
+                (str(env.ORG_ID), params.limit, params.offset),
+            ),
+            Statement(
+                "SELECT CAST(COUNT(*) AS TEXT) AS n FROM cf_mail_outbox WHERE org_id=?",
+                (str(env.ORG_ID),),
+            ),
+        ]
+    )
+    return {
+        "items": [plain(row) for row in result[0]["results"]],
+        "total": int(plain(result[1]["results"][0])["n"]),
+        "limit": params.limit,
+        "offset": params.offset,
+    }
+
+
+@router.get(
+    "/api/jobs/mail/{identity}/attempts", dependencies=[Depends(require("core.settings.read"))]
+)
+async def mail_attempts(identity: str, request: Request, params: PageParamsDep):
+    mail_id(identity)
+    env = environment(request)
+    db, org = D1Database(env.DB), str(env.ORG_ID)
+    if not await db.first("SELECT id FROM cf_mail_outbox WHERE id=? AND org_id=?", (identity, org)):
+        raise NotFoundError("Mail intent not found")
+    result = await db.batch(
+        [
+            Statement(
+                "SELECT id,event_id,CAST(generation AS TEXT) AS generation,state,payload_hash,"
+                "provider_id,error_code,created_at,finished_at FROM cf_mail_attempts "
+                "WHERE org_id=? AND mail_id=? ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+                (org, identity, params.limit, params.offset),
+            ),
+            Statement(
+                "SELECT CAST(COUNT(*) AS TEXT) AS n FROM cf_mail_attempts "
+                "WHERE org_id=? AND mail_id=?",
+                (org, identity),
+            ),
+        ]
+    )
+    return {
+        "items": [plain(row) for row in result[0]["results"]],
+        "total": int(plain(result[1]["results"][0])["n"]),
+        "limit": params.limit,
+        "offset": params.offset,
+    }
+
+
+class MailResolutionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    action: Literal["retry", "mark_sent", "cancel"]
+    reason: str = Field(min_length=5, max_length=500)
+    allow_possible_duplicate: bool = Field(default=False, strict=True)
+    provider_id: str | None = Field(default=None, min_length=1, max_length=256)
+
+
+@router.post("/api/jobs/mail/{identity}/resolve")
+async def mail_resolve(identity: str, body: MailResolutionInput, request: Request):
+    mail_id(identity)
+    return await invoke(request, "mail.resolve", {"id": identity, "body": body.model_dump()})
 
 
 class TickInput(BaseModel):

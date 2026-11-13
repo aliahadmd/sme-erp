@@ -228,6 +228,10 @@ async def consume(env, batch):
                     from erp_cf.ai_jobs import process_ai_event
 
                     await process_ai_event(env, body, event)
+                elif event and event["event_type"] == "mail.delivery.requested":
+                    from erp_cf.mail_jobs import process_mail_event
+
+                    await process_mail_event(env, body)
                 else:
                     await system(
                         env,

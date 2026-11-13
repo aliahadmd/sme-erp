@@ -34,6 +34,7 @@ def enable(env, *, mode="disabled"):
     env.JOBS_ENABLED = "true"
     env.EVENT_QUEUE_NAME, env.DEAD_LETTER_QUEUE_NAME = "events", "dead"
     env.QUEUE_MAX_RETRIES, env.EMAIL_MODE = "3", mode
+    env.EMAIL_FROM = "erp@example.com"
     env.EVENTS = Queue()
     return env.EVENTS
 

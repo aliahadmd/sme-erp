@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  and AI have passed 222 local backend
+  AI and mail delivery have passed 274 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -503,10 +503,10 @@ application Worker. No production domain, VPS or production database changed.
   cursor/version checkpoints. Daily job keys prevent repeated effects. Staging
   explicitly uses Shanghai's fixed UTC+08:00 business calendar; this is not a
   general daylight-saving timezone implementation.
-- `EMAIL_MODE=disabled` records completed disabled intents and sends no mail.
-  Test mode likewise records intents without a network send. The live Email
-  Sending provider is still unfinished: live intents remain pending and their
-  delivery event fails explicitly instead of being silently discarded.
+- At this milestone, `EMAIL_MODE=disabled` recorded completed disabled intents
+  and sent no mail. The later delivery implementation below adds rendering,
+  attempt receipts and operator reconciliation. Disabled historical intents
+  remain disabled when the staging mode changes.
 
 Observed staging checks:
 
@@ -624,11 +624,74 @@ The last backend check passes 222 tests. The changed frontend passes fourteen
 tests, TypeScript/Vite build and lint. Live Email Sending, full recovery,
 realistic capacity and complete browser/cutover acceptance are still open.
 
+## Email delivery and reconciliation
+
+The application now includes a Cloudflare Email Sending binding adapter and
+durable delivery ledger. Migration `0014_mail_delivery.sql` is applied in staging
+with SHA-256 `62214384fb6b7767d3a3624740777ee64c452ccbb45cbada7520fe4a57c6dcec`.
+The staging Worker version is `bb2cbab3-32a5-4fe7-ae99-52facb37a02b`, with a
+reported startup time of 2,140 ms. Its binding restricts senders to
+`erp@aliahad.com`; `EMAIL_MODE=test` prevents outbound provider calls.
+
+- `disabled` stores a completed disabled intent. `test` runs an intent through
+  the real Queue, source checks, rendering and D1 attempt receipt, without
+  invoking `EMAIL.send`. Historical disabled/test intents are not automatically
+  delivered when a deployment enables live mode.
+- Live delivery commits a guarded pre-send claim and payload hash before network
+  I/O. The call runs outside the financial coordinator lock, with a 60-second
+  wait and a 120-second claim lease. Concurrent duplicates cannot claim the same
+  intent. A crashed/expired claim becomes uncertain; it is never automatically
+  resent. Existing outbox recovery can take fifteen minutes to revisit it.
+- Recipient addresses, active staff, notification preferences, permissions and
+  invoice/payment status are rechecked before claiming. SQL guards reject
+  changes between planning reads and commit. Overdue reminders use the current
+  exact open balance and are cancelled after payment. Rendering includes plain
+  text and escaped HTML; headers exclude recipient-controlled line breaks.
+- A provider message ID records acceptance as `sent`; it is not an inbox-delivery
+  receipt. Known validation/configuration rejections become `dead`. Explicit
+  quota/rate rejections defer in D1 before the Queue message is acknowledged.
+  Unknown responses, timeouts and internal/delivery errors become `uncertain`.
+  A late provider receipt is preserved even after an operator replaces/cancels
+  that attempt; it cannot overwrite the operator's newer decision.
+- `GET /api/jobs/mail` and `GET /api/jobs/mail/{id}/attempts` require
+  `core.settings.read`. Responses are bounded and omit addresses, subjects and
+  bodies. `POST /api/jobs/mail/{id}/resolve` requires `core.settings.update` and
+  a reason. Operators can cancel, confirm provider acceptance with its ID, or
+  retry. Retrying uncertain mail requires `allow_possible_duplicate: true`.
+  Decisions are audited and share the guarded D1 batch boundary.
+
+The account/domain prerequisite check reports the existing `aliahad.com` sender
+domain enabled, arbitrary recipients and a 1,000/day account quota. No DNS or
+domain onboarding changes were made. The current Workers API documents no
+idempotency key, and `Message-ID` is platform-controlled; `X-ERP-Mail-ID` is a
+correlation header, not provider deduplication.
+[Workers API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/),
+[header rules](https://developers.cloudflare.com/email-service/reference/headers/)
+
+Local checks cover provider acceptance/rejection, quotas, malformed/ambiguous
+responses, lost claim/outcome responses, late receipts, source/permission changes,
+concurrent plans, operator permissions and rollback at every claim/outcome batch
+statement. The full backend suite passes 274 tests; lint, formatting, schema and
+Build Output checks pass. `scripts/verify_mail_remote.py` exercises real Queue/D1
+test delivery and reverses its synthetic invoice. Live provider acceptance,
+inbox receipt and asynchronous suppression/bounce feedback remain unverified.
+Observed native test-mode proof on this version: four intents (staff invoice,
+staff overdue, customer invoice and manual invoice) each produced one test
+attempt and completed event receipt. Repeating the manual email command returned
+the same queued response and produced one intent. Operational responses omitted
+mail content, and the synthetic invoice was voided after verification.
+Eight duplicate copies of these completed event envelopes were then pushed to
+the native queue. D1 recorded eight `already_processed` prepare receipts; the
+four intents and four test attempts were unchanged. Foreign-key checks were
+clean, SQL assertions were empty, and the account still reported zero sends.
+No real email has been sent by this migration work.
+
 ## HTTP surface coverage
 
 The original application's current OpenAPI inventory contains 139 method/path
-pairs. The native Worker now contains all 139, three job-operations endpoints
-and four staging-only operations: 146 operations across 110 OpenAPI paths.
+pairs. The native Worker now contains all 139, six job-operations endpoints
+and four staging-only operations: 149 operations
+across 113 OpenAPI paths.
 The captured inventory is `cloudflare/fixtures/reference_routes.json`; the
 route-presence regression test requires no missing original operation. Route
 presence is not proof of full workflow, role or operational parity.
@@ -636,7 +699,7 @@ presence is not proof of full workflow, role or operational parity.
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
-R2 production backup/recovery and scheduling, Email Sending,
+R2 production backup/recovery and scheduling, live email acceptance/delivery,
 demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs

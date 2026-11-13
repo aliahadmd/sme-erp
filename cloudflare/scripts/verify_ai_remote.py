@@ -36,7 +36,7 @@ async def main():
 
         assert (await call("GET", "/api/meta"))["environment"] == "staging"
         initial = await call("GET", "/api/jobs/status")
-        assert initial["ai"]["enabled"] and initial["email_mode"] == "disabled"
+        assert initial["ai"]["enabled"] and initial["email_mode"] in {"disabled", "test"}
         before = initial["ai"]["budget"]["used"]
         sentinel = "ERP-CF-AI-PROOF-" + run
         echo = await call("POST", "/api/ai/echo", {"prompt": sentinel})

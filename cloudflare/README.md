@@ -118,8 +118,12 @@ on-account allocations, refunds, statements and exact voids. Immutable clearing
 effects preserve original FX and residual base cents. The payment UI restricts
 FIFO allocations by currency. Real D1 checks cover forced rollback, retries,
 refunds, 18-digit values and a full buy/sell/pay cycle with exact stock/book reversals.
-Invoice email requests become durable mail intents. Staging uses disabled mode;
-the live Email Sending provider is still pending.
+Invoice email requests become durable mail intents. Staging uses test mode:
+Queues renders messages and records D1 attempt receipts without calling the
+Email Sending provider. The live adapter records a claim before sending and
+preserves ambiguous outcomes for deliberate operator reconciliation. See
+[mail operations](../docs/CLOUDFLARE_IMPLEMENTATION.md#email-delivery-and-reconciliation)
+for its limits and verification status.
 
 HR now includes departments/employees, linked self-service identities, leave
 types and requests, yearly allowance/overlap guards and immutable decisions.
@@ -133,11 +137,13 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last backend verification passed 222 tests and lint/schema checks. The
+The last backend verification passed 274 tests and lint/schema checks. The
 frontend passes 14 tests and build/lint. Real Queue and Cron
 checks verify notifications, deduplication, DLQ replay, quote expiry and audit
 retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
-delivery/reversal proof. Only disabled email intents are produced.
+delivery/reversal proof. Disabled and test email modes perform no outbound send.
+Run `uv run python -u scripts/verify_mail_remote.py` to exercise the native
+Queue/D1 test delivery path; this does not prove live email acceptance/delivery.
 All 139 original HTTP operations are now present. Workers AI handles echo,
 summaries and product suggestions; bulk results enter an atomic review queue.
 One daily Durable Object budget covers every actual inference attempt. Quota
@@ -197,6 +203,7 @@ migration for later schema changes rather than rewriting its history.
 `fixtures/0001_feasibility.sql` is excluded from application migrations. It must
 never be applied to the final ERP database. The full business schema has been
 created in the isolated `erp-staging-20261113` database; authentication,
-management, manual accounting, order/quotation and inventory APIs now use it.
-Eight application migrations are recorded there. The remaining business handlers
-and full demo seed still need porting.
+management, accounting, orders/quotations, inventory, invoicing/payments, HR,
+reporting and background/AI APIs now use it. Fourteen application migrations
+are recorded there. Full recovery, the demo seed and complete deployment/acceptance
+remain unfinished.

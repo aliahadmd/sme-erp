@@ -61,9 +61,10 @@ async def consume_event(plan, env, payload):
             )
             outcome = "processed"
     elif kind == "mail.delivery.requested":
-        # This explicit failure preserves durable intents until Email Sending
-        # is configured; disabled/test modes never produce these messages.
-        raise DomainError("Email sending is not configured", code="email_unavailable", status=503)
+        # External I/O belongs in the queue handler, outside the command lock.
+        raise DomainError(
+            "Use the mail delivery handler", code="mail_dispatch_required", status=409
+        )
     elif kind == "ai.batch.requested":
         from erp_cf.ai_commands import batch_page
 

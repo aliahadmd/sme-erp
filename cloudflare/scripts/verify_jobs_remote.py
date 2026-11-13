@@ -49,7 +49,7 @@ async def main(replay_event=None, resume=False):
 
         assert (await call("GET", "/api/meta"))["environment"] == "staging"
         initial = await call("GET", "/api/jobs/status")
-        assert initial["enabled"] and initial["email_mode"] == "disabled"
+        assert initial["enabled"] and initial["email_mode"] in {"disabled", "test"}
 
         if replay_event:
             letters = await call("GET", "/api/jobs/dead-letters?limit=100")
@@ -207,7 +207,7 @@ async def main(replay_event=None, resume=False):
             headers={"X-Bootstrap-Token": private["BOOTSTRAP_TOKEN"]},
         )
         assert all(result[k]["status"] == "complete" for k in ["quotes", "audit", "overdue"])
-        print("PASS bounded scheduled maintenance and durable disabled-mail intents", flush=True)
+        print("PASS bounded scheduled maintenance and durable safe-mode mail intents", flush=True)
 
         # Do not count the manual proof as evidence for automatic Cron execution.
         manual_trigger = (await call("GET", "/api/jobs/status"))["scheduler"]["last_trigger_at"]

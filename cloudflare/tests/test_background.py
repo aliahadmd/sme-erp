@@ -450,7 +450,7 @@ async def test_mail_modes_never_silently_drop_live_intents(env):
         {"status": "pending", "subject": "Subject  Injected"}
     ]
     identity = rows(env, "SELECT id FROM cf_outbox")[0]["id"]
-    with pytest.raises(Exception, match="email_unavailable"):
+    with pytest.raises(Exception, match="mail_dispatch_required"):
         await system(env, "jobs.event", "live-mail", {"event_id": identity, "generation": 0})
     assert rows(env, "SELECT status FROM cf_mail_outbox")[0]["status"] == "pending"
 

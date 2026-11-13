@@ -74,7 +74,7 @@ class Notifications:
         mode = str(getattr(self.env, "EMAIL_MODE", "disabled"))
         if mode not in {"disabled", "test", "live"}:
             raise ValidationError("Invalid email delivery mode")
-        status, timestamp = (mode if mode != "live" else "pending"), now().isoformat()
+        status, timestamp = ("disabled" if mode == "disabled" else "pending"), now().isoformat()
         self.plan.statements.append(
             Statement(
                 "INSERT INTO cf_mail_outbox(id,org_id,event_id,recipient,user_id,preference,"
@@ -93,12 +93,17 @@ class Notifications:
                     str(source_id) if source_id else None,
                     status,
                     timestamp,
-                    timestamp if mode != "live" else None,
+                    timestamp if mode == "disabled" else None,
                 ),
             )
         )
-        if mode == "live":
-            self.plan.emit("mail.delivery.requested", {"mail_id": identity})
+        if mode != "disabled":
+            event = self.plan.emit("mail.delivery.requested", {"mail_id": identity})
+            self.plan.statements.append(
+                Statement(
+                    "UPDATE cf_mail_outbox SET delivery_event_id=? WHERE id=?", (event, identity)
+                )
+            )
         return identity
 
     async def many(
