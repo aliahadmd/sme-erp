@@ -13,21 +13,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, ValidationError
+from app.shared.document_states import EDITABLE_STATUSES as EDITABLE_STATUSES
+from app.shared.document_states import ORDER_TRANSITIONS as ORDER_TRANSITIONS
 from app.shared.totals import LineMath, compute_line, compute_totals
-
-ORDER_TRANSITIONS: dict[str, set[str]] = {
-    "draft": {"confirmed", "cancelled"},
-    "confirmed": {"cancelled", "delivered", "received", "invoiced"},
-    # delivered/received are set by the inventory module when goods move;
-    # invoiced/closed by the invoicing module.
-    "delivered": {"invoiced", "closed"},
-    "received": {"invoiced", "closed"},
-    "invoiced": {"closed"},
-    "closed": set(),
-    "cancelled": set(),
-}
-
-EDITABLE_STATUSES = {"draft"}
 
 
 def ensure_transition(current: str, target: str, label: str) -> None:

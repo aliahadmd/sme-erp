@@ -39,13 +39,23 @@ class Totals:
 
 def compute_totals(
     lines: list[tuple[Decimal | str, Decimal | str, Decimal | str, Decimal | str]],
+    *,
+    round_gross_per_line: bool = True,
 ) -> Totals:
-    """lines: (qty, unit_price, discount_pct, tax_rate_pct) tuples."""
+    """lines: (qty, unit_price, discount_pct, tax_rate_pct) tuples.
+
+    Quotations retain their existing unrounded-gross accumulation by passing
+    round_gross_per_line=False; their line bases/taxes still round per line.
+    """
     subtotal = Decimal("0.00")
     after_discount = Decimal("0.00")
     tax_total = Decimal("0.00")
     for qty, price, discount_pct, tax_rate in lines:
-        gross = line_total(qty, price, Decimal("0"))
+        gross = (
+            line_total(qty, price, Decimal("0"))
+            if round_gross_per_line
+            else Decimal(str(qty)) * Decimal(str(price))
+        )
         line = compute_line(qty, price, discount_pct, tax_rate)
         subtotal += gross
         after_discount += line.base

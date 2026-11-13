@@ -1,7 +1,6 @@
 """Contacts, catalog and currency commands on the shared native D1 batch path."""
 
 import uuid
-from decimal import DecimalException
 
 from app.modules.catalog.schemas import (
     ProductCategoryIn,
@@ -19,22 +18,8 @@ from app.modules.currencies.schemas import CurrencyIn, CurrencyOut, RateIn, Rate
 
 from erp_cf.db import assertion
 from erp_cf.errors import ConflictError, ValidationError
-from erp_cf.money import coefficient, quantize
 from erp_cf.numbering import next_number
-from erp_cf.store import tables
-
-
-def decimal_values(data, table):
-    result = dict(data)
-    for name, column in tables()[table].fields.items():
-        if column.kind == "decimal" and name in result and result[name] is not None:
-            try:
-                value = quantize(result[name], column.scale)
-                coefficient(value, column.scale, column.precision)
-            except (DecimalException, ValueError) as exc:
-                raise ValidationError(f"Invalid precision for {name}") from exc
-            result[name] = value
-    return result
+from erp_cf.store import decimal_values
 
 
 async def validate_links(plan, data, links):

@@ -24,21 +24,34 @@ def load_suite(name):
 CORE = load_suite("test_core")
 MASTER = load_suite("test_master_data")
 ACCOUNTING = load_suite("test_accounting")
+DOCUMENTS = load_suite("test_documents")
+QUOTES = load_suite("test_quotations")
 CASES = [
     function
-    for suite in [CORE, MASTER]
+    for suite in [CORE, MASTER, QUOTES]
     for name, function in vars(suite).items()
     if name.startswith("test_")
     and inspect.iscoroutinefunction(function)
     and set(inspect.signature(function).parameters) == {"client"}
-    and name != "test_ai_description_disabled_without_key"
+    and name
+    not in {"test_ai_description_disabled_without_key", "test_expired_quote_cannot_be_accepted"}
 ]
 CASES.append(ACCOUNTING.test_manual_entry_must_balance)
+DOCUMENT_CASES = [
+    function
+    for name, function in vars(DOCUMENTS).items()
+    if name.startswith("test_") and inspect.iscoroutinefunction(function)
+]
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda f: f.__name__)
 async def test_original_http_contract(case, client):
     await case(client)
+
+
+@pytest.mark.parametrize("case", DOCUMENT_CASES, ids=lambda f: f.__name__)
+async def test_original_document_contract(case, client):
+    await case(client, {})
 
 
 async def test_original_login_validation_variants(client):

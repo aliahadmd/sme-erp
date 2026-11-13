@@ -12,7 +12,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
@@ -21,11 +21,14 @@ from pydantic import BaseModel
 
 from erp_cf.db import AtomicCommands, CommandConflict, Statement, assertion
 from erp_cf.errors import ConflictError, NotFoundError, ValidationError
-from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coefficient
+from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coefficient, quantize
 
 SEARCH_COLUMNS = {
     "crm_contacts": {"name": "_name_fold", "code": "_code_fold", "legal_name": "_legal_fold"},
     "catalog_products": {"name": "_name_fold", "sku": "_sku_fold"},
+    "sales_sales_orders": {"number": "_number_fold", "customer_name": "_party_fold"},
+    "purchasing_purchase_orders": {"number": "_number_fold", "supplier_name": "_party_fold"},
+    "sales_quotations": {"number": "_number_fold", "customer_name": "_party_fold"},
 }
 
 
@@ -219,6 +222,19 @@ def tables():
     )
 
 
+def decimal_values(data, table):
+    result = dict(data)
+    for name, column in tables()[table].fields.items():
+        if column.kind == "decimal" and name in result and result[name] is not None:
+            try:
+                value = quantize(result[name], column.scale)
+                coefficient(value, column.scale, column.precision)
+            except (DecimalException, ValueError) as exc:
+                raise ValidationError(f"Invalid precision for {name}") from exc
+            result[name] = value
+    return result
+
+
 class Repository:
     def __init__(self, db, name: str, org_id: str | None = None):
         self.db = db
@@ -410,6 +426,21 @@ class UnitOfWork:
                 "ip": ip,
             },
         )
+
+    def emit(self, event_type, payload):
+        event_id = str(uuid.uuid7())
+        self.statements.append(
+            Statement(
+                "INSERT INTO cf_outbox(id,command_id,event_type,payload_json) VALUES (?,?,?,?)",
+                (
+                    event_id,
+                    self.identity,
+                    event_type,
+                    json.dumps(wire({**payload, "org_id": self.org_id}), separators=(",", ":")),
+                ),
+            )
+        )
+        return event_id
 
     async def replay(self):
         try:

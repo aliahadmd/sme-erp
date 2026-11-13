@@ -15,7 +15,7 @@ class OrderLineIn(BaseModel):
     description: str | None = None
     qty: Decimal = Field(gt=0)
     unit_price: Decimal | None = Field(None, ge=0)
-    discount_pct: Decimal = Field(0, ge=0, le=100)
+    discount_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
     tax_id: uuid.UUID | None = None
 
 
@@ -55,8 +55,8 @@ class OrderLineOut(BaseModel):
     line_subtotal: Decimal
     line_tax: Decimal
     line_total: Decimal
-    qty_received: Decimal = 0
-    qty_invoiced: Decimal = 0
+    qty_received: Decimal = Decimal("0")
+    qty_invoiced: Decimal = Decimal("0")
 
 
 class OrderOut(BaseModel):

@@ -36,8 +36,9 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The target Cloudflare account is accessible through the connected plugin.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
-- The proof, persistence foundation, authentication, management and accounting have
-  passed 79 local backend tests. The frontend has passed 13 tests, its TypeScript/
+- The proof, persistence foundation, authentication, management, accounting and
+  order/quotation handlers have passed 97 local backend tests. The frontend has
+  passed 13 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -92,9 +93,9 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers and manual accounting now use it; buy/sell financial workflows remain
-unported. Six application migrations are recorded by name/hash, including
-Unicode search keys and immutable journal history.
+handlers, manual accounting and order/quotation APIs now use it; stock/invoice/
+payment workflows remain unported. Seven application migrations are recorded
+by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
 |---|---|
@@ -225,10 +226,50 @@ also pass on D1. The failure-probe option requires
 normal verifier runs omit it. These checks do not establish production capacity
 or complete buy/sell workflow parity.
 
+## Sales, purchasing and quotations
+
+Application version `124d60e4-2d2c-413b-a91d-349d6210947c` passes
+`cloudflare/scripts/verify_documents_remote.py` on isolated staging.
+
+- Sales/purchase orders support list/filter/search/detail, create/draft edit,
+  confirm/cancel and per-product outstanding quantities. Quotations support
+  draft edit, send/accept/reject/cancel and accepted-quote conversion. The
+  original contracts, state tables and pure progress calculations are shared.
+- Catalog name/unit/tax/price snapshots and effective-date FX rates are guarded
+  in the same D1 command. Base conversion divides by the stored rate. Numeric
+  inputs round to declared scales before line/header calculations; zero-after-
+  rounding quantities and overflowing totals reject the entire command.
+- Header, matching lines and pagination totals are fetched in one D1 read
+  batch. Unicode casefold keys are updated atomically for number/party search.
+- Conversion creates the order, copies agreed line snapshots, marks the quote
+  converted, allocates the number and writes both audits in one guarded batch.
+  Staging races with six different keys produce one order; replay with the
+  winning key returns that result. Catalog changes do not reprice the offer.
+- `OrderFlow` carries planned line/header revisions across repeated changes in
+  one command. Local tests cover duplicate-product FIFO, free-text billing,
+  partial movement/invoicing, closure, releases, stale competing commands and
+  cancellation guards for both sales and purchasing. These helpers still need
+  integration with real receipt/delivery/invoice/payment endpoints.
+- Confirmation events are persisted in the transactional outbox. Staging has
+  one event per confirmed sales/purchase order despite retries. Queue dispatch
+  is pending. The bounded quotation-expiry planner is tested; Cron wiring is
+  also pending, so automatic expiry is not yet an operational staging feature.
+- Eight additional existing order/quotation API scenarios run unchanged with
+  the new fixtures. New checks force rollback during conversion and event
+  creation, reject foreign-organization references and detect a newly inserted
+  effective FX rate before commit. The remote verifier also checks draft
+  replacement, lifecycle guards and exact 18-digit prices. A direct D1 check
+  confirms the converted order's rate of 4 and base total of 31.46.
+
+The historical quotation gross-rounding rule remains explicit in the shared
+totals engine; orders retain their per-line gross rounding. Migration `0007`
+precedes the first document writes in this fresh D1 database. Synthetic staging
+documents are not the full business demo, and production remains unchanged.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port sales, purchasing,
-inventory, invoicing, HR and the remaining reporting handlers onto the typed
+The full ERP migration remains incomplete. Next, port inventory, invoicing,
+HR and the remaining reporting handlers onto the typed
 repositories and atomic command path, and prove buy/sell/partial/credit/refund/FX
 workflows. Then
 complete Queues/Cron, R2 production backup/recovery, Email Sending, Workers AI,

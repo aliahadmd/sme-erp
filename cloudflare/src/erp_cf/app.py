@@ -10,6 +10,7 @@ from erp_cf.auth import router as auth_router
 from erp_cf.bootstrap import router as bootstrap_router
 from erp_cf.core_api import router as core_router
 from erp_cf.db import D1Database
+from erp_cf.document_api import routers as document_routers
 from erp_cf.errors import register_handlers
 from erp_cf.identity import environment
 from erp_cf.master_api import router as master_router
@@ -23,6 +24,8 @@ def create_app(test_environment=None):
     app.include_router(core_router)
     app.include_router(master_router)
     app.include_router(accounting_router)
+    for router in document_routers:
+        app.include_router(router)
 
     @app.middleware("http")
     async def context(request: Request, call_next):

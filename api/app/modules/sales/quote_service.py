@@ -1,20 +1,10 @@
 """Quotation lifecycle — its own state machine, built on the shared helpers."""
 
 from datetime import date
-from decimal import Decimal
 
 from app.core.errors import ConflictError, ValidationError
 from app.modules.sales.models import Quotation
-
-QUOTE_TRANSITIONS: dict[str, set[str]] = {
-    "draft": {"sent", "cancelled"},
-    "sent": {"accepted", "rejected", "cancelled", "expired"},
-    "accepted": {"converted", "cancelled"},
-    "converted": set(),
-    "rejected": set(),
-    "expired": set(),
-    "cancelled": set(),
-}
+from app.shared.document_states import QUOTE_TRANSITIONS as QUOTE_TRANSITIONS
 
 EDITABLE = {"draft"}
 
@@ -40,20 +30,21 @@ def recompute(quotation: Quotation) -> None:
     """Recompute line + header totals (single money engine)."""
     from app.shared.order_engine import apply_line_math
 
-    subtotal = Decimal("0")
-    discounted = Decimal("0")
-    tax = Decimal("0")
     for line in quotation.lines:
-        math = apply_line_math(line)
-        subtotal += Decimal(str(line.qty)) * Decimal(str(line.unit_price))
-        discounted += math.base
-        tax += math.tax
-    from app.shared.money import money
+        apply_line_math(line)
+    from app.shared.totals import compute_totals
 
-    quotation.subtotal = money(subtotal)
-    quotation.discount_total = money(subtotal - discounted)
-    quotation.tax_total = money(tax)
-    quotation.total = money(discounted + tax)
+    totals = compute_totals(
+        [
+            (line.qty, line.unit_price, line.discount_pct, line.tax_rate_pct)
+            for line in quotation.lines
+        ],
+        round_gross_per_line=False,
+    )
+    quotation.subtotal = totals.subtotal
+    quotation.discount_total = totals.discount_total
+    quotation.tax_total = totals.tax_total
+    quotation.total = totals.total
 
 
 def check_expiry(quotation: Quotation, today: date) -> None:

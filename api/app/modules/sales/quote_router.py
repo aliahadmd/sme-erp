@@ -1,12 +1,10 @@
 """Quotations API — priced offers that convert into sales orders."""
 
 import uuid
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +19,7 @@ from app.modules.sales.quote_service import (
     ensure_transition,
     recompute,
 )
-from app.shared.money import CurrencyCode
+from app.modules.sales.schemas import QuoteCreateIn, QuoteOut, QuoteUpdateIn
 from app.shared.numbering import next_number
 from app.shared.order_engine import (
     apply_line_math,
@@ -31,77 +29,6 @@ from app.shared.order_engine import (
 from app.shared.pagination import PageParamsDep, paginate
 
 router = APIRouter(prefix="/sales/quotations", tags=["sales"])
-
-
-class QuoteLineIn(BaseModel):
-    product_id: uuid.UUID | None = None
-    description: str | None = None
-    qty: Decimal = Field(gt=0)
-    unit_price: Decimal | None = Field(None, ge=0)
-    discount_pct: Decimal = Field(0, ge=0, le=100)
-    tax_id: uuid.UUID | None = None
-
-
-class QuoteCreateIn(BaseModel):
-    customer_id: uuid.UUID
-    quote_date: date | None = None
-    valid_until: date | None = None
-    # Omitted → the customer's default currency, else the org base currency.
-    currency: CurrencyCode | None = None
-    notes: str | None = None
-    lines: list[QuoteLineIn] = []
-
-
-class QuoteUpdateIn(BaseModel):
-    customer_id: uuid.UUID | None = None
-    quote_date: date | None = None
-    valid_until: date | None = None
-    currency: CurrencyCode | None = None
-    notes: str | None = None
-    lines: list[QuoteLineIn] | None = None
-
-
-class QuoteLineOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    position: int
-    product_id: uuid.UUID | None
-    product_name: str | None
-    description: str | None
-    qty: Decimal
-    uom_code: str | None
-    unit_price: Decimal
-    discount_pct: Decimal
-    tax_id: uuid.UUID | None
-    tax_rate_pct: Decimal
-    line_subtotal: Decimal
-    line_tax: Decimal
-    line_total: Decimal
-
-
-class QuoteOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    number: str
-    customer_id: uuid.UUID | None
-    customer_name: str | None
-    quote_date: date
-    valid_until: date | None
-    currency: str
-    status: str
-    subtotal: Decimal
-    discount_total: Decimal
-    tax_total: Decimal
-    total: Decimal
-    notes: str | None
-    created_by: uuid.UUID | None
-    sent_at: date | None
-    accepted_at: date | None
-    converted_order_id: uuid.UUID | None
-    created_at: datetime | None = None
-    lines: list[QuoteLineOut] = []
 
 
 async def _snapshot_fx(session: AsyncSession, org_id: uuid.UUID, document: Any) -> None:

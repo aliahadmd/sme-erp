@@ -10,12 +10,14 @@ Duck-typed helpers: they operate on any order object whose lines carry
   products and free-text lines are billed exactly once.
 """
 
+from __future__ import annotations
+
 import uuid
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 ZERO = Decimal("0")
 
@@ -143,6 +145,8 @@ def is_fully_progressed(
 
 async def goods_product_ids(session: AsyncSession, order: Any) -> set[uuid.UUID]:
     """Products on the order that move stock (goods with inventory tracking)."""
+    from sqlalchemy import select
+
     from app.modules.catalog.models import Product
 
     ids = {line.product_id for line in order.lines if line.product_id is not None}
