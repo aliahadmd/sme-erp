@@ -37,7 +37,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
-  orders/quotations, inventory, invoicing/payments, HR and reporting have passed 184 local backend
+  orders/quotations, inventory, invoicing/payments, HR, reporting and background delivery
+  have passed 207 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -94,7 +95,7 @@ contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
 handlers, accounting, orders/quotations, inventory, invoicing/payments, HR and reporting now use it.
-Eleven application migrations are recorded
+Twelve application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -470,10 +471,89 @@ checkpoint. Readiness and the 98-path OpenAPI document serve successfully.
 Shared schemas remain importable through the legacy report router. The frontend's
 report contracts are retained; deployed browser acceptance is pending.
 
+## Queues, notifications and scheduled maintenance
+
+Application version `26e50f76-f492-497c-bf2f-3336fc343dca` is deployed with
+the staging event queue `erp-staging-events-20261113`, its dead-letter queue
+`erp-staging-events-dlq-20261113`, and an every-minute Cron Trigger. The event
+consumer uses batches of ten, concurrency two and three retries; the DLQ
+consumer uses concurrency one. Both are registered against the same isolated
+application Worker. No production domain, VPS or production database changed.
+
+- The dispatcher sends only versioned organization/event IDs and a delivery
+  generation. It marks dispatch after Queue acceptance; an ambiguous send can
+  repeat the same IDs. Successful API writes attach a bounded dispatch to
+  `waitUntil`; Cron repairs pending or fifteen-minute-old uncompleted deliveries.
+- Private system commands share the organization coordinator and guarded native
+  D1 batch boundary. In-app notices, deduplication keys, email intents, inbox
+  receipt, source completion and the business epoch commit together. Transport
+  attempt/quarantine metadata does not change financial records.
+- Invoice, payment and low-stock notices use current records and permissions,
+  including active superusers. Staff email preferences are preserved. Late
+  events for voided documents are completed as stale sources. Overdue notices
+  exclude credits, and customer reminders have a separate stable key.
+- Failed messages receive bounded backoff and go to the DLQ after retries.
+  D1 stores quarantined event metadata without copying message bodies into logs.
+  Authenticated settings operators can inspect status and replay recoverable
+  events. Replay increments the delivery generation, so stale failures or DLQ
+  copies cannot mark a later attempt dead. Cron also reconstructs missing
+  quarantine records from durable dead outbox rows if DLQ handling fails.
+- Quote expiry and overdue discovery process 25 records per page; audit pruning
+  processes 100. Each invocation runs at most five pages per job, with D1
+  cursor/version checkpoints. Daily job keys prevent repeated effects. Staging
+  explicitly uses Shanghai's fixed UTC+08:00 business calendar; this is not a
+  general daylight-saving timezone implementation.
+- `EMAIL_MODE=disabled` records completed disabled intents and sends no mail.
+  Test mode likewise records intents without a network send. The live Email
+  Sending provider is still unfinished: live intents remain pending and their
+  delivery event fails explicitly instead of being silently discarded.
+
+Observed staging checks:
+
+- Real Queue delivery created exactly four administrator notices for an invoice,
+  its overdue balance, a payment and low stock, plus six disabled mail intents.
+  Repeated source messages left those notice IDs and mail counts unchanged.
+- A synthetic unsupported event recorded four failed attempts, reached the real
+  DLQ consumer and became quarantined. After repairing only that test event's
+  subscriber type, administrator replay completed generation one. Repeating the
+  admin command and delivering both current/old generation copies produced one
+  inbox receipt. A late old-generation DLQ copy left it resolved.
+- Workers observability records successful automatic `scheduled` invocations,
+  independently of the protected manual staging proof. Quote-expiry and audit
+  pruning were also exercised with one deliberately backdated staging quote and
+  audit record; that fixture update advanced the business epoch in the same batch.
+- The synthetic invoice, payment, delivery and receipt are voided. Their 16
+  journal lines reconcile to zero on every affected account; stock quantity and
+  cost are zero. The final check found 136 completed outbox events and 136 inbox
+  receipts, no pending/dead source events, one resolved dead letter, no leaked
+  SQL assertions and no foreign-key violations.
+
+Local checks cover rollback after every statement of an event batch, duplicate
+delivery and competing plans, ambiguous Queue acceptance, repeated failed
+replays, stale generations, permission boundaries, inactive users/preferences,
+malformed/foreign messages, DLQ/database failure, resumable overdue scans,
+business-date boundaries, quote expiry and retention. Original notification
+HTTP scenarios run unchanged after explicit queue delivery; their former
+synchronous timing is not asserted for the deployed asynchronous transport.
+
+The deployed Python runtime required two entrypoint corrections discovered by
+staging checks: a direct `WorkerEntrypoint` subclass exposes Queue handlers,
+and `queue(self, batch, env=None, ctx=None)` accepts the extra arguments actually
+passed by this target runtime despite the current two-argument documentation
+example. HTTP continues through `asgi.fetch`; the scheduled handler accepts all
+four arguments. Revalidate these boundaries on SDK/runtime upgrades.
+
+`cloudflare/scripts/verify_jobs_remote.py` exercises real delivery, maintenance,
+automatic Cron and reversals; `--resume` continues its saved staging fixture,
+and `--replay-event` verifies an already-quarantined, repaired test event.
+This evidence does not complete live mail, backup scheduling/recovery, login
+counter expiry, AI jobs, realistic queue/fan-out capacity or full-system parity.
+
 ## Remaining HTTP surface
 
 The original application's current OpenAPI inventory contains 139 method/path
-pairs. The native Worker contains 131 of those plus three staging-only operations.
+pairs. The native Worker contains 131 of those, three job-operations endpoints
+and four staging-only operations: 138 operations across 102 OpenAPI paths.
 The eight missing operations are all AI-related: draft listing/accept/discard,
 search, echo, report summarization and individual/bulk product-description
 generation. The captured inventory is `cloudflare/fixtures/reference_routes.json`;
@@ -482,9 +562,9 @@ presence is not proof of behavior, notification delivery or full-system parity.
 
 ## Work still required
 
-The full ERP migration remains incomplete. Next, complete Queues/Cron,
-R2 production backup/recovery, Email Sending, Workers AI and the remaining AI APIs,
-overdue notifications, demo seeding, frontend assets and browser/role parity,
+The full ERP migration remains incomplete. Next, complete login-counter expiry,
+R2 production backup/recovery and scheduling, Email Sending, Workers AI and the
+remaining AI APIs/jobs, demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs
 also remain open. The synthetic proof is not the migrated ERP.

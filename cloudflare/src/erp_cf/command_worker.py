@@ -10,3 +10,6 @@ class ERPCommands(DurableObject):
 
     async def execute(self, envelope):
         return await self.coordinator.execute(envelope)
+
+    async def run_system(self, envelope):
+        return await self.coordinator.run_system(envelope)

@@ -13,6 +13,11 @@ class Prepared:
     def bind(self, *params):
         if len(params) > 100:
             raise ValueError("D1 permits at most 100 bindings per statement")
+        if any(
+            value is not None and not isinstance(value, (str, int, float, bytes))
+            for value in params
+        ):
+            raise TypeError("D1 bindings require primitive SQL values")
         return Prepared(self.binding, self.sql, params)
 
     async def all(self):

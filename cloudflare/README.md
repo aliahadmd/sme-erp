@@ -102,8 +102,9 @@ Sales/purchase orders and quotations now preserve their CRUD/lifecycle APIs,
 catalog and dated FX snapshots, Unicode search and exact totals. Quote conversion
 and both audits commit together. Order progress helpers support repeated planned
 changes and releases; inventory and invoicing now use them.
-Order confirmation events are stored in the outbox, with queue dispatch still pending.
-The bounded quote-expiry planner also awaits Cron wiring.
+Order confirmation events are dispatched through the durable outbox and Queues.
+Cron runs bounded quote-expiry, overdue and audit-retention plans with durable
+cursor checkpoints.
 
 Inventory now includes warehouses, stock/low-stock and movement reads,
 receipts/deliveries with post/void, and adjustments. Stock, original cost
@@ -117,7 +118,8 @@ on-account allocations, refunds, statements and exact voids. Immutable clearing
 effects preserve original FX and residual base cents. The payment UI restricts
 FIFO allocations by currency. Real D1 checks cover forced rollback, retries,
 refunds, 18-digit values and a full buy/sell/pay cycle with exact stock/book reversals.
-Invoice email requests are durable outbox records; actual delivery is pending.
+Invoice email requests become durable mail intents. Staging uses disabled mode;
+the live Email Sending provider is still pending.
 
 HR now includes departments/employees, linked self-service identities, leave
 types and requests, yearly allowance/overlap guards and immutable decisions.
@@ -131,12 +133,14 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last verification passed 184 backend and 14 frontend tests, plus frontend
-build/lint and backend lint/schema checks. The eight remaining HTTP operations
-are AI-related. AI,
-overdue notifications, jobs,
-frontend assets and the full demo seed remain in progress. This Worker is not
-yet the complete ERP.
+The last backend verification passed 207 tests and lint/schema checks. The
+unchanged frontend previously passed 14 tests and build/lint. Real Queue and Cron
+checks verify notifications, deduplication, DLQ replay, quote expiry and audit
+retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
+delivery/reversal proof. Only disabled email intents are produced.
+The eight remaining original HTTP operations are AI-related. AI, live mail,
+full backup/recovery, counter expiry, frontend assets, browser/role acceptance
+and the full demo seed remain unfinished. This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
 

@@ -1,10 +1,13 @@
-import { bindings, defineConfig, exports } from "cf/config";
+import { bindings, defineConfig, exports, triggers } from "cf/config";
 
 export default defineConfig(({ mode }) => {
   if (mode !== "staging" && mode !== "app-staging") {
     throw new Error("Only --mode staging (proof) and --mode app-staging are configured.");
   }
   const proof = mode === "staging";
+  const eventQueue = "erp-staging-events-20261113";
+  const deadQueue = "erp-staging-events-dlq-20261113";
+  const maxRetries = 3;
   return {
     accountId: "4287bb6da0c60bbcc12c01a34718fb86",
     worker: {
@@ -13,6 +16,13 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: "2026-11-12",
       compatibilityFlags: ["python_workers"],
       observability: { enabled: true, traces: { enabled: true } },
+      triggers: proof ? [] : [
+        triggers.queue({ name: eventQueue, deadLetterQueue: deadQueue,
+          maxBatchSize: 10, maxBatchTimeout: 1, maxConcurrency: 2, maxRetries }),
+        triggers.queue({ name: deadQueue, maxBatchSize: 10, maxBatchTimeout: 1,
+          maxConcurrency: 1, maxRetries }),
+        triggers.scheduled({ schedule: "* * * * *" }),
+      ],
       exports: proof
         ? { OrganizationCommands: exports.durableObject({ storage: "sqlite" }) }
         : {
@@ -51,6 +61,14 @@ export default defineConfig(({ mode }) => {
         PUBLIC_ORIGIN: bindings.text("https://erp-migration-staging-20261113.aliahad.workers.dev"),
         ORG_ID: bindings.text("019a78e1-6d80-7000-8000-000000000001"),
         BOOTSTRAP_ENABLED: bindings.text("true"),
+        EVENTS: bindings.queue({ name: eventQueue }),
+        JOBS_ENABLED: bindings.text("true"),
+        EVENT_QUEUE_NAME: bindings.text(eventQueue),
+        DEAD_LETTER_QUEUE_NAME: bindings.text(deadQueue),
+        QUEUE_MAX_RETRIES: bindings.text(String(maxRetries)),
+        EMAIL_MODE: bindings.text("disabled"),
+        AUDIT_RETENTION_DAYS: bindings.text("365"),
+        BUSINESS_UTC_OFFSET_MINUTES: bindings.text("480"),
       },
     },
   };

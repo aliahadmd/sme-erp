@@ -1,10 +1,34 @@
 """Application entrypoint. The isolated financial proof has a separate Worker."""
 
-from workers import asgi
+from urllib.parse import urlsplit
+
+from workers import WorkerEntrypoint, asgi
 
 from erp_cf.app import create_app
+from erp_cf.background import consume, dispatch_best_effort, tick
 from erp_cf.command_worker import ERPCommands as ERPCommands
 from erp_cf.limits_worker import LoginGuard as LoginGuard
 
 app = create_app()
-Default = asgi.entrypoint(app)
+
+
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        if (request.headers.get("upgrade") or "").lower() == "websocket":
+            return await asgi.websocket(app, request, self.env)
+        response = await asgi.fetch(app, request, self.env, self.ctx)
+        if (
+            request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and 200 <= response.status < 400
+            and urlsplit(str(request.url)).path.startswith("/api/")
+        ):
+            self.ctx.waitUntil(dispatch_best_effort(self.env))
+        return response
+
+    async def queue(self, batch, env=None, ctx=None):
+        # This runtime passes env/ctx despite the two-argument docs example.
+        await consume(self.env, batch)
+
+    async def scheduled(self, controller, env, ctx):
+        # Python's scheduled entrypoint requires all four arguments.
+        await tick(self.env, int(controller.scheduledTime))

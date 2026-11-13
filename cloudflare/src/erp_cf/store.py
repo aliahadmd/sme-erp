@@ -331,7 +331,7 @@ class UnitOfWork:
         self,
         db,
         org_id: str,
-        actor_id: str,
+        actor_id: str | None,
         key: str,
         operation: str,
         payload: dict,

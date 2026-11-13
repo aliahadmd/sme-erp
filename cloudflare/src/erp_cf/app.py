@@ -16,6 +16,7 @@ from erp_cf.hr_api import router as hr_router
 from erp_cf.identity import environment
 from erp_cf.inventory_api import router as inventory_router
 from erp_cf.invoicing_api import router as invoicing_router
+from erp_cf.jobs_api import router as jobs_router
 from erp_cf.master_api import router as master_router
 from erp_cf.reporting_api import router as reporting_router
 from erp_cf.reporting_proof import router as reporting_proof_router
@@ -34,6 +35,7 @@ def create_app(test_environment=None):
     app.include_router(hr_router)
     app.include_router(reporting_router)
     app.include_router(reporting_proof_router)
+    app.include_router(jobs_router)
     for router in document_routers:
         app.include_router(router)
 

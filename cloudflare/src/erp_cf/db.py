@@ -64,7 +64,7 @@ class AtomicCommands:
         self.db = db
 
     @staticmethod
-    def identity(org_id: str, actor_id: str, key: str) -> str:
+    def identity(org_id: str, actor_id: str | None, key: str) -> str:
         if not 1 <= len(key) <= 128:
             raise ValueError("Idempotency key must contain 1 to 128 characters")
         return hashlib.sha256(json.dumps([org_id, actor_id, key]).encode()).hexdigest()

@@ -11,7 +11,7 @@ Keep the existing React/Vite SPA and business modules. Move runtime code to a sm
 | Current dependency | Proposed replacement | Reason and qualification |
 |---|---|---|
 | nginx serving the SPA and proxying `/api` | Workers Static Assets + API Worker | Existing SPA can remain; configure SPA navigation fallback and explicitly route `/api/*` to application code. No SSR conversion is required. |
-| FastAPI/uvicorn API process | Python Worker retaining FastAPI/Pydantic | Preferred feasibility path after the Python/ORM discussion; remove uvicorn and adapt runtime/persistence. |
+| FastAPI/uvicorn API process | Python Worker retaining FastAPI/Pydantic | Implemented staging path after the Python/ORM discussion; remove uvicorn and adapt runtime/persistence. |
 | Async SQLAlchemy/asyncpg | Typed native D1 repositories; optional synchronous SQLAlchemy 2 adapter | Application uses native batches. The adapter passes the basic proof; its commit/rollback methods do not provide multi-statement transactions. |
 | Redis/arq durable jobs | Queues + consumer Worker + dead-letter queue | Suited to email, AI drafts, notifications and bounded export tasks. Consumers must tolerate redelivery and reordering. |
 | arq cron | Cron Triggers invoking bounded jobs/queue fan-out | Scheduled work should be idempotent by job + period + organization; calculate business dates in an explicit organization timezone. |
@@ -32,12 +32,13 @@ Cloudflare currently supports FastAPI in Python Workers using its built-in ASGI 
 
 The important mismatch is the repository's async SQLAlchemy layer: Cloudflare documents synchronous SQLAlchemy support, while async SQLAlchemy ORM is unsupported because greenlet is unavailable. Current Hyperdrive docs demonstrate asyncpg itself working against PostgreSQL, but that does not make async SQLAlchemy work and does not turn asyncpg into a D1 driver. D1 requires a persistence/transaction redesign regardless of the API language. [Python SQLAlchemy compatibility](https://developers.cloudflare.com/hyperdrive/examples/python-workers/#sqlalchemy-support)
 
-**Updated recommendation:** retain Python/FastAPI/Pydantic, preserving Decimal financial logic and existing contracts. The ORM candidate is synchronous SQLAlchemy 2 with the community `sqlalchemy-cloudflare-d1` adapter's native binding integration. Use explicit native D1 batches for every atomic multi-statement operation. If broader adapter validation fails, direct D1 repositories remain a Python option; TypeScript/Hono is an alternative if the Python runtime itself proves unsuitable. The basic end-to-end Worker proof now passes concurrent ORM reads and single-statement writes with exact 18-digit values. Full ERP suitability remains provisional; see [current evidence](../CLOUDFLARE_IMPLEMENTATION.md). [Adapter documentation](https://github.com/CollierKing/sqlalchemy-cloudflare-d1)
+**Updated recommendation:** retain Python/FastAPI/Pydantic with typed native D1 repositories, preserving Decimal financial logic and existing contracts. Explicit native D1 batches own every atomic multi-statement operation. Synchronous SQLAlchemy 2 with the community `sqlalchemy-cloudflare-d1` adapter remains an optional ORM candidate in the separate proof; it is not the application's persistence dependency. The basic end-to-end Worker proof passes concurrent ORM reads and single-statement writes with exact 18-digit values. TypeScript/Hono remains an alternative if later Python runtime acceptance fails. Full ERP suitability still requires the remaining workflow and operational gates; see [current evidence](../CLOUDFLARE_IMPLEMENTATION.md). [Adapter documentation](https://github.com/CollierKing/sqlalchemy-cloudflare-d1)
 
 Implementation update, 13 November: the application uses typed native D1
 repositories for both reads and writes, retaining the existing Pydantic
 contracts and generated model metadata. The adapter remains available in the
-validated proof. Authentication, core management and master-data CRUD now pass
+validated proof. Authentication, core management, master data, accounting,
+orders/quotations, inventory, invoicing/payments, HR and reporting now pass
 isolated staging checks; the [implementation log](../CLOUDFLARE_IMPLEMENTATION.md)
 records the remaining workflow and operational gates.
 

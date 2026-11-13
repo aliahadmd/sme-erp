@@ -10,7 +10,7 @@ The main uncertainty is not whether D1 supports SQL transactions: it does suppor
 
 The user has clarified that a fresh demo database is acceptable. The proposed initial cutover can therefore create the final D1 schema and seed representative demo data; PostgreSQL production-data ETL and preserving legacy password hashes are not initial requirements. Exact-value storage and backup recovery still need proof because the demo will generate new financial records.
 
-The preferred feasibility path now retains Python/FastAPI/Pydantic and evaluates synchronous SQLAlchemy with `sqlalchemy-cloudflare-d1`. That community adapter is provisional and does not remove the native D1 batch design below; its binding connection's commit/rollback methods are no-ops. See the [services research](cloudflare-workers-services.md#orm-candidate-and-its-transaction-boundary) for the inspected release and runtime validation requirements.
+The implementation retains Python/FastAPI/Pydantic and uses typed native D1 repositories for application reads and writes, with native batches owning atomic commands. Synchronous SQLAlchemy with `sqlalchemy-cloudflare-d1` remains an optional candidate in the separate proof. That community adapter does not replace the native D1 batch design below; its binding connection's commit/rollback methods are no-ops. See the [services research](cloudflare-workers-services.md#orm-candidate-and-its-transaction-boundary) for the inspected release and runtime validation requirements, and the [implementation log](../CLOUDFLARE_IMPLEMENTATION.md) for current evidence.
 
 ## Existing requirements found in the repository
 
@@ -106,7 +106,8 @@ Time Travel is always on and provides point-in-time recovery. Paid history is 30
 
 These gates were not executed during the original research. Subsequent isolated
 implementation has verified exact transport, guarded rollback, competing stock
-commands, replay and a bounded eight-table recovery proof. Full buy/sell cycles,
+commands, replay, a complete buy/sell/pay and reversal cycle, consistent paged
+reporting and a bounded eight-table recovery proof. Full-system workflow parity,
 restarts/network loss and realistic capacity/recovery remain open; see the
 [current evidence](../CLOUDFLARE_IMPLEMENTATION.md). Passing the complete gates is
 still required for this particular ERP.

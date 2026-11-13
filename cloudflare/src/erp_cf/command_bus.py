@@ -27,11 +27,12 @@ class Coordinator:
         from erp_cf.hr_commands import COMMANDS as HR
         from erp_cf.inventory_commands import COMMANDS as INVENTORY
         from erp_cf.invoicing_commands import COMMANDS as INVOICING
+        from erp_cf.job_commands import COMMANDS as JOBS
         from erp_cf.master_commands import COMMANDS as MASTER
 
         operation = envelope.get("operation", "")
         try:
-            spec = (CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING | HR).get(
+            spec = (CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING | HR | JOBS).get(
                 operation
             )
             if spec is None:
@@ -71,6 +72,54 @@ class Coordinator:
             return {
                 "status": 500,
                 "body": {"error": {"code": "internal_error", "detail": "Internal server error"}},
+            }
+
+    async def run_system(self, envelope):
+        """Trusted binding-only dispatch. Public execute() cannot select these handlers."""
+        from erp_cf.job_commands import SYSTEM_COMMANDS
+
+        operation = envelope.get("operation", "")
+        try:
+            handler = SYSTEM_COMMANDS.get(operation)
+            if handler is None:
+                raise NotFoundError("Unknown system command")
+            key, payload = envelope.get("key", ""), envelope.get("payload", {})
+            if (
+                not isinstance(key, str)
+                or not 1 <= len(key) <= 128
+                or not isinstance(payload, dict)
+            ):
+                raise ValidationError("Invalid system command")
+            async with self.lock:
+                fingerprint_key = str(getattr(self.env, "COMMAND_HASH_KEY", ""))
+                if len(fingerprint_key) < 32:
+                    raise RuntimeError("COMMAND_HASH_KEY must contain at least 32 characters")
+                plan = UnitOfWork(
+                    D1Database(self.env.DB),
+                    str(self.env.ORG_ID),
+                    None,
+                    key,
+                    operation,
+                    payload,
+                    fingerprint_key=fingerprint_key,
+                )
+                existing = await plan.replay()
+                if existing is not None:
+                    return existing
+                with localcontext() as context:
+                    context.prec = 80
+                    response = await handler(plan, self.env, payload)
+                    return await plan.commit({"status": 200, "body": wire(response)})
+        except DomainError as exc:
+            return {"status": exc.status, "body": exc.response()}
+        except Exception as exc:
+            # Do not include message bodies, addresses or validation inputs.
+            logging.getLogger("erp").error(
+                "system_command_failed operation=%s error_type=%s", operation, type(exc).__name__
+            )
+            return {
+                "status": 500,
+                "body": {"error": {"code": "internal_error", "detail": "System job failed"}},
             }
 
 

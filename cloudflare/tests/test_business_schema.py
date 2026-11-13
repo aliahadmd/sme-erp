@@ -34,6 +34,12 @@ def test_schema_covers_all_current_models_and_source_files():
         "cf_stock_move_states",
         "cf_settlement_effects",
         "cf_business_epochs",
+        "cf_event_receipts",
+        "cf_notification_keys",
+        "cf_mail_outbox",
+        "cf_dead_letters",
+        "cf_job_runs",
+        "cf_scheduler_state",
         "platform_schema_migrations",
     } == expected
     for table in expected:

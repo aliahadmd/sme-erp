@@ -39,7 +39,8 @@ def source_database():
         "INSERT INTO proof_precision VALUES ('large', 999999999999999999);"
         "INSERT INTO proof_precision VALUES ('negative', -999999999999999999);"
         "INSERT INTO cf_commands VALUES ('c','h','{}','now');"
-        "INSERT INTO cf_outbox VALUES ('e','c','posted','{}','now',NULL,NULL);"
+        "INSERT INTO cf_outbox(id,command_id,event_type,payload_json,created_at) "
+        "VALUES ('e','c','posted','{}','now');"
     )
     return db
 

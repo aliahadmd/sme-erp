@@ -29,6 +29,7 @@ QUOTES = load_suite("test_quotations")
 INVENTORY = load_suite("test_inventory")
 INVOICING = load_suite("test_invoicing")
 HR = load_suite("test_hr")
+NOTIFICATIONS = load_suite("test_notifications")
 AUDIT = load_suite("test_audit_fixes")
 PENDING_AUDIT = {
     "test_c2_failed_posting_rolls_back_document",  # Original server monkeypatch.
@@ -89,3 +90,41 @@ async def test_original_inventory_http_scenarios_in_reference_order(client):
         INVENTORY.test_receipt_of_fully_received_po_rejected,
     ]:
         await case(client, fixture)
+
+
+NOTIFICATION_CASES = [
+    function
+    for name, function in vars(NOTIFICATIONS).items()
+    if name.startswith("test_") and inspect.iscoroutinefunction(function)
+] + [
+    AUDIT.test_h2_h3_invoice_email_queues_and_notification_survives,
+    AUDIT.test_m4_credit_notes_are_never_overdue,
+]
+
+
+@pytest.mark.parametrize("case", NOTIFICATION_CASES, ids=lambda f: f.__name__)
+async def test_original_notification_contract_after_queue_delivery(case, client, env):
+    from tests.jobs_fakes import drain, enable
+
+    enable(env)
+
+    class DeliveredClient:
+        """Wait for background delivery before original synchronous assertions."""
+
+        def __getattr__(self, name):
+            if name not in {"get", "post", "put", "patch", "delete", "request"}:
+                return getattr(client, name)
+
+            async def request(*args, **kwargs):
+                response = await getattr(client, name)(*args, **kwargs)
+                if response.is_success:
+                    await drain(env)
+                return response
+
+            return request
+
+    delivered = DeliveredClient()
+    if case is NOTIFICATIONS.test_mark_notification_read:
+        # The original suite shares a database and creates a notice earlier.
+        await NOTIFICATIONS.test_invoice_posted_creates_notification(delivered)
+    await case(delivered)
