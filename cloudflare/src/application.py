@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from workers import WorkerEntrypoint, asgi
 
+from erp_cf.ai_worker import AIBudget as AIBudget
 from erp_cf.app import create_app
 from erp_cf.background import consume, dispatch_best_effort, tick
 from erp_cf.command_worker import ERPCommands as ERPCommands

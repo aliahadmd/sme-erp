@@ -43,8 +43,7 @@ CASES = [
     if name.startswith("test_")
     and inspect.iscoroutinefunction(function)
     and set(inspect.signature(function).parameters) == {"client"}
-    and name
-    not in {"test_ai_description_disabled_without_key", "test_expired_quote_cannot_be_accepted"}
+    and name not in {"test_expired_quote_cannot_be_accepted"}
     and name not in PENDING_AUDIT
 ]
 CASES.append(ACCOUNTING.test_manual_entry_must_balance)

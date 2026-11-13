@@ -32,7 +32,11 @@ from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coeffi
 
 SEARCH_COLUMNS = {
     "crm_contacts": {"name": "_name_fold", "code": "_code_fold", "legal_name": "_legal_fold"},
-    "catalog_products": {"name": "_name_fold", "sku": "_sku_fold"},
+    "catalog_products": {
+        "name": "_name_fold",
+        "sku": "_sku_fold",
+        "description": "_description_fold",
+    },
     "sales_sales_orders": {"number": "_number_fold", "customer_name": "_party_fold"},
     "purchasing_purchase_orders": {"number": "_number_fold", "supplier_name": "_party_fold"},
     "sales_quotations": {"number": "_number_fold", "customer_name": "_party_fold"},

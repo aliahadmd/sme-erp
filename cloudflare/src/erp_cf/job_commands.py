@@ -64,10 +64,19 @@ async def consume_event(plan, env, payload):
         # This explicit failure preserves durable intents until Email Sending
         # is configured; disabled/test modes never produce these messages.
         raise DomainError("Email sending is not configured", code="email_unavailable", status=503)
+    elif kind == "ai.batch.requested":
+        from erp_cf.ai_commands import batch_page
+
+        outcome = await batch_page(plan, env, data)
     elif kind in IGNORED_EVENTS:
         outcome = "no_subscriber"
     else:
         raise DomainError("Unsupported outbox event", code="unsupported_event", status=422)
+    complete_event(plan, event, outcome)
+    return {"outcome": outcome}
+
+
+def complete_event(plan, event, outcome):
     timestamp = now().isoformat()
     plan.statements.extend(
         [
@@ -75,7 +84,7 @@ async def consume_event(plan, env, payload):
                 plan.identity,
                 "EXISTS(SELECT 1 FROM cf_outbox WHERE id=? AND completed_at IS NULL "
                 "AND delivery_generation=CAST(? AS INTEGER))",
-                (event["id"], str(payload["generation"])),
+                (event["id"], event["generation"]),
             ),
             Statement(
                 "INSERT INTO cf_event_receipts(event_id,org_id,outcome,processed_at) "
@@ -84,7 +93,7 @@ async def consume_event(plan, env, payload):
             ),
             Statement(
                 "UPDATE cf_outbox SET completed_at=?,delivery_state='complete',"
-                "last_error=NULL,dead_at=NULL WHERE id=?",
+                "last_error=NULL,dead_at=NULL,available_at=NULL WHERE id=?",
                 (timestamp, event["id"]),
             ),
             Statement(
@@ -94,7 +103,6 @@ async def consume_event(plan, env, payload):
             ),
         ]
     )
-    return {"outcome": outcome}
 
 
 async def maintenance(plan, env, payload):
@@ -220,7 +228,7 @@ async def replay_dead_letter(plan, actor, payload):
             ),
             Statement(
                 "UPDATE cf_outbox SET delivery_state='pending',dispatched_at=NULL,"
-                "last_error=NULL,dead_at=NULL,failed_attempts=0,"
+                "last_error=NULL,dead_at=NULL,available_at=NULL,failed_attempts=0,"
                 "delivery_generation=delivery_generation+1 WHERE id=?",
                 (row["event_id"],),
             ),

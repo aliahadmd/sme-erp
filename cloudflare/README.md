@@ -133,14 +133,19 @@ retries the complete report; future jobs/maintenance must preserve this writer
 contract. Real D1 checks cover totals beyond int64, tax/FX snapshots, 601-line
 paging and an intentionally interleaved void that discards the stale partial read.
 
-The last backend verification passed 207 tests and lint/schema checks. The
-unchanged frontend previously passed 14 tests and build/lint. Real Queue and Cron
+The last backend verification passed 222 tests and lint/schema checks. The
+frontend passes 14 tests and build/lint. Real Queue and Cron
 checks verify notifications, deduplication, DLQ replay, quote expiry and audit
 retention. Run `uv run python -u scripts/verify_jobs_remote.py` for the staging
 delivery/reversal proof. Only disabled email intents are produced.
-The eight remaining original HTTP operations are AI-related. AI, live mail,
-full backup/recovery, counter expiry, frontend assets, browser/role acceptance
-and the full demo seed remain unfinished. This Worker is not yet the complete ERP.
+All 139 original HTTP operations are now present. Workers AI handles echo,
+summaries and product suggestions; bulk results enter an atomic review queue.
+One daily Durable Object budget covers every actual inference attempt. Quota
+exhaustion defers bulk work in D1 for Cron to resume. Run
+`uv run python -u scripts/verify_ai_remote.py` for the real-model staging proof.
+Login budgets now expire through alarms while preserving in-flight checks.
+Live mail, full backup/recovery, frontend assets, browser/role acceptance and the
+full demo seed remain unfinished. This Worker is not yet the complete ERP.
 
 ## CLI packaging workaround
 

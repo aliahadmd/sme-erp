@@ -18,6 +18,7 @@ from tests.fakes import SQLiteD1
 class Storage:
     def __init__(self):
         self.data = {}
+        self.alarm = None
 
     async def get(self, key):
         await asyncio.sleep(0)
@@ -26,6 +27,15 @@ class Storage:
     async def put(self, key, value):
         await asyncio.sleep(0)
         self.data[key] = copy.deepcopy(value)
+
+    async def setAlarm(self, timestamp):
+        self.alarm = timestamp
+
+    async def deleteAlarm(self):
+        self.alarm = None
+
+    async def delete(self, key):
+        self.data.pop(key, None)
 
 
 class Limiters:

@@ -37,8 +37,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
-  orders/quotations, inventory, invoicing/payments, HR, reporting and background delivery
-  have passed 207 local backend
+  orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
+  and AI have passed 222 local backend
   tests. The frontend has passed 14 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -95,7 +95,7 @@ contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
 handlers, accounting, orders/quotations, inventory, invoicing/payments, HR and reporting now use it.
-Twelve application migrations are recorded
+Thirteen application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -549,22 +549,95 @@ and `--replay-event` verifies an already-quarantined, repaired test event.
 This evidence does not complete live mail, backup scheduling/recovery, login
 counter expiry, AI jobs, realistic queue/fan-out capacity or full-system parity.
 
-## Remaining HTTP surface
+## Workers AI and persistent counter expiry
+
+Version `90dcdd45-75b8-4b3e-9473-c871ac0a6384` adds all eight original AI
+operations, the native Workers AI binding and the SQLite-backed `AIBudget`
+Durable Object. The staging model is
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, a Cloudflare-hosted text model.
+Its documented input/output shape and availability were checked before use;
+model upgrades require fresh quality/runtime checks.
+[Model documentation](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/)
+
+- Echo remains superuser-only; summaries require `reports.view`, and product
+  generation/review requires `catalog.product.update`. Disabled requests return
+  `ai_disabled` without reserving quota. Provider failure, empty output and
+  oversized input have explicit error envelopes without logging prompts.
+- Echo, summary, individual suggestions and bulk generation share a daily quota
+  per organization/environment. Each actual inference attempt is charged before
+  model I/O, including failed or ambiguous attempts. The default limit is 200,
+  with 32,000-byte input, 512 output tokens and a 60-second provider wait bound.
+  The selected model identifier must be Cloudflare-hosted. No external provider
+  API key or shared financial-prompt cache is used.
+- Bulk requests use bounded 25-product planning pages and one durable event per
+  product. Network inference runs outside the financial command lock. Product
+  and category revisions, active requester permissions and missing descriptions
+  are rechecked before committing a result. A human edit or permission revocation
+  suppresses stale output. Unique pending-task/draft constraints and one inbox
+  receipt prevent duplicate drafts. At-least-once delivery can repeat billed
+  inference after a crash; each repeated attempt still consumes quota.
+- Exhausted bulk quota is persisted as an outbox due time after the next business
+  midnight. The Queue message is acknowledged only after that D1 defer write;
+  Cron redispatches it when due. Waiting for quota does not exhaust transport
+  retries. Actual provider failures still follow retries and DLQ handling.
+- Single-product generation remains an unapplied suggestion. Bulk generation
+  creates review drafts; accept/discard, product updates and audit use the native
+  atomic command boundary. Keyword search remains a keyword feature, including
+  Unicode-folded name/SKU/description search; no semantic index is claimed.
+- The drafts page now refreshes every five seconds while open, rather than
+  relying on one four-second refresh after enqueue. Its toast uses the queued
+  count, and duplicate clicks are disabled while submitting. Frontend tests,
+  build and lint pass; deployed browser acceptance remains unfinished.
+
+Observed real-runtime checks:
+
+- Cloudflare-hosted echo retained a synthetic sentinel. The report summary
+  retained the supplied `123.45 USD` and three invoices. The model returned
+  generic factual descriptions from the limited supplied product fields;
+  this is a basic quality check, not a general financial-accuracy guarantee.
+- Nine bulk tasks completed, with drafts kept unapplied until explicit review.
+  One acceptance and its repeated command returned the same outcome; discard
+  left the other product unchanged. Unicode description search passed.
+- The counter's SQL storage recorded twelve attempts after the initial proof.
+  A controlled staging counter fixture then placed it at 199: the next real
+  inference succeeded, followed by 429s for both echo and summary. The synthetic
+  increment was removed, preserving thirteen actual attempts.
+- A second controlled fixture exhausted the quota for one regenerable test
+  product. Its event became pending with `ai_budget_exceeded` and a next-day
+  due time, without a dead letter. After restoring the quota and advancing only
+  that test event's due time, automatic Cron resumed generation. The regenerated
+  draft was explicitly discarded; actual attempt count is fourteen.
+- Authentication, refresh/reuse/logout and fifteen concurrent unknown-user
+  logins still pass after the counter changes. `LoginGuard` now schedules expiry
+  before persisting admission state, preserves in-flight permits at window
+  rollover and removes expired state in its alarm handler. Workers observability
+  records a successful native `LoginGuard` alarm on this version. Tests cover
+  early/repeated alarms, restart persistence and rollover safety. AI counter
+  alarms retain the active day's quota and remove older rows; their calendar
+  rollover has been exercised locally, not yet observed at live midnight.
+
+`cloudflare/scripts/verify_ai_remote.py` exercises the real model, HTTP contracts,
+bulk Queue delivery, review and shared quota. Local cases also cover disabled
+and forbidden paths, concurrent quota admission, stale source/actor changes,
+rollback of draft/inbox writes, repeated generation and next-day deferral.
+The last backend check passes 222 tests. The changed frontend passes fourteen
+tests, TypeScript/Vite build and lint. Live Email Sending, full recovery,
+realistic capacity and complete browser/cutover acceptance are still open.
+
+## HTTP surface coverage
 
 The original application's current OpenAPI inventory contains 139 method/path
-pairs. The native Worker contains 131 of those, three job-operations endpoints
-and four staging-only operations: 138 operations across 102 OpenAPI paths.
-The eight missing operations are all AI-related: draft listing/accept/discard,
-search, echo, report summarization and individual/bulk product-description
-generation. The captured inventory is `cloudflare/fixtures/reference_routes.json`;
-a route-presence regression test tracks this explicit unfinished set. Route
-presence is not proof of behavior, notification delivery or full-system parity.
+pairs. The native Worker now contains all 139, three job-operations endpoints
+and four staging-only operations: 146 operations across 110 OpenAPI paths.
+The captured inventory is `cloudflare/fixtures/reference_routes.json`; the
+route-presence regression test requires no missing original operation. Route
+presence is not proof of full workflow, role or operational parity.
 
 ## Work still required
 
-The full ERP migration remains incomplete. Next, complete login-counter expiry,
-R2 production backup/recovery and scheduling, Email Sending, Workers AI and the
-remaining AI APIs/jobs, demo seeding, frontend assets and browser/role parity,
+The full ERP migration remains incomplete. Next, complete
+R2 production backup/recovery and scheduling, Email Sending,
+demo seeding, frontend assets and browser/role parity,
 production environment and CI configuration, capacity acceptance, cutover and
 safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs
 also remain open. The synthetic proof is not the migrated ERP.

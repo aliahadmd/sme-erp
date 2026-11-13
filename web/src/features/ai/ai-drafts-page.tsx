@@ -22,6 +22,7 @@ export function AiDraftsPage() {
   })
   const draftsQuery = useQuery({
     queryKey: ["ai", "drafts"],
+    refetchInterval: 5000,
     queryFn: () =>
       api.get<
         { id: string; entity_id: string; draft_text: string; model: string | null }[]
@@ -34,9 +35,10 @@ export function AiDraftsPage() {
 
   const generate = useMutation({
     mutationFn: () => api.post<{ queued: number }>("/api/catalog/products/generate-missing", undefined),
-    onSuccess: () => {
-      toast.success("Queued products for description generation")
-      setTimeout(() => void draftsQuery.refetch(), 4000)
+    onSuccess: (data) => {
+      toast.success(data.queued > 0
+        ? `Queued ${data.queued} products. Drafts will appear automatically.`
+        : "No products need new descriptions")
       invalidate()
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
@@ -62,7 +64,7 @@ export function AiDraftsPage() {
             Generated descriptions awaiting review — accept applies them to the product
           </p>
         </div>
-        <Button variant="outline" onClick={() => generate.mutate()}>
+        <Button variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
           Generate missing descriptions
         </Button>
       </div>

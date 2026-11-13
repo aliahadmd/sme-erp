@@ -10,19 +10,10 @@ from pathlib import Path
 
 from erp_cf.app import create_app
 
-PENDING = {
-    "GET /api/ai/drafts",
-    "GET /api/ai/search",
-    "POST /api/ai/drafts/{id}/accept",
-    "POST /api/ai/drafts/{id}/discard",
-    "POST /api/ai/echo",
-    "POST /api/ai/summarize",
-    "POST /api/catalog/products/generate-missing",
-    "POST /api/catalog/products/{id}/generate-description",
-}
+PENDING = set()
 
 
-def test_original_route_inventory_has_only_the_explicit_remaining_ai_endpoints():
+def test_original_route_inventory_is_complete():
     reference = json.loads(
         (Path(__file__).parents[1] / "fixtures/reference_routes.json").read_text()
     )

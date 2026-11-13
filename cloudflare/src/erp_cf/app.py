@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from erp_cf.accounting_api import router as accounting_router
+from erp_cf.ai_api import router as ai_router
 from erp_cf.auth import router as auth_router
 from erp_cf.bootstrap import router as bootstrap_router
 from erp_cf.core_api import router as core_router
@@ -36,6 +37,7 @@ def create_app(test_environment=None):
     app.include_router(reporting_router)
     app.include_router(reporting_proof_router)
     app.include_router(jobs_router)
+    app.include_router(ai_router)
     for router in document_routers:
         app.include_router(router)
 

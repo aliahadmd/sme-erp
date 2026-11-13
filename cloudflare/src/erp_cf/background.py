@@ -27,8 +27,8 @@ class EventMessage(BaseModel):
 
 
 class JobFailed(Exception):
-    def __init__(self, code):
-        self.code = code
+    def __init__(self, code, *, defer_until=None):
+        self.code, self.defer_until = code, defer_until
         super().__init__(code)
 
 
@@ -60,12 +60,14 @@ async def dispatch(env, *, limit=100):
         return {"dispatched": 0}
     db, org_id = D1Database(env.DB), str(env.ORG_ID)
     cutoff = (datetime.now(UTC) - timedelta(minutes=15)).isoformat()
+    timestamp = now().isoformat()
     rows = await db.all(
         "SELECT id,CAST(delivery_generation AS TEXT) AS generation FROM cf_outbox "
         "WHERE json_extract(payload_json,'$.org_id')=? "
         "AND completed_at IS NULL AND delivery_state IN ('pending','queued') "
+        "AND (available_at IS NULL OR available_at<=?) "
         "AND (dispatched_at IS NULL OR dispatched_at<?) ORDER BY created_at,id LIMIT ?",
-        (org_id, cutoff, min(max(limit, 1), 100)),
+        (org_id, timestamp, cutoff, min(max(limit, 1), 100)),
     )
     if not rows:
         return {"dispatched": 0}
@@ -211,15 +213,52 @@ async def consume(env, batch):
                     raise JobFailed("wrong_queue")
                 body = decode_message(plain(message.body), env.ORG_ID)
                 event_id = str(body.event_id)
-                await system(
-                    env,
-                    "jobs.event",
-                    f"event:{event_id}:{body.generation}",
-                    {"event_id": event_id, "generation": body.generation},
+                event = await D1Database(env.DB).first(
+                    "SELECT id,event_type,payload_json,completed_at,available_at,"
+                    "CAST(delivery_generation AS TEXT) AS generation FROM cf_outbox "
+                    "WHERE id=? AND json_extract(payload_json,'$.org_id')=?",
+                    (event_id, str(env.ORG_ID)),
                 )
+                if event and event["available_at"] and event["available_at"] > now().isoformat():
+                    # D1 owns the future wake-up; do not burn Queue retries while
+                    # waiting for tomorrow's quota. Cron dispatches it when due.
+                    message.ack()
+                    continue
+                if event and event["event_type"] == "ai.product.requested":
+                    from erp_cf.ai_jobs import process_ai_event
+
+                    await process_ai_event(env, body, event)
+                else:
+                    await system(
+                        env,
+                        "jobs.event",
+                        f"event:{event_id}:{body.generation}",
+                        {"event_id": event_id, "generation": body.generation},
+                    )
             message.ack()
         except Exception as exc:
             code = exc.code if isinstance(exc, JobFailed) else "consumer_failed"
+            if code == "ai_budget_exceeded" and event_id and exc.defer_until:
+                try:
+                    available = datetime.fromtimestamp(exc.defer_until / 1000, UTC).isoformat()
+                    await D1Database(env.DB).batch(
+                        [
+                            Statement(
+                                "UPDATE cf_outbox SET delivery_state='pending',available_at=?,"
+                                "dispatched_at=NULL,last_error='ai_budget_exceeded',"
+                                "failed_attempts=failed_attempts+1 WHERE id=? "
+                                "AND json_extract(payload_json,'$.org_id')=? "
+                                "AND completed_at IS NULL "
+                                "AND delivery_generation=CAST(? AS INTEGER)",
+                                (available, event_id, str(env.ORG_ID), str(body.generation)),
+                            )
+                        ]
+                    )
+                    message.ack()
+                    continue
+                except Exception:
+                    # Do not acknowledge until the durable defer record exists.
+                    code = "ai_defer_failed"
             if event_id:
                 try:
                     await record_failure(
@@ -244,6 +283,7 @@ async def consume(env, batch):
                 )
             )
             message.retry({"delaySeconds": min(60, 5 * 2 ** min(int(message.attempts) - 1, 4))})
+    await dispatch_best_effort(env)
 
 
 async def recover_dead_letters(env, *, limit=25):

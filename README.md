@@ -102,5 +102,11 @@ journal entry are saved together or not at all; every change is audit-logged.
 **Operations:** Docker, background job worker, nightly backups, automated tests and CI,
 automatic deployment on every push.
 
+The public deployment still uses this Docker stack. The Cloudflare migration
+retains Python/FastAPI and React, with native D1 repositories, Queues, Durable
+Objects and Workers AI verified in isolated staging. See the
+[migration status](docs/CLOUDFLARE_IMPLEMENTATION.md) for completed checks and
+remaining deployment, integration and acceptance work.
+
 Developers: setup, architecture and deployment notes are in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

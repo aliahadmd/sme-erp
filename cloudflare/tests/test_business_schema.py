@@ -40,6 +40,8 @@ def test_schema_covers_all_current_models_and_source_files():
         "cf_dead_letters",
         "cf_job_runs",
         "cf_scheduler_state",
+        "cf_ai_batches",
+        "cf_ai_tasks",
         "platform_schema_migrations",
     } == expected
     for table in expected:

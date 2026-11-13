@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
         : {
           LoginGuard: exports.durableObject({ storage: "sqlite" }),
           ERPCommands: exports.durableObject({ storage: "sqlite" }),
+          AIBudget: exports.durableObject({ storage: "sqlite" }),
         },
       env: proof ? {
         DB: bindings.d1({
@@ -69,6 +70,13 @@ export default defineConfig(({ mode }) => {
         EMAIL_MODE: bindings.text("disabled"),
         AUDIT_RETENTION_DAYS: bindings.text("365"),
         BUSINESS_UTC_OFFSET_MINUTES: bindings.text("480"),
+        AI: bindings.ai(),
+        AI_BUDGETS: bindings.durableObject({
+          worker: "erp-migration-staging-20261113", exportName: "AIBudget",
+        }),
+        AI_ENABLED: bindings.text("true"),
+        AI_MODEL: bindings.text("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
+        AI_DAILY_REQUEST_LIMIT: bindings.text("200"),
       },
     },
   };

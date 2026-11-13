@@ -13,3 +13,6 @@ class LoginGuard(DurableObject):
 
     async def finish(self, permit: str, success: bool):
         await self.budget.finish(permit, success)
+
+    async def alarm(self, info=None):
+        await self.budget.expire()

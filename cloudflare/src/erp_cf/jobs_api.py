@@ -58,11 +58,18 @@ async def status(request: Request):
         return {plain(row)["state"]: int(plain(row)["n"]) for row in results[index]["results"]}
 
     scheduler = results[3]["results"]
+    ai = {"enabled": str(getattr(env, "AI_ENABLED", "false")) == "true"}
+    if ai["enabled"]:
+        try:
+            ai["budget"] = plain(await env.AI_BUDGETS.getByName(org_id).status())
+        except Exception:
+            ai["budget"] = {"status": "unavailable"}
     return {
         "enabled": str(getattr(env, "JOBS_ENABLED", "false")) == "true",
         "email_mode": str(getattr(env, "EMAIL_MODE", "disabled")),
         "outbox": counts(0),
         "mail": counts(1),
+        "ai": ai,
         "dead_letters": counts(2),
         "scheduler": plain(scheduler[0]) if scheduler else None,
         "runs": [plain(row) for row in results[4]["results"]],

@@ -22,6 +22,7 @@ class Coordinator:
 
     async def execute(self, envelope):
         from erp_cf.accounting_commands import COMMANDS as ACCOUNTING
+        from erp_cf.ai_commands import COMMANDS as AI
         from erp_cf.core_commands import COMMANDS as CORE
         from erp_cf.documents import COMMANDS as DOCUMENTS
         from erp_cf.hr_commands import COMMANDS as HR
@@ -32,9 +33,9 @@ class Coordinator:
 
         operation = envelope.get("operation", "")
         try:
-            spec = (CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING | HR | JOBS).get(
-                operation
-            )
+            spec = (
+                CORE | MASTER | ACCOUNTING | DOCUMENTS | INVENTORY | INVOICING | HR | JOBS | AI
+            ).get(operation)
             if spec is None:
                 raise NotFoundError("Unknown command")
             async with self.lock:
@@ -76,11 +77,12 @@ class Coordinator:
 
     async def run_system(self, envelope):
         """Trusted binding-only dispatch. Public execute() cannot select these handlers."""
+        from erp_cf.ai_commands import finish_task
         from erp_cf.job_commands import SYSTEM_COMMANDS
 
         operation = envelope.get("operation", "")
         try:
-            handler = SYSTEM_COMMANDS.get(operation)
+            handler = (SYSTEM_COMMANDS | {"ai.task.finish": finish_task}).get(operation)
             if handler is None:
                 raise NotFoundError("Unknown system command")
             key, payload = envelope.get("key", ""), envelope.get("payload", {})
