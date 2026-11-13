@@ -26,12 +26,13 @@ async def read_documents(
         f"FROM {kind.table} d WHERE {where} ORDER BY d.created_at DESC,d.id DESC LIMIT ? OFFSET ?"
     )
     head, line = tables()[kind.table], tables()[kind.lines]
+    line_order = "l.position,l.id" if "position" in line.fields else "l.id"
     results = await db.batch(
         [
             Statement(f"SELECT {head.projection('d')} {selected}", (*values, limit, offset)),
             Statement(
                 f"SELECT {line.projection('l')} FROM {kind.lines} l WHERE l.{kind.parent} "
-                f"IN (SELECT d.id {selected}) ORDER BY l.position,l.id",
+                f"IN (SELECT d.id {selected}) ORDER BY {line_order}",
                 (*values, limit, offset),
             ),
             Statement(

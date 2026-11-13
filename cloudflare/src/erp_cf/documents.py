@@ -117,6 +117,17 @@ class DocumentPlan:
             self.references[key] = row
         return self.references[key]
 
+    async def preload(self, table, identities):
+        missing = {
+            str(value)
+            for value in identities
+            if value is not None and (table, str(value)) not in self.references
+        }
+        rows = await self.plan.repository(table).many(missing, required=False)
+        for identity, row in rows.items():
+            self.plan.guard(table, row)
+            self.references[(table, identity)] = row
+
     async def party(self, identity):
         party = await self.reference("crm_contacts", identity, "Unknown contact")
         if party["status"] != "active":
@@ -130,6 +141,16 @@ class DocumentPlan:
     async def build_lines(self, inputs):
         if not inputs:
             raise ValidationError(f"{self.kind.label.capitalize()} needs at least one line")
+        await self.preload("catalog_products", [item.product_id for item in inputs])
+        products = [
+            row for (table, _), row in self.references.items() if table == "catalog_products"
+        ]
+        await self.preload("catalog_uoms", [row["uom_id"] for row in products])
+        await self.preload(
+            "catalog_taxes",
+            [item.tax_id for item in inputs]
+            + [row["purchase_tax_id" if self.kind.purchase else "sale_tax_id"] for row in products],
+        )
         lines = []
         for position, item in enumerate(inputs):
             data = item.model_dump()

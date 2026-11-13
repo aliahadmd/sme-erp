@@ -52,6 +52,7 @@ uv run python -u scripts/verify_auth_remote.py
 uv run python -u scripts/verify_management_remote.py
 uv run python -u scripts/verify_accounting_remote.py
 uv run python -u scripts/verify_documents_remote.py
+uv run python -u scripts/verify_inventory_remote.py
 ```
 
 `.secrets.app-staging.json` provides independent `JWT_SECRET`, `BOOTSTRAP_TOKEN`
@@ -100,13 +101,20 @@ signed 64-bit aggregate range. Posted proof history is immutable.
 Sales/purchase orders and quotations now preserve their CRUD/lifecycle APIs,
 catalog and dated FX snapshots, Unicode search and exact totals. Quote conversion
 and both audits commit together. Order progress helpers support repeated planned
-changes and releases; inventory/invoicing integration remains pending. Order
-confirmation events are stored in the outbox, with queue dispatch still pending.
+changes and releases; inventory now uses them, with invoicing integration pending.
+Order confirmation events are stored in the outbox, with queue dispatch still pending.
 The bounded quote-expiry planner also awaits Cron wiring.
 
-The last verification passed 97 backend and 13 frontend tests, plus frontend
-build/lint and backend lint/schema checks. Stock/invoice/payment workflows and
-their automatic postings, HR/remaining reporting, AI, overdue notifications, jobs,
+Inventory now includes warehouses, stock/low-stock and movement reads,
+receipts/deliveries with post/void, and adjustments. Stock, original cost
+snapshots, order progress, journals, audits and outbox events commit together.
+Voids use original costs; consumed receipts that would leave residual inventory
+value require dependent documents to be voided first. The remote verifier checks
+forced rollback, stock races, exact costs and a 360-line post/void cycle.
+
+The last verification passed 111 backend and 13 frontend tests, plus frontend
+build/lint and backend lint/schema checks. Invoice/payment workflows and their
+automatic postings, HR/remaining reporting, AI, overdue notifications, jobs,
 frontend assets and the full demo seed remain in progress. This Worker is not
 yet the complete ERP.
 
@@ -159,7 +167,7 @@ migration for later schema changes rather than rewriting its history.
 
 `fixtures/0001_feasibility.sql` is excluded from application migrations. It must
 never be applied to the final ERP database. The full business schema has been
-created in the isolated `erp-staging-20261113` database; authentication and
-management, manual accounting and order/quotation APIs now use it. Seven
-application migrations are recorded there. The remaining business handlers and
-full demo seed still need porting.
+created in the isolated `erp-staging-20261113` database; authentication,
+management, manual accounting, order/quotation and inventory APIs now use it.
+Eight application migrations are recorded there. The remaining business handlers
+and full demo seed still need porting.

@@ -65,6 +65,7 @@ class OrderFlow:
         except (ValueError, DecimalException) as exc:
             raise ConflictError(str(exc)) from exc
         goods = set()
+        await self.documents.preload("catalog_products", [r["product_id"] for r in row["lines"]])
         for product_id in {r["product_id"] for r in row["lines"] if r["product_id"]}:
             product = await self.documents.reference(
                 "catalog_products", product_id, "Unknown order product"

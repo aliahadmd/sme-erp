@@ -39,7 +39,7 @@ class StockRowOut(BaseModel):
 class ReceiptLineIn(BaseModel):
     product_id: uuid.UUID
     qty: Decimal = Field(gt=0)
-    unit_cost: Decimal = Field(0, ge=0)
+    unit_cost: Decimal = Field(Decimal("0"), ge=0)
 
 
 class ReceiptIn(BaseModel):
@@ -113,7 +113,7 @@ class AdjustmentLineIn(BaseModel):
     qty: Decimal  # may be negative, never zero
     # Base-currency unit cost for FOUND stock (positive lines). Omitted/0 →
     # the current moving-average cost. Ignored for decreases (valued at avg).
-    unit_cost: Decimal = Field(0, ge=0)
+    unit_cost: Decimal = Field(Decimal("0"), ge=0)
 
     @field_validator("qty")
     @classmethod

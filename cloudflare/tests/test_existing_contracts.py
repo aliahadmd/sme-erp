@@ -26,6 +26,7 @@ MASTER = load_suite("test_master_data")
 ACCOUNTING = load_suite("test_accounting")
 DOCUMENTS = load_suite("test_documents")
 QUOTES = load_suite("test_quotations")
+INVENTORY = load_suite("test_inventory")
 CASES = [
     function
     for suite in [CORE, MASTER, QUOTES]
@@ -62,3 +63,17 @@ async def test_original_login_validation_variants(client):
 async def test_original_ledger_contract_after_manual_post(client):
     await ACCOUNTING.test_manual_entry_must_balance(client)
     await ACCOUNTING.test_ledger_running_balance(client)
+
+
+async def test_original_inventory_http_scenarios_in_reference_order(client):
+    fixture = {}
+    for case in [
+        INVENTORY.test_moving_average_costing,
+        INVENTORY.test_delivery_cogs_and_negative_guard,
+        INVENTORY.test_adjustment_and_low_stock,
+        INVENTORY.test_receipt_void_reverses_stock,
+        INVENTORY.test_warehouse_rbac,
+        INVENTORY.test_over_delivery_and_partial_remaining,
+        INVENTORY.test_receipt_of_fully_received_po_rejected,
+    ]:
+        await case(client, fixture)

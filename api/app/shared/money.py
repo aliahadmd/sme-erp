@@ -8,15 +8,21 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated
 
 from pydantic import BeforeValidator, StringConstraints
-from sqlalchemy import Numeric
-
-MONEY = Numeric(18, 2)
-QUANTITY = Numeric(18, 4)
-UNIT_PRICE = Numeric(18, 6)
 
 _Q2 = Decimal("0.01")
 _Q4 = Decimal("0.0001")
 _Q6 = Decimal("0.000001")
+
+
+def __getattr__(name: str):
+    # Preserve the old server's type aliases without importing its database
+    # library when Workers only needs Decimal helpers or CurrencyCode.
+    scales = {"MONEY": 2, "QUANTITY": 4, "UNIT_PRICE": 6}
+    if name in scales:
+        from sqlalchemy import Numeric
+
+        return Numeric(18, scales[name])
+    raise AttributeError(name)
 
 
 def money(value: Decimal | str | int | float) -> Decimal:

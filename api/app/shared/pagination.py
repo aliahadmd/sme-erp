@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import Select, func, select
 
 if TYPE_CHECKING:
+    from sqlalchemy import Select
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -40,6 +40,8 @@ async def paginate(
     session: AsyncSession, stmt: Select, params: PageParams
 ) -> tuple[list[Any], int]:
     """Execute a statement with limit/offset; returns (rows, total_count)."""
+    from sqlalchemy import func, select
+
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total: int = (await session.scalar(count_stmt)) or 0
     rows = list((await session.scalars(stmt.limit(params.limit).offset(params.offset))).all())

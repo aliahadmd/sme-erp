@@ -19,7 +19,7 @@ from types import MappingProxyType
 
 from pydantic import BaseModel
 
-from erp_cf.db import AtomicCommands, CommandConflict, Statement, assertion
+from erp_cf.db import AtomicCommands, CommandConflict, Statement, assertion, plain
 from erp_cf.errors import ConflictError, NotFoundError, ValidationError
 from erp_cf.money import INT64_MAX, INT64_MIN, INTEGER, coefficient, from_coefficient, quantize
 
@@ -275,6 +275,31 @@ class Repository:
         if result is None and required:
             raise NotFoundError(f"{self.table.name} record not found")
         return result
+
+    async def many(self, identities, *, required=True):
+        """Bounded binding counts, one D1 batch for a set of owned references."""
+        identities = list(dict.fromkeys(str(value) for value in identities if value is not None))
+        statements = []
+        for start in range(0, len(identities), 80):
+            chunk = identities[start : start + 80]
+            where, params = self.condition(
+                "id IN (" + ",".join("?" for _ in chunk) + ")", tuple(chunk)
+            )
+            statements.append(
+                Statement(
+                    f"SELECT {self.table.projection()} FROM {quote(self.table.name)} WHERE {where}",
+                    params,
+                )
+            )
+        found = {}
+        if statements:
+            for result in await self.db.batch(statements):
+                for record in result["results"]:
+                    row = self.table.decode(plain(record))
+                    found[row["id"]] = row
+        if required and set(identities) - set(found):
+            raise NotFoundError(f"{self.table.name} record not found")
+        return found
 
     async def count(self, where="1", params=()):
         where, params = self.condition(where, params)

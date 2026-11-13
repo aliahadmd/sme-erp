@@ -11,6 +11,8 @@ class Prepared:
         self.binding, self.sql, self.params = binding, sql, params
 
     def bind(self, *params):
+        if len(params) > 100:
+            raise ValueError("D1 permits at most 100 bindings per statement")
         return Prepared(self.binding, self.sql, params)
 
     async def all(self):
@@ -38,7 +40,11 @@ class SQLiteD1:
         return Prepared(self, sql)
 
     async def batch(self, statements):
-        if self.before_batch:
+        # Race/failure hooks run just before writes, after planning reads.
+        writing = any(
+            s.sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for s in statements
+        )
+        if self.before_batch and writing:
             await self.before_batch(statements)
         self.connection.execute("BEGIN")
         try:

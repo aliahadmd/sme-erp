@@ -36,9 +36,9 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The target Cloudflare account is accessible through the connected plugin.
 - An isolated D1 database, `erp-feasibility-20261113`, has been created and the
   runtime/proof schema applied. It contains no migrated production records.
-- The proof, persistence foundation, authentication, management, accounting and
-  order/quotation handlers have passed 97 local backend tests. The frontend has
-  passed 13 tests, its TypeScript/
+- The proof, persistence foundation, authentication, management, accounting,
+  orders/quotations and inventory have passed 111 local backend tests. The frontend
+  has passed 13 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -93,8 +93,8 @@ This database now serves the isolated staging application. It
 contains the fresh organization, branch, administrator, 84 permissions and
 seven system roles, 16 chart-of-account entries, five settings and a base
 currency, plus synthetic verification records. Core management and master-data
-handlers, manual accounting and order/quotation APIs now use it; stock/invoice/
-payment workflows remain unported. Seven application migrations are recorded
+handlers, manual accounting, orders/quotations and inventory now use it;
+invoice/payment workflows remain unported. Eight application migrations are recorded
 by name/hash, including Unicode search keys and immutable journal history.
 
 | Resource | Identifier |
@@ -248,8 +248,8 @@ Application version `124d60e4-2d2c-413b-a91d-349d6210947c` passes
 - `OrderFlow` carries planned line/header revisions across repeated changes in
   one command. Local tests cover duplicate-product FIFO, free-text billing,
   partial movement/invoicing, closure, releases, stale competing commands and
-  cancellation guards for both sales and purchasing. These helpers still need
-  integration with real receipt/delivery/invoice/payment endpoints.
+  cancellation guards for both sales and purchasing. Inventory now integrates
+  them with receipt/delivery endpoints; invoice/payment integration remains open.
 - Confirmation events are persisted in the transactional outbox. Staging has
   one event per confirmed sales/purchase order despite retries. Queue dispatch
   is pending. The bounded quotation-expiry planner is tested; Cron wiring is
@@ -266,9 +266,62 @@ totals engine; orders retain their per-line gross rounding. Migration `0007`
 precedes the first document writes in this fresh D1 database. Synthetic staging
 documents are not the full business demo, and production remains unchanged.
 
+## Inventory postings and reversals
+
+Application version `d9007edb-0c03-41b1-89e7-d541049be46a` passes
+`cloudflare/scripts/verify_inventory_remote.py --failure-probe` on staging.
+
+- Warehouse defaults, stock/low-stock reads, movement history, receipt/delivery
+  create/post/void and adjustment create/post preserve the existing API shapes.
+  Order-sourced receipts copy outstanding goods quantities and discounted net
+  costs divided by the PO's FX snapshot. Services/free-text do not move stock.
+- `StockBook` carries pending product/warehouse balances across repeated lines.
+  Stock, immutable moves, cost snapshots, source-order progress, balanced journal,
+  numbering, audit and outbox share one native D1 batch. The database also
+  enforces one default warehouse and one reversal per original move.
+- Migration `0008` adds immutable exact-decimal before/after cost snapshots.
+  Reversals walk original moves in reverse order, restore prior costs when the
+  state matches and otherwise remove/restore the original movement cost. This
+  fixes the old receipt-void behavior that could retain today's average while
+  reversing a different original journal value. A consumed receipt that would
+  leave residual value at zero stock rejects until dependent moves are voided.
+- Local tests run seven original inventory HTTP scenarios unchanged in their
+  reference sequence. Additional checks cover discounted FX/FIFO partial
+  receipts, zero/negative policy, scale/overflow bounds, lost-race rollback,
+  failed voids and immutable history. A 360-distinct-product receipt exercises
+  bounded reference/stock reads rather than one query per line; the test binding
+  enforces D1's per-statement binding bound.
+- On real D1, a temporary trigger rejected a receipt during journal-line
+  insertion. Stock, source progress, journal and idempotency claim rolled back;
+  the original receipt stayed draft. A subsequent valid receipt using that key
+  committed. The script also races deliveries against insufficient stock and
+  verifies moving-average costs, exact ledger reconciliation, interleaved
+  post/void progress, mixed-sign adjustments and an 18-digit unit cost.
+- A real 360-line post/void cycle succeeds with exact cost snapshots. This run
+  added 739 moves with 739 snapshots and no missing snapshots or foreign-key
+  violations. D1 rejects movement, snapshot and posted-document mutation. The
+  temporary failure trigger has been removed. OpenAPI also serves successfully
+  after these checks; the complete API is still being ported.
+
+The first inventory deployment was rejected by the Python startup memory gate.
+The application was unnecessarily importing SQLAlchemy through shared money
+and pagination helpers. Those imports are now lazy for the legacy server;
+application startup imports no ORM modules, while the isolated SQLAlchemy proof
+remains available. A fresh-process regression check covers that boundary and
+the legacy numeric aliases. The corrected Worker deployed successfully with a
+reported 4,298 ms startup. Cloudflare's isolate memory bound still applies, so
+realistic capacity acceptance remains open. [Workers memory limits](https://developers.cloudflare.com/workers/platform/limits/#memory)
+
+The failure-probe option requires
+`cloudflare/fixtures/inventory_fault_probe.sql` on isolated staging and removal
+afterward; normal runs omit it. Inventory notification events are durable in
+the outbox, but queue delivery/low-stock notifications are not operational yet.
+The full buy/sell cycle still requires invoice/payment integration and its
+acceptance tests. No production traffic or database was changed.
+
 ## Work still required
 
-The full ERP migration remains incomplete. Next, port inventory, invoicing,
+The full ERP migration remains incomplete. Next, port invoicing/payments,
 HR and the remaining reporting handlers onto the typed
 repositories and atomic command path, and prove buy/sell/partial/credit/refund/FX
 workflows. Then
