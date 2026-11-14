@@ -28,6 +28,7 @@ export class ApiError extends Error {
 
 type Tokens = {
   get: () => string | null
+  session: () => number
   clear: () => void
   refresh: () => Promise<boolean>
 }
@@ -38,6 +39,7 @@ type Tokens = {
  */
 let tokenProvider: Tokens = {
   get: () => null,
+  session: () => 0,
   clear: () => {},
   refresh: async () => false,
 }
@@ -51,6 +53,17 @@ export async function apiFetch<T>(
   options: RequestInit & { retry?: boolean } = {}
 ): Promise<T> {
   const { retry = true, headers, ...rest } = options
+  const provider = tokenProvider
+  const session = provider.session()
+  const assertCurrentSession = () => {
+    if (provider !== tokenProvider || provider.session() !== session) {
+      throw new ApiError(
+        401,
+        "session_changed",
+        "Your session changed. Retry the action from the current account."
+      )
+    }
+  }
 
   const finalHeaders = new Headers(headers)
   finalHeaders.set("Accept", "application/json")
@@ -63,7 +76,7 @@ export async function apiFetch<T>(
   ) {
     finalHeaders.set("Idempotency-Key", crypto.randomUUID())
   }
-  const token = tokenProvider.get()
+  const token = provider.get()
   if (token) {
     finalHeaders.set("Authorization", `Bearer ${token}`)
   }
@@ -73,14 +86,16 @@ export async function apiFetch<T>(
     headers: finalHeaders,
     credentials: "include",
   })
+  assertCurrentSession()
 
   if (
     response.status === 401 &&
     retry &&
     !path.startsWith("/api/auth/") &&
-    tokenProvider.refresh
+    provider.refresh
   ) {
-    const refreshed = await tokenProvider.refresh()
+    const refreshed = await provider.refresh()
+    assertCurrentSession()
     if (refreshed) {
       return apiFetch<T>(path, {
         ...options,
@@ -88,7 +103,7 @@ export async function apiFetch<T>(
         retry: false,
       })
     }
-    tokenProvider.clear()
+    provider.clear()
   }
 
   if (!response.ok) {
@@ -107,13 +122,16 @@ export async function apiFetch<T>(
     } catch {
       // non-JSON error body — keep defaults
     }
+    assertCurrentSession()
     throw new ApiError(response.status, code, detail, errors)
   }
 
   if (response.status === 204) {
     return undefined as T
   }
-  return (await response.json()) as T
+  const result = (await response.json()) as T
+  assertCurrentSession()
+  return result
 }
 
 export const api = {

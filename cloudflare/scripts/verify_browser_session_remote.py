@@ -9,15 +9,19 @@ import argparse
 import json
 import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / ".cloudflare/verification/role-browser"
+URL = "https://erp-demo-staging-20261114.aliahad.workers.dev"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scenario", choices=["session-cache", "roles"], default="session-cache")
+    parser.add_argument(
+        "--scenario", choices=["session-cache", "stale-response", "roles"], default="session-cache"
+    )
     parser.add_argument(
         "--role", help="Limit the navigation walkthrough to one active demo profile"
     )
@@ -25,7 +29,7 @@ def main():
     private = json.loads((ROOT / ".demo.demo-staging.json").read_text())
     accounts = (
         {"admin": private["admin"], "employee": private["users"]["employee"]}
-        if args.scenario == "session-cache"
+        if args.scenario != "roles"
         else {
             "admin": private["admin"],
             **{k: v for k, v in private["users"].items() if k != "disabled"},
@@ -35,12 +39,32 @@ def main():
         if args.scenario != "roles" or args.role not in accounts:
             parser.error("--role requires --scenario roles and an active demo profile")
         accounts = {args.role: accounts[args.role]}
-    script = (ROOT / f"scripts/browser_{args.scenario.replace('-', '_')}.js").read_text()
-    source = "async page => (" + script + ")(page," + json.dumps(accounts) + ")"
+    script = (
+        (ROOT / f"scripts/browser_{args.scenario.replace('-', '_')}.js")
+        .read_text()
+        .strip()
+        .removesuffix(";")
+    )
+    source = (
+        "async page => { if (new URL(page.url()).origin !== "
+        + json.dumps(URL)
+        + ") throw new Error('Unexpected browser origin');"
+        + "const assets = await page.locator('script[src]').evaluateAll("
+        + "scripts => scripts.map(script => new URL(script.src).pathname));"
+        + "const result = await ("
+        + script
+        + ")(page,"
+        + json.dumps(accounts)
+        + "); return {...result, origin: new URL(page.url()).origin, assets}; }"
+    )
     DIRECTORY.mkdir(parents=True, exist_ok=True)
     payload = DIRECTORY / f"{args.scenario}-private.js"
     with os.fdopen(os.open(payload, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as out:
         out.write(source)
+    evidence = DIRECTORY / f"{args.scenario}.json"
+    started_at = datetime.now(UTC).isoformat()
+    report = {"state": "running", "started_at": started_at}
+    evidence.write_text(json.dumps(report) + "\n")
     try:
         result = subprocess.run(
             [
@@ -68,9 +92,17 @@ def main():
             error = text.split("### Error", 1)[-1].split("### Ran Playwright code", 1)[0]
             raise RuntimeError(error[:2000])
         value = json.loads(text.split("### Result\n", 1)[1].split("\n###", 1)[0])
-        (DIRECTORY / f"{args.scenario}.json").write_text(json.dumps(value, indent=2) + "\n")
+        report = value
+        value.update(
+            state="complete", started_at=started_at, verified_at=datetime.now(UTC).isoformat()
+        )
+        evidence.write_text(json.dumps(value, indent=2) + "\n")
         if args.scenario == "session-cache":
             print("PASS native same-browser account switch: only the employee's own leave is shown")
+        elif args.scenario == "stale-response":
+            print(
+                "PASS native delayed old-session response: no refresh/retry under the new account"
+            )
         else:
             print(
                 json.dumps(
@@ -78,7 +110,7 @@ def main():
                         {
                             "role": role["role"],
                             "pages": len(role["pages"]),
-                        "forms": len(role["forms"]),
+                            "forms": len(role["forms"]),
                             "failures": role["failures"],
                         }
                         for role in value["roles"]
@@ -88,6 +120,10 @@ def main():
             )
             if not value["passed"]:
                 raise RuntimeError("Role browser walkthrough found inaccessible pages or requests")
+    except BaseException:
+        report["state"] = "failed"
+        evidence.write_text(json.dumps(report, indent=2) + "\n")
+        raise
     finally:
         payload.unlink(missing_ok=True)
 

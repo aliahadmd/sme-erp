@@ -128,16 +128,21 @@ the fresh demo's `/login` page, then run:
 ```sh
 uv run python scripts/verify_browser_session_remote.py --scenario roles
 uv run python scripts/verify_browser_session_remote.py
+uv run python scripts/verify_browser_session_remote.py --scenario stale-response
 ```
 
 The first command walks all nine active profiles, checks navigation/access
 controls and opens/closes authorized forms without submitting them. Use
 `--scenario roles --role warehouse` to narrow a diagnostic run. The default
 scenario switches from administrator to employee in the same live application
-and verifies that only the employee's leave is rendered. Both scenarios sign
-out their actors. The launcher reads the ignored demo credentials, creates a
+and verifies that only the employee's leave is rendered. The stale-response
+scenario holds an old HR read across the same switch, releases it as 401 and
+requires no refresh/retry under the later account; it submits no financial
+command. All scenarios sign out their actors. The launcher pins the demo origin
+before filling credentials, reads the ignored demo credentials, creates a
 temporary 0600 callback, captures/redacts CLI source echo, deletes that callback,
 and writes non-credential evidence under `.cloudflare/verification/role-browser/`.
+Evidence includes the asset name, timestamps and running/complete/failed state.
 Keep the browser's normal TLS verification enabled. A passing navigation/form
 check does not prove every financial or HR submission workflow.
 

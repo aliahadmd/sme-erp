@@ -39,7 +39,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
   AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 309 local backend
-  tests. The frontend has passed 26 tests, its TypeScript/
+  tests. The frontend has passed 30 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -967,9 +967,42 @@ These checks prove navigation, form loading and the tested access boundaries.
 They do not complete browser submission/reversal/approval acceptance, realistic
 capacity, restart/network-loss proofs or production cutover acceptance.
 
+## API retries across account changes
+
+Two local regressions held a payment response or a refresh across administrator
+logout and accountant login. The old client issued another payment request
+after the account changed. The request wrapper now captures an authentication
+generation and rejects stale responses/completions with `session_changed`
+before refreshing, retrying or returning data. Sign-in and sign-out advance
+that generation. Refresh sharing is scoped to the generation; a stale refresh
+cannot replace the later account's token or clear its refresh operation.
+
+Same-session concurrent requests still share one rotating refresh and retain
+their individual mutation keys across retry. A Strict Mode regression verifies
+that repeated mount effects also share a refresh and restore the session.
+
+Chrome reproduced the old retry behavior by holding an administrator's HR GET,
+signing out, signing in as an employee, then releasing the old response as 401.
+The previous `index-C3mxWVZE.js` client refreshed/retried under the employee.
+The corrected `index-8fOHeHvv.js` client records zero stale refreshes/retries and retains
+only the employee's three leave rows. This uses an intercepted read; no financial
+command is submitted in the browser probe. Its temporary fetch observation is
+removed in cleanup, and the actor signs out. The native evidence is
+`role-browser/stale-response.json`.
+
+Version `e15db3e8-950b-45cb-b759-4a5b994a61e6` deploys the correction to the
+isolated demo, with reported startup of 3,085 ms and the same operational flags.
+The original cache-switch regression and all nine profiles' 98 page checks/31
+form openings pass again on this version. The launcher now pins the
+demo origin before entering credentials, records asset names/timestamps and
+marks running/failed checks explicitly so an old success is not mistaken for a
+new result. These tests do not replace general network-loss or restart proofs.
+The final native D1 check found zero unrevoked sessions, pending events and SQL
+assertions, clean foreign keys and successful Cron with no scheduler error.
+
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 309 backend tests, 26 frontend tests, lint/formatting, the
+`pnpm quality` passes 309 backend tests, 30 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and

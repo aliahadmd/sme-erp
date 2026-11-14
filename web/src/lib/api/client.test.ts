@@ -13,6 +13,7 @@ describe("apiFetch error normalization", () => {
     vi.stubGlobal("fetch", fetcher)
     setTokenProvider({
       get: () => token,
+      session: () => 0,
       clear: () => {},
       refresh: async () => {
         token = "fresh"
@@ -49,6 +50,7 @@ describe("apiFetch error normalization", () => {
     )
     setTokenProvider({
       get: () => null,
+      session: () => 0,
       clear: () => {},
       refresh: async () => false,
     })
@@ -74,6 +76,7 @@ describe("apiFetch error normalization", () => {
     )
     setTokenProvider({
       get: () => null,
+      session: () => 0,
       clear: () => {},
       refresh: async () => false,
     })

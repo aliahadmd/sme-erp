@@ -17,12 +17,15 @@ export type CurrentUser = {
 }
 
 let accessToken: string | null = null
+let sessionGeneration = 0
 
 export function getAccessToken() {
   return accessToken
 }
 
+/** Explicit session replacement; ordinary token rotation preserves the generation. */
 export function setAccessToken(token: string | null) {
+  sessionGeneration += 1
   accessToken = token
 }
 
@@ -37,19 +40,25 @@ type AuthState = {
 
 const AuthContext = React.createContext<AuthState | undefined>(undefined)
 
-let refreshInFlight: Promise<boolean> | null = null
+let refreshInFlight: { session: number; promise: Promise<boolean> } | null =
+  null
 
-async function doRefresh(): Promise<boolean> {
+async function doRefresh(session: number): Promise<boolean> {
   try {
     // retry: false is critical — a 401 from the refresh call itself must not
     // re-enter the refresh flow (that recursion caused infinite request storms).
-    const result = await api.post<{ access_token: string }>("/api/auth/refresh", undefined, {
-      retry: false,
-    })
+    const result = await api.post<{ access_token: string }>(
+      "/api/auth/refresh",
+      undefined,
+      {
+        retry: false,
+      }
+    )
+    if (session !== sessionGeneration) return false
     accessToken = result.access_token
     return true
   } catch {
-    accessToken = null
+    if (session === sessionGeneration) accessToken = null
     return false
   }
 }
@@ -57,12 +66,27 @@ async function doRefresh(): Promise<boolean> {
 /** Single-flight: parallel 401s share one refresh instead of racing the
  * rotating refresh cookie against itself. */
 function requestRefresh(): Promise<boolean> {
-  if (!refreshInFlight) {
-    refreshInFlight = doRefresh().finally(() => {
-      refreshInFlight = null
+  if (!refreshInFlight || refreshInFlight.session !== sessionGeneration) {
+    const flight = {
+      session: sessionGeneration,
+      promise: Promise.resolve(false),
+    }
+    flight.promise = doRefresh(flight.session).finally(() => {
+      if (refreshInFlight === flight) refreshInFlight = null
     })
+    refreshInFlight = flight
   }
-  return refreshInFlight
+  return refreshInFlight.promise
+}
+
+// Repeated mount effects must retain the same provider while sharing a refresh.
+const sessionTokens = {
+  get: () => accessToken,
+  session: () => sessionGeneration,
+  clear: () => {
+    accessToken = null
+  },
+  refresh: requestRefresh,
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -70,28 +94,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = React.useState(true)
 
   React.useEffect(() => {
-    setTokenProvider({
-      get: () => accessToken,
-      clear: () => {
-        accessToken = null
-      },
-      refresh: requestRefresh,
-    })
+    setTokenProvider(sessionTokens)
   }, [])
 
   const restoreSession = React.useCallback(async () => {
+    const session = sessionGeneration
     try {
       if (!accessToken) {
         const refreshed = await requestRefresh()
         if (!refreshed) return
       }
       const me = await api.get<CurrentUser>("/api/auth/me")
-      setUser(me)
+      if (session === sessionGeneration) setUser(me)
     } catch {
-      accessToken = null
-      setUser(null)
+      if (session === sessionGeneration) {
+        accessToken = null
+        setUser(null)
+      }
     } finally {
-      setIsLoading(false)
+      if (session === sessionGeneration) setIsLoading(false)
     }
   }, [])
 
@@ -102,29 +123,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [restoreSession])
 
   const login = React.useCallback(async (email: string, password: string) => {
-    const result = await api.post<{ access_token: string; token_type: string }>(
-      "/api/auth/login",
-      { email, password },
-    )
-    accessToken = result.access_token
+    const session = ++sessionGeneration
+    accessToken = null
+    setUser(null)
+    setIsLoading(true)
     try {
+      const result = await api.post<{
+        access_token: string
+        token_type: string
+      }>("/api/auth/login", { email, password })
+      if (session !== sessionGeneration)
+        throw new ApiError(
+          401,
+          "session_changed",
+          "Your session changed. Retry the action from the current account."
+        )
+      accessToken = result.access_token
       const me = await api.get<CurrentUser>("/api/auth/me")
+      if (session !== sessionGeneration)
+        throw new ApiError(
+          401,
+          "session_changed",
+          "Your session changed. Retry the action from the current account."
+        )
       setUser(me)
     } catch (error) {
-      accessToken = null
+      if (session === sessionGeneration) accessToken = null
       if (error instanceof ApiError) throw error
       throw new ApiError(0, "network_error", "Could not reach the API")
+    } finally {
+      if (session === sessionGeneration) setIsLoading(false)
     }
   }, [])
 
   const logout = React.useCallback(async () => {
+    const session = ++sessionGeneration
     try {
       await api.post("/api/auth/logout")
     } catch {
-      // best-effort — clear locally regardless
+      // Server revocation is best-effort; clear only this logout's own session.
     }
-    accessToken = null
-    setUser(null)
+    if (session === sessionGeneration) {
+      setAccessToken(null)
+      setUser(null)
+      setIsLoading(false)
+    }
   }, [])
 
   const hasPermission = React.useCallback(
@@ -133,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user.is_superuser) return true
       return user.permissions.includes(code)
     },
-    [user],
+    [user]
   )
 
   const hasAnyPermission = React.useCallback(
@@ -142,12 +185,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user.is_superuser) return true
       return codes.some((code) => user.permissions.includes(code))
     },
-    [user],
+    [user]
   )
 
   const value = React.useMemo(
     () => ({ user, isLoading, login, logout, hasPermission, hasAnyPermission }),
-    [user, isLoading, login, logout, hasPermission, hasAnyPermission],
+    [user, isLoading, login, logout, hasPermission, hasAnyPermission]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
