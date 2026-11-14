@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { CommandIntent } from "@/lib/api/command-intent"
 import { allocateFifo, formatMoney, moneyToCents, sumMoney } from "@/lib/money"
 import { useAuth } from "@/lib/auth"
 
@@ -256,6 +257,9 @@ function RecordPaymentDialog({
   onOpenChange: (open: boolean) => void
   onDone: () => void
 }) {
+  const [command] = useState(
+    () => new CommandIntent(invoicingApi.recordPayment)
+  )
   const [mode, setMode] = useState<"payment" | "refund">("payment")
   const [direction, setDirection] = useState<"in" | "out">("in")
   const [partyId, setPartyId] = useState("")
@@ -326,9 +330,12 @@ function RecordPaymentDialog({
     setSaving(true)
     setError(null)
     try {
-      if (mode === "refund") {
+      if (command.uncertain) {
+        await command.retry()
+        toast.success("Payment confirmed")
+      } else if (mode === "refund") {
         if (!creditNote) throw new Error("Select a credit note")
-        await invoicingApi.recordPayment({
+        await command.submit({
           // AR credit note → we pay the customer; AP credit note → supplier pays us.
           direction: creditNote.invoice_type === "ar_credit" ? "out" : "in",
           party_id: partyId,
@@ -340,7 +347,7 @@ function RecordPaymentDialog({
         })
         toast.success("Refund recorded")
       } else {
-        await invoicingApi.recordPayment({
+        await command.submit({
           direction,
           party_id: partyId,
           amount,
@@ -375,7 +382,10 @@ function RecordPaymentDialog({
             {mode === "refund" ? "Refund a credit note" : "Record payment"}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <fieldset
+          disabled={saving || command.uncertain}
+          className="flex flex-col gap-4"
+        >
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label>Type</Label>
@@ -424,7 +434,7 @@ function RecordPaymentDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label>Party *</Label>
+              <Label htmlFor="pay-party">Party *</Label>
               <Select
                 value={partyId}
                 onValueChange={(v) => {
@@ -433,7 +443,7 @@ function RecordPaymentDialog({
                   setCreditNoteId("")
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger id="pay-party">
                   <SelectValue placeholder="Select…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -519,27 +529,36 @@ function RecordPaymentDialog({
             </p>
           )}
           {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
+        </fieldset>
+        {command.uncertain && (
+          <p role="status" className="text-sm text-muted-foreground">
+            This payment's result is unconfirmed. Retry the submitted payment.
+            If you leave this form, check Payments before recording another.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             disabled={
-              !partyId ||
-              !amount ||
               saving ||
-              statementQuery.isLoading ||
-              !!statementQuery.error ||
-              (mode === "refund" && !creditNoteId)
+              (!command.uncertain &&
+                (!partyId ||
+                  !amount ||
+                  statementQuery.isLoading ||
+                  !!statementQuery.error ||
+                  (mode === "refund" && !creditNoteId)))
             }
             onClick={() => void save()}
           >
             {saving
               ? "Saving…"
-              : mode === "refund"
-                ? "Record refund"
-                : "Record payment"}
+              : command.uncertain
+                ? "Retry submitted payment"
+                : mode === "refund"
+                  ? "Record refund"
+                  : "Record payment"}
           </Button>
         </DialogFooter>
       </DialogContent>

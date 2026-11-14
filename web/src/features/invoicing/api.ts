@@ -1,6 +1,6 @@
 /** Invoicing API. */
 
-import { api } from "@/lib/api/client"
+import { api, type MutationOptions } from "@/lib/api/client"
 import type { Contact } from "@/features/contacts/api"
 import type { Page } from "@/features/settings/api"
 import type { Order } from "@/features/documents/api"
@@ -139,22 +139,30 @@ export const invoicingApi = {
       `/api/invoicing/payments?${new URLSearchParams(clean)}`
     )
   },
-  recordPayment: (body: {
-    direction: "in" | "out"
-    party_id: string
-    amount: string
-    currency?: string
-    method: string
-    credit_note_id?: string
-    allocations: { invoice_id: string; amount: string }[]
-  }) => api.post<Payment>("/api/invoicing/payments", body),
+  recordPayment: (
+    body: {
+      direction: "in" | "out"
+      party_id: string
+      amount: string
+      currency?: string
+      method: string
+      credit_note_id?: string
+      allocations: { invoice_id: string; amount: string }[]
+    },
+    options?: MutationOptions
+  ) => api.post<Payment>("/api/invoicing/payments", body, options),
   allocatePayment: (
     id: string,
-    allocations: { invoice_id: string; amount: string }[]
+    allocations: { invoice_id: string; amount: string }[],
+    options?: MutationOptions
   ) =>
-    api.post<Payment>(`/api/invoicing/payments/${id}/allocate`, {
-      allocations,
-    }),
+    api.post<Payment>(
+      `/api/invoicing/payments/${id}/allocate`,
+      {
+        allocations,
+      },
+      options
+    ),
   voidPayment: (id: string) =>
     api.post<Payment>(`/api/invoicing/payments/${id}/void`, undefined),
 

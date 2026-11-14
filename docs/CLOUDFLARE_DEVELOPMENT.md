@@ -146,6 +146,34 @@ Evidence includes the asset name, timestamps and running/complete/failed state.
 Keep the browser's normal TLS verification enabled. A passing navigation/form
 check does not prove every financial or HR submission workflow.
 
+Financial response-loss checks use the separate verification Worker and keep
+the coherent demo unchanged. With `erp-financial` open at that Worker's `/login`:
+
+```sh
+ERP_RESTART_PROOF=true CF_MODE=app-staging pnpm quality
+ERP_RESTART_PROOF=true pnpm deploy:app-staging
+uv run python scripts/verify_browser_payment_remote.py --prepare --restart
+uv run python scripts/verify_browser_payment_remote.py --browser
+pnpm build:app-staging
+pnpm deploy:app-staging
+```
+
+The probe creates a disposable customer, submits a real `12.34` payment, resets
+the coordinator after its commit, withholds the response, and retries through
+the UI. It checks the unchanged key/payload, changed coordinator instance,
+native single payment/posting, one reversal and restored account balances.
+Cleanup voids only that payment and archives only its fixture contact. If the
+process is interrupted, inspect its live process/browser first, then use
+`--cleanup` when that process is terminal. Cleanup reads the known command receipt
+and never creates a payment to discover its ID. Start another run with
+`--new --prepare --restart` only after the previous checkpoint is cleaned.
+
+The final two commands close the temporary diagnostic flag; verify the hidden
+coordinator endpoints return 404 afterward. The flag is unavailable on the demo
+and future production origins. `CommandIntent` currently protects the payment/
+refund form's unresolved submissions; other financial forms need equivalent
+retry and lifecycle acceptance before complete browser recovery is claimed.
+
 ## CI and Workers Builds
 
 `.github/workflows/cloudflare.yml` runs `pnpm quality` without database services,

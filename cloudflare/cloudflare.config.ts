@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const proof = mode === "staging";
   const demo = mode === "demo-staging";
   const initializing = demo && process.env.ERP_DEMO_BOOTSTRAP === "true";
+  const restartProof = mode === "app-staging" && process.env.ERP_RESTART_PROOF === "true";
   const application = demo ? "erp-demo-staging-20261114" : "erp-migration-staging-20261113";
   const eventQueue = demo ? "erp-demo-staging-events-20261114" : "erp-staging-events-20261113";
   const deadQueue = demo ? "erp-demo-staging-events-dlq-20261114" : "erp-staging-events-dlq-20261113";
@@ -73,6 +74,7 @@ export default defineConfig(({ mode }) => {
         PUBLIC_ORIGIN: bindings.text(`https://${application}.aliahad.workers.dev`),
         ORG_ID: bindings.text(demo ? "01a1d6bf-eca3-7654-b225-ae37c723ed96" : "019a78e1-6d80-7000-8000-000000000001"),
         BOOTSTRAP_ENABLED: bindings.text(demo ? String(initializing) : "true"),
+        RESTART_PROOFS_ENABLED: bindings.text(String(restartProof)),
         EVENTS: bindings.queue({ name: eventQueue }),
         JOBS_ENABLED: bindings.text(String(!initializing)),
         EVENT_QUEUE_NAME: bindings.text(eventQueue),

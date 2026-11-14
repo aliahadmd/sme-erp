@@ -48,14 +48,10 @@ export function setTokenProvider(provider: Tokens) {
   tokenProvider = provider
 }
 
-export async function apiFetch<T>(
-  path: string,
-  options: RequestInit & { retry?: boolean } = {}
-): Promise<T> {
-  const { retry = true, headers, ...rest } = options
+export function captureApiSession() {
   const provider = tokenProvider
   const session = provider.session()
-  const assertCurrentSession = () => {
+  return () => {
     if (provider !== tokenProvider || provider.session() !== session) {
       throw new ApiError(
         401,
@@ -64,6 +60,17 @@ export async function apiFetch<T>(
       )
     }
   }
+}
+
+export type MutationOptions = { retry?: boolean; idempotencyKey?: string }
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit & { retry?: boolean } = {}
+): Promise<T> {
+  const { retry = true, headers, ...rest } = options
+  const provider = tokenProvider
+  const assertCurrentSession = captureApiSession()
 
   const finalHeaders = new Headers(headers)
   finalHeaders.set("Accept", "application/json")
@@ -136,21 +143,39 @@ export async function apiFetch<T>(
 
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
-  post: <T>(path: string, body?: unknown, options?: { retry?: boolean }) =>
+  post: <T>(path: string, body?: unknown, options: MutationOptions = {}) =>
     apiFetch<T>(path, {
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
-      ...options,
+      retry: options.retry,
+      headers: options.idempotencyKey
+        ? { "Idempotency-Key": options.idempotencyKey }
+        : undefined,
     }),
-  patch: <T>(path: string, body?: unknown) =>
+  patch: <T>(path: string, body?: unknown, options: MutationOptions = {}) =>
     apiFetch<T>(path, {
       method: "PATCH",
       body: body === undefined ? undefined : JSON.stringify(body),
+      retry: options.retry,
+      headers: options.idempotencyKey
+        ? { "Idempotency-Key": options.idempotencyKey }
+        : undefined,
     }),
-  put: <T>(path: string, body?: unknown) =>
+  put: <T>(path: string, body?: unknown, options: MutationOptions = {}) =>
     apiFetch<T>(path, {
       method: "PUT",
       body: body === undefined ? undefined : JSON.stringify(body),
+      retry: options.retry,
+      headers: options.idempotencyKey
+        ? { "Idempotency-Key": options.idempotencyKey }
+        : undefined,
     }),
-  delete: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, options: MutationOptions = {}) =>
+    apiFetch<T>(path, {
+      method: "DELETE",
+      retry: options.retry,
+      headers: options.idempotencyKey
+        ? { "Idempotency-Key": options.idempotencyKey }
+        : undefined,
+    }),
 }

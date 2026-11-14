@@ -38,8 +38,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 309 local backend
-  tests. The frontend has passed 30 tests, its TypeScript/
+  AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 313 local backend
+  tests. The frontend has passed 35 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -1000,9 +1000,80 @@ new result. These tests do not replace general network-loss or restart proofs.
 The final native D1 check found zero unrevoked sessions, pending events and SQL
 assertions, clean foreign keys and successful Cron with no scheduler error.
 
+## Submitted payment retries and native coordinator reset
+
+A real payment-form regression found that manual resubmission generated a new
+idempotency key after a committed response was lost. The local test originally
+recorded two payments. The deployed legacy browser also sent the same body with
+a different key; the verifier stopped that second transmission before it could
+create a duplicate in staging.
+
+`CommandIntent` retains one action's key, immutable input and authentication
+generation until it receives an acknowledgement. It joins concurrent identical
+submissions, permits corrections after an initial definite rejection, retains
+uncertainty after a later rejection, and prevents an old action from sending or
+retrying across an account switch. After acknowledgement, another explicitly
+submitted action receives a new key, even when its input is identical.
+
+The payment/refund form uses that controller. Unconfirmed submissions lock
+editable fields and offer **Retry submitted payment**, using the original FIFO
+allocations even if a refreshed statement changes. Closing and reopening the
+dialog on the same page retains the submitted action. The controller is in
+browser memory: leaving/reloading the page or signing out is not persisted
+offline recovery. The UI directs users to check Payments before starting a new
+action after leaving an unconfirmed form. Broader financial-form recovery still
+requires acceptance; this change does not claim every mutation now uses the
+controller.
+
+On the isolated `app-staging` Worker, version
+`b8ede215-57be-4873-9818-997cdee5cb23` (reported startup 2,949 ms), a real Chrome
+test submitted `12.34`, read the committed response internally, reset the
+financial coordinator, then withheld that response from the application. The
+browser showed the unconfirmed state, locked editing, retained the amount across
+dialog close/reopen, and retried with the same key/body. Both acknowledgements
+identified payment `01a1d881-6a2f-7493-9896-5395a6e2769d` (`PAY-2026-0028`).
+
+The coordinator constructor marker changed from
+`057f1436c870476ba9cdf34cc7973cea` to `4bd0525d91c5462d8ddb8f801f680794`.
+The probe uses Cloudflare's documented `ctx.abort()` reset, waits for the
+coordinator lock, and clears no durable storage. It is gated by the explicit
+temporary flag, the exact isolated Worker origin, the staging environment and
+primary-backed superuser checks at both HTTP and RPC boundaries. Fresh stubs
+disable automatic retries for the reset call; a 202 response alone is not treated
+as proof of a reset. [Durable Object state](https://developers.cloudflare.com/durable-objects/api/state/#abort),
+[stub retry controls](https://developers.cloudflare.com/durable-objects/api/namespace/#get)
+
+Native D1 checks found exactly one payment and one original payment posting.
+Cleanup voided that payment, verified exactly one reversal, archived its test
+contact, and restored every account balance to the recorded baseline. The
+coherent demo database was not used for financial fault injection. The ignored
+checkpoint is `cloudflare/.cloudflare/verification/financial-browser/payment-retry.json`;
+earlier cleaned probe checkpoints are retained beside it. Its known command key
+is saved before transmission, so interrupted cleanup reads the existing receipt
+instead of creating a payment to discover its outcome. Credentials remain in
+temporary 0600 callback files, which are removed after execution.
+
+This proves completed-command replay after a native coordinator reset. It does
+not establish crashes during every write phase, frontend reload recovery,
+other forms' retry behavior or full Worker-isolate/capacity acceptance. The
+temporary reset flag is disabled again after the proof.
+The closed verification deployment is `9a525e06-fa3b-4b96-ba1a-89151455062e`
+(reported startup 2,803 ms); anonymous and authenticated instance/reset requests
+return 404. All four browser-proof payments are void, their account effects are
+reversed, foreign keys/assertions are clean and no proof session remains active.
+
+The closed demo deployment `7d07d32b-27a2-40f8-b3e2-6641c904b2ca` serves
+`/assets/index-BCMeOZee.js` with both bootstrap and restart probes disabled.
+The complete nine-profile Chrome walkthrough passes again on that asset:
+98 page checks and 31 permitted form openings, with no unexpected API errors.
+The same-browser account-cache and delayed old-session response probes pass on
+that asset too. The completed demo seed replay still verifies stock value
+`2220.60`, open AR `543.96`, open AP `2372.00`, one low-stock item and balanced
+books; it does not add financial stress fixtures to the demo.
+
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 309 backend tests, 30 frontend tests, lint/formatting, the
+`pnpm quality` passes 313 backend tests, 35 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
@@ -1023,6 +1094,9 @@ The original application's current OpenAPI inventory contains 139 method/path
 pairs. The native Worker now contains all 139, six job-operations endpoints,
 nine backup/recovery operations and four staging-only operations: 158 operations
 across 121 OpenAPI paths.
+Two additional hidden coordinator proof routes return 404 unless the temporary
+isolated restart verification is explicitly enabled; they are not public API
+schema operations.
 The captured inventory is `cloudflare/fixtures/reference_routes.json`; the
 route-presence regression test requires no missing original operation. Route
 presence is not proof of full workflow, role or operational parity.
@@ -1033,5 +1107,6 @@ The full ERP migration remains incomplete. Next, complete
 realistic backup/recovery capacity and operational alerts, live email acceptance/delivery,
 complete browser/role parity, hosted CI/Workers Builds activation,
 production environment, capacity acceptance, cutover and
-safe old-runtime retirement. Forced Worker/DO restart and network-loss proofs
-also remain open. The synthetic proof is not the migrated ERP.
+safe old-runtime retirement. The completed-payment coordinator reset/response-loss
+case passes; broader Worker restart, in-flight failure, frontend recovery and
+capacity proofs remain open. The synthetic proof is not the migrated ERP.

@@ -22,6 +22,7 @@ from erp_cf.jobs_api import router as jobs_router
 from erp_cf.master_api import router as master_router
 from erp_cf.reporting_api import router as reporting_router
 from erp_cf.reporting_proof import router as reporting_proof_router
+from erp_cf.restart_proof import router as restart_proof_router
 
 
 def create_app(test_environment=None):
@@ -38,6 +39,7 @@ def create_app(test_environment=None):
     app.include_router(hr_router)
     app.include_router(reporting_router)
     app.include_router(reporting_proof_router)
+    app.include_router(restart_proof_router)
     app.include_router(jobs_router)
     app.include_router(ai_router)
     for router in document_routers:
