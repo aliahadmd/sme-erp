@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { CommandIntent } from "@/lib/api/command-intent"
 import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
@@ -142,6 +143,7 @@ function ManualEntryDialog({
   onDone: () => void
 }) {
   const queryClient = useQueryClient()
+  const [command] = useState(() => new CommandIntent(accountingApi.createEntry))
   const [memo, setMemo] = useState("")
   const [debitAccountId, setDebitAccountId] = useState("")
   const [creditAccountId, setCreditAccountId] = useState("")
@@ -160,13 +162,15 @@ function ManualEntryDialog({
     setSaving(true)
     setError(null)
     try {
-      await accountingApi.createEntry({
-        memo,
-        lines: [
-          { account_id: debitAccountId, debit: amount, credit: "0" },
-          { account_id: creditAccountId, debit: "0", credit: amount },
-        ],
-      })
+      if (command.uncertain) await command.retry()
+      else
+        await command.submit({
+          memo,
+          lines: [
+            { account_id: debitAccountId, debit: amount, credit: "0" },
+            { account_id: creditAccountId, debit: "0", credit: amount },
+          ],
+        })
       toast.success("Entry posted")
       void queryClient.invalidateQueries({ queryKey: ["accounting"] })
       onDone()
@@ -186,7 +190,10 @@ function ManualEntryDialog({
         <DialogHeader>
           <DialogTitle>Manual journal entry</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <fieldset
+          disabled={saving || command.uncertain}
+          className="flex flex-col gap-4"
+        >
           <div className="flex flex-col gap-2">
             <Label htmlFor="je-memo">Memo</Label>
             <Input
@@ -242,18 +249,30 @@ function ManualEntryDialog({
             />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
+        </fieldset>
+        {command.uncertain && (
+          <p role="status" className="text-sm text-muted-foreground">
+            This entry's result is unconfirmed. Retry the submitted entry. If
+            you leave this form, check Journal entries before posting another.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             disabled={
-              !memo || !debitAccountId || !creditAccountId || !amount || saving
+              saving ||
+              (!command.uncertain &&
+                (!memo || !debitAccountId || !creditAccountId || !amount))
             }
             onClick={() => void save()}
           >
-            {saving ? "Posting…" : "Post entry"}
+            {saving
+              ? "Posting…"
+              : command.uncertain
+                ? "Retry submitted entry"
+                : "Post entry"}
           </Button>
         </DialogFooter>
       </DialogContent>

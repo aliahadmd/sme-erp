@@ -34,7 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ApiError } from "@/lib/api/client"
+import { ApiError, captureApiSession } from "@/lib/api/client"
+import { CommandIntent } from "@/lib/api/command-intent"
 import { useAuth } from "@/lib/auth"
 import { formatMoney } from "@/lib/money"
 
@@ -525,6 +526,14 @@ function CreateAdjustmentDialog({
   onDone: () => void
 }) {
   const queryClient = useQueryClient()
+  const [assertSession] = useState(() => captureApiSession())
+  const [createCommand] = useState(
+    () => new CommandIntent(inventoryApi.createAdjustment)
+  )
+  const [postCommand] = useState(
+    () => new CommandIntent(inventoryApi.postAdjustment)
+  )
+  const [createdId, setCreatedId] = useState<string | null>(null)
   const [reason, setReason] = useState("stock_correction")
   const [productId, setProductId] = useState("")
   const [qty, setQty] = useState("")
@@ -537,22 +546,35 @@ function CreateAdjustmentDialog({
     enabled: open,
   })
   const products = productsQuery.data?.items ?? []
+  const submitted =
+    createdId !== null || createCommand.uncertain || postCommand.uncertain
 
   const create = async () => {
     setSaving(true)
     setError(null)
     try {
-      const created = await inventoryApi.createAdjustment({
-        reason,
-        lines: [{ product_id: productId, qty }],
-      })
-      await inventoryApi.postAdjustment(created.id)
+      assertSession()
+      let id = createdId
+      if (!id) {
+        const created = createCommand.uncertain
+          ? await createCommand.retry()
+          : await createCommand.submit({
+              reason,
+              lines: [{ product_id: productId, qty }],
+            })
+        id = created.id
+        setCreatedId(id)
+      }
+      assertSession()
+      if (postCommand.uncertain) await postCommand.retry()
+      else await postCommand.submit(id)
       toast.success("Adjustment posted")
       void queryClient.invalidateQueries({ queryKey: ["inventory"] })
       onDone()
       onOpenChange(false)
       setProductId("")
       setQty("")
+      setCreatedId(null)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -566,7 +588,10 @@ function CreateAdjustmentDialog({
         <DialogHeader>
           <DialogTitle>New adjustment</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <fieldset
+          disabled={saving || submitted}
+          className="flex flex-col gap-4"
+        >
           <div className="flex flex-col gap-2">
             <Label>Reason</Label>
             <Select
@@ -615,16 +640,26 @@ function CreateAdjustmentDialog({
             />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
+        </fieldset>
+        {submitted && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Retry this submitted adjustment to confirm or finish posting it. If
+            you leave this form, check Adjustments before creating another.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            disabled={!productId || !qty || saving}
+            disabled={saving || (!submitted && (!productId || !qty))}
             onClick={() => void create()}
           >
-            {saving ? "Posting…" : "Create & post"}
+            {saving
+              ? "Posting…"
+              : submitted
+                ? "Retry submitted adjustment"
+                : "Create & post"}
           </Button>
         </DialogFooter>
       </DialogContent>

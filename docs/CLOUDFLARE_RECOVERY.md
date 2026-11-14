@@ -16,6 +16,16 @@ contain sensitive application data, including password hashes and session
 records, and must remain private. Runtime access uses bindings rather than an
 account API token.
 
+The separate coherent demo has its first committed private R2 baseline:
+`01a1da6a-5839-76e7-b180-7b49a4fdbc35`, captured on 14 November 2026. It contains
+1,558 rows in 77 pages (460,502 bytes) across all 62 captured data tables and
+completed in approximately 4 minutes 50 seconds. The archive is discoverable,
+the write pause is released, and the requester has signed out. The ignored
+checkpoint is `cloudflare/.cloudflare/verification/demo-baseline-backup.json`.
+This is capture/publication evidence; the full restore proof below used the
+separate verification application's database. The demo still has restoration
+disabled and no recovery-database binding.
+
 ## Capture and publication
 
 An authenticated superuser with settings access requests a backup using

@@ -171,8 +171,32 @@ and never creates a payment to discover its ID. Start another run with
 The final two commands close the temporary diagnostic flag; verify the hidden
 coordinator endpoints return 404 afterward. The flag is unavailable on the demo
 and future production origins. `CommandIntent` currently protects the payment/
-refund form's unresolved submissions; other financial forms need equivalent
-retry and lifecycle acceptance before complete browser recovery is claimed.
+refund form's unresolved submissions. Manual journal entries use the same
+controller. The adjustment form retains separate create/post commands and its
+acknowledged draft ID, so a posting failure never starts another draft.
+
+The separate financial verifier covers those forms without enabling a restart
+probe. Open `erp-financial` at the verification Worker's `/login`, then run:
+
+```sh
+uv run python scripts/verify_browser_financial_remote.py --prepare --scenario manual
+uv run python scripts/verify_browser_financial_remote.py --browser
+uv run python scripts/verify_browser_financial_remote.py --new --prepare --scenario adjustment-post
+uv run python scripts/verify_browser_financial_remote.py --browser
+```
+
+Additional scenarios are `adjustment-create` and `adjustment-rejected`. The last
+keeps negative-stock protection enabled, rejects the first posting, replenishes
+only the disposable product, then retries the same draft. Each run checks native
+records and adds an exact compensating entry/adjustment, voids its initial stock
+receipt and archives/deactivates its fixture master data. It never deletes
+financial records. All account balances must match the pre-fixture baseline.
+Its private `financial-retry.json` checkpoint supports `--cleanup` after the
+original process is terminal, using the known create receipt. `--new` refuses
+an uncleaned checkpoint. A CLI/transport interruption records an unknown browser
+outcome and leaves cleanup pending; inspect the original browser actions before
+compensating or starting another run. Other forms and recovery across page
+reloads still need acceptance before complete browser recovery is claimed.
 
 ## CI and Workers Builds
 

@@ -39,7 +39,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
   AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 313 local backend
-  tests. The frontend has passed 35 tests, its TypeScript/
+  tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -1071,9 +1071,79 @@ that asset too. The completed demo seed replay still verifies stock value
 `2220.60`, open AR `543.96`, open AP `2372.00`, one low-stock item and balanced
 books; it does not add financial stress fixtures to the demo.
 
+## Journal and adjustment retry boundaries
+
+Four further component regression cases originally reproduced duplicate
+financial actions: manual journal retries created two entries, while adjustment
+retries created two drafts after a lost create response, a lost post response,
+or an initially rejected post. These tests exercise the real pages, API client
+and a server-receipt simulation. All four now pass, including locked inputs and
+dialog close/reopen recovery for the pending adjustment.
+
+On the previously deployed `/assets/index-BCMeOZee.js`, native Chrome checks
+independently reproduced the changed journal key and the adjustment handler
+restarting at create after its original posting committed. The verifier blocked
+the changed second command before transmission. Native receipts identified
+journal `01a1da5e-4917-77bf-9802-ad908564593b` (`JE-2026-0191`) and adjustment
+`01a1da61-1549-7241-b28a-c9ca3898d01b` (`ADJ-2026-0002`). Cleanup compensated
+their effects and restored every account balance; the stock receipt was voided
+and the fixture product archived.
+
+Manual entry submission now retains its exact command until acknowledged.
+Adjustment submission retains separate create/post command identities and the
+acknowledged draft ID. Even a definitive posting rejection keeps that draft;
+retrying never starts another create. Session checks also fence the transition
+between create and post. These controllers retain state only while their page
+is mounted, and the forms direct users to review existing records if they leave.
+The journal/adjustment native acceptance runs use
+`scripts/verify_browser_financial_remote.py`; their checkpoint reconciles the
+known create receipt before compensating immutable financial effects.
+
+The updated verification deployment is
+`2bd0de80-a0b2-4737-a768-9879febf61d0`, serving `/assets/index-C3bnUq5k.js`.
+The CLI lost its final network response after upload; Cloudflare's deployment
+API confirmed the new version at 100%, so the upload was not repeated. The
+deployed restart flag is false, jobs are enabled and mail remains in test mode.
+
+All four native Chrome cases now pass on that asset:
+
+| Scenario | Submitted native record | Observed retry behavior |
+|---|---|---|
+| Lost journal response | `01a1da69-e198-73db-9825-8d6ed6f30d4f` | Two 201 acknowledgements of one entry, with the same key and body |
+| Lost adjustment create response | `01a1da6a-ebd3-7058-9a51-28908ee3a02c` | Two acknowledgements of one draft, followed by one stock movement |
+| Lost adjustment post response | `01a1da6c-60e4-7419-ba43-63356cf7aabf` | One create, then two 200 acknowledgements of the same posting |
+| Rejected adjustment post | `01a1da70-8f50-77a1-9e49-9b29eb8bc33a` | One create, a real insufficient-stock 409, replenishment of only the fixture product, then a 200 for the same draft |
+
+Every case checks locked fields and retained values across dialog close/reopen,
+native single-record/movement counts, and all account balances after cleanup.
+The rejected posting may use a fresh key after its definite 409; it keeps the
+original draft ID. Response-loss retries must retain their original key/body.
+All checkpoints are cleaned and the browser/API sessions signed out. An earlier
+network-readiness failure and a test-only fetch binding error were cleaned and
+excluded from this passing evidence. A callback/transport interruption leaves
+an unknown checkpoint pending for inspection rather than compensating while
+browser actions may still be running.
+
+The coherent demo's first private R2 baseline is also committed:
+`01a1da6a-5839-76e7-b180-7b49a4fdbc35`, 1,558 rows across 62 data tables,
+77 pages and 460,502 bytes, completing in about 4 minutes 50 seconds. Archive
+discovery and release of the write pause pass. No restore was attempted against
+the demo; its restore flag and recovery binding remain disabled.
+Final native checks find zero active sessions created during these financial/
+backup runs, zero assertions and clean foreign keys in both isolated databases.
+
+The updated demo deployment is `168965e7-ca14-429d-b47a-577056f50d9d`, reported
+startup 2,708 ms, serving the same `/assets/index-C3bnUq5k.js`. Bootstrap and
+restart probes remain disabled, jobs enabled, mail in test mode, and no recovery
+database is bound. Production, its database and domain remain unchanged.
+The full nine-profile walkthrough passes on this demo version too: 98 page
+checks and 31 permitted form openings, with no unexpected API errors. HTTP
+checks confirm disabled bootstrap with a valid request body, hidden restart
+probes, released maintenance and the completed baseline backup.
+
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 313 backend tests, 35 frontend tests, lint/formatting, the
+`pnpm quality` passes 313 backend tests, 39 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and

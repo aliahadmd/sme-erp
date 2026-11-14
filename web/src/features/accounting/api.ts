@@ -1,6 +1,6 @@
 /** Accounting API. */
 
-import { api } from "@/lib/api/client"
+import { api, type MutationOptions } from "@/lib/api/client"
 import type { Page } from "@/features/settings/api"
 
 export type Account = {
@@ -46,9 +46,12 @@ export const accountingApi = {
     if (params.limit) clean.set("limit", String(params.limit))
     return api.get<Page<JournalEntry>>(`/api/accounting/journal-entries?${clean}`)
   },
-  createEntry: (body: {
-    memo: string
-    lines: { account_id: string; debit: string; credit: string }[]
-  }) => api.post<JournalEntry>("/api/accounting/journal-entries", body),
+  createEntry: (
+    body: {
+      memo: string
+      lines: { account_id: string; debit: string; credit: string }[]
+    },
+    options?: MutationOptions
+  ) => api.post<JournalEntry>("/api/accounting/journal-entries", body, options),
   trialBalance: () => api.get<TrialBalanceRow[]>("/api/accounting/trial-balance"),
 }

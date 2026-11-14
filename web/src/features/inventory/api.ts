@@ -1,6 +1,6 @@
 /** Inventory API. */
 
-import { api } from "@/lib/api/client"
+import { api, type MutationOptions } from "@/lib/api/client"
 import type { Page } from "@/features/settings/api"
 import type { Product } from "@/features/products/api"
 import type { Order } from "@/features/documents/api"
@@ -121,12 +121,20 @@ export const inventoryApi = {
     if (params.limit) clean.set("limit", String(params.limit))
     return api.get<Page<Adjustment>>(`/api/inventory/adjustments?${clean}`)
   },
-  createAdjustment: (body: {
-    reason: string
-    notes?: string
-    lines: { product_id: string; qty: string }[]
-  }) => api.post<Adjustment>("/api/inventory/adjustments", body),
-  postAdjustment: (id: string) => api.post<Adjustment>(`/api/inventory/adjustments/${id}/post`, undefined),
+  createAdjustment: (
+    body: {
+      reason: string
+      notes?: string
+      lines: { product_id: string; qty: string }[]
+    },
+    options?: MutationOptions
+  ) => api.post<Adjustment>("/api/inventory/adjustments", body, options),
+  postAdjustment: (id: string, options?: MutationOptions) =>
+    api.post<Adjustment>(
+      `/api/inventory/adjustments/${id}/post`,
+      undefined,
+      options
+    ),
 
   // All orders (status filtered client-side): partly received/delivered or
   // already-invoiced orders can still have goods outstanding.
