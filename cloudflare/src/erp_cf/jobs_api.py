@@ -20,6 +20,13 @@ from erp_cf.maintenance import state as maintenance_state
 router = APIRouter()
 
 
+@router.get("/api/operations/health", dependencies=[Depends(require("core.settings.read"))])
+async def operational_health(request: Request):
+    from erp_cf.operations import health
+
+    return await health(environment(request))
+
+
 @router.get("/api/jobs/status", dependencies=[Depends(require("core.settings.read"))])
 async def status(request: Request):
     env = environment(request)

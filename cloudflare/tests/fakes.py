@@ -22,7 +22,13 @@ class Prepared:
 
     async def all(self):
         rows = self.binding.connection.execute(self.sql, self.params).fetchall()
-        return {"results": [dict(row) for row in rows], "success": True}
+        pages = self.binding.connection.execute("PRAGMA page_count").fetchone()[0]
+        size = self.binding.connection.execute("PRAGMA page_size").fetchone()[0]
+        return {
+            "results": [dict(row) for row in rows],
+            "success": True,
+            "meta": {"size_after": pages * size},
+        }
 
     async def first(self):
         rows = (await self.all())["results"]

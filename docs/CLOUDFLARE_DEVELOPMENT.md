@@ -35,6 +35,12 @@ Worker into Build Output. It makes no Cloudflare resource changes. The default
 mode is `demo-staging`; `CF_MODE=app-staging pnpm quality` selects verification.
 Quality builds refuse the temporary demo-bootstrap flag.
 
+Operational assessment, thresholds, native Monitor queries and deployed demo
+policy IDs are documented in [the operations guide](CLOUDFLARE_OPERATIONS.md).
+Monitoring is disabled during demo initialization and enabled afterward. Native
+Monitor delivery has been activated and tested for the demo; the query renderer
+itself remains read-only.
+
 The host-only `uuid-utils` development dependency lets schema generation inspect
 the original model definitions. It is excluded from the Worker target lock.
 Do not vendor host-native extensions into the Python Worker.

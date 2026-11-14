@@ -80,7 +80,10 @@ after its page ledger and R2 objects are removed.
 
 Confirm the deployed schedule flag and job results rather than assuming a local
 configuration change has enabled automatic capture. Failed jobs and overdue
-backups need operational alerts; these are part of production acceptance.
+backups need operational alerts. The demo now assesses these conditions and
+has native Cloudflare Monitors with confirmed test delivery; see
+[operational monitoring](CLOUDFLARE_OPERATIONS.md). Replicate and verify the
+policies for the production environment before cutover.
 
 ## Isolated restore
 

@@ -11,6 +11,7 @@ from erp_cf.backup_schedule import run as run_backups
 from erp_cf.backup_worker import ERPBackups as ERPBackups
 from erp_cf.command_worker import ERPCommands as ERPCommands
 from erp_cf.limits_worker import LoginGuard as LoginGuard
+from erp_cf.operations import emit_health
 
 app = create_app()
 
@@ -35,5 +36,8 @@ class Default(WorkerEntrypoint):
     async def scheduled(self, controller, env, ctx):
         # Python's scheduled entrypoint requires all four arguments.
         scheduled = int(controller.scheduledTime)
-        if not await run_backups(self.env, scheduled):
-            await tick(self.env, scheduled)
+        try:
+            if not await run_backups(self.env, scheduled):
+                await tick(self.env, scheduled)
+        finally:
+            await emit_health(self.env)

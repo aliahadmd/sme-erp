@@ -1,0 +1,22 @@
+{
+  "worker": "erp-demo-staging-20261114",
+  "enabled": true,
+  "delivery": "One user-approved email destination; personal address retained in Cloudflare",
+  "policies": [
+    {
+      "id": "5885cc1ae88042f9a3d88984b698cd91",
+      "query_file": "heartbeat.sql",
+      "name": "ERP demo: missing operational heartbeat"
+    },
+    {
+      "id": "65e1373c8522498585cacfff22a6f091",
+      "query_file": "health.sql",
+      "name": "ERP demo: operational assessment needs attention"
+    },
+    {
+      "id": "4b13f43f271f4d5cafbc0f9483a3fc6c",
+      "query_file": "cron-errors.sql",
+      "name": "ERP demo: scheduled error logs"
+    }
+  ]
+}

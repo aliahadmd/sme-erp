@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 313 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 325 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1141,9 +1141,65 @@ checks and 31 permitted form openings, with no unexpected API errors. HTTP
 checks confirm disabled bootstrap with a valid request body, hidden restart
 probes, released maintenance and the completed baseline backup.
 
+## Operational assessment and native Cloudflare Monitors
+
+`GET /api/operations/health` requires current `core.settings.read` permission.
+It reads D1 aggregates and private R2 object metadata, returning explicit
+issues for stale eligible work, missing/stale scheduler success, quarantine,
+expired mail claims, missing/overdue/stalled/failed backups, stalled/failed
+restores and database headroom. Missing configuration/source/size metadata does
+not produce a healthy result. Expected backup pauses suppress job-age noise
+only within the configured total pause budget plus a bounded grace period.
+The assessment never retries mail or mutates business/maintenance state.
+
+With monitoring enabled, each Cron completion emits a redacted structured heartbeat, including when
+backup work pauses ordinary jobs or the job invocation raises. The initial
+native log query found no messages because Cloudflare had parsed the JSON into
+attributes and left its message column empty. The final collector includes a
+stable `message` field, `erp_operational_health:<status>`, for the native SQL
+queries. A separate boundary regression also caught same-second backup failure
+ordering; durations retain fractional seconds instead of hiding a later failed
+run through integer truncation.
+
+The final verification version is `f773d584-745b-414e-92f0-0aaad2090019`
+(reported startup 2,752 ms). An earlier network-failed upload was confirmed
+absent from both versions and deployments before the same prebuilt output was
+retried with IPv4 preferred. The fresh demo runs version
+`fc557f0a-7ecf-40cd-8c06-95ca105e9ac9` (reported startup 2,956 ms). Both retain
+`/assets/index-C3bnUq5k.js`; no frontend behavior changed in this step.
+
+Native authenticated assessments report `ok`, with database sizes around
+6.3 MB for verification and 2.2 MB for the demo, and all three latest backup
+marker/manifest objects present. The demo employee receives 403. Native SQL
+previews on the demo return heartbeat count 5, unhealthy count 0 and scheduled
+error count 0 in the observed fifteen-minute window. The heartbeat aggregate
+also returns one numeric zero row for a known earlier window without that
+collector, so the missing-data condition has a signal rather than an empty
+result set. These checks do not establish realistic load capacity or full
+backup restorability from object metadata alone.
+
+The user authorized monitor activation/testing and supplied a destination.
+These three demo-only `custom_analytics` policies are enabled, using native
+`sql_api` selectors, a fifteen-minute window, five-minute evaluation and hourly
+repeats:
+
+- Missing heartbeat: `5885cc1ae88042f9a3d88984b698cd91`.
+- Unhealthy assessment: `65e1373c8522498585cacfff22a6f091`.
+- Scheduled error logs: `4b13f43f271f4d5cafbc0f9483a3fc6c`.
+
+The stored recipient, queries, thresholds and intervals were read back before
+enabling. Cloudflare accepted one INFO test per policy. Notification history
+records all three as sent and not silenced at approximately 15:36 UTC on
+14 November, and the user confirmed all three arrived. Existing billing policy
+configuration was preserved. No ERP business mail was enabled; its independent
+Email Sending acceptance remains open. The review templates, deployed policy
+IDs and [operations guide](CLOUDFLARE_OPERATIONS.md) document replication.
+Native read-only assessments and previews are saved privately under
+`cloudflare/.cloudflare/verification/operations/`.
+
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 313 backend tests, 39 frontend tests, lint/formatting, the
+`pnpm quality` passes 325 backend tests, 39 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
@@ -1162,8 +1218,8 @@ in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
 
 The original application's current OpenAPI inventory contains 139 method/path
 pairs. The native Worker now contains all 139, six job-operations endpoints,
-nine backup/recovery operations and four staging-only operations: 158 operations
-across 121 OpenAPI paths.
+nine backup/recovery operations, the operational health assessment and four
+staging-only operations: 159 operations across 122 OpenAPI paths.
 Two additional hidden coordinator proof routes return 404 unless the temporary
 isolated restart verification is explicitly enabled; they are not public API
 schema operations.
@@ -1174,7 +1230,7 @@ presence is not proof of full workflow, role or operational parity.
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
-realistic backup/recovery capacity and operational alerts, live email acceptance/delivery,
+realistic backup/recovery capacity, production alert replication, live ERP email acceptance/delivery,
 complete browser/role parity, hosted CI/Workers Builds activation,
 production environment, capacity acceptance, cutover and
 safe old-runtime retirement. The completed-payment coordinator reset/response-loss

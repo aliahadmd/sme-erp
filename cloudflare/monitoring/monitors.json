@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "enabled": false,
+  "account_id": "4287bb6da0c60bbcc12c01a34718fb86",
+  "workers": {
+    "app-staging": "erp-migration-staging-20261113",
+    "demo-staging": "erp-demo-staging-20261114"
+  },
+  "activation": "Prepared only; choose an authorized destination before enabling native Monitors",
+  "monitors": [
+    {
+      "name": "Missing ERP operational heartbeat",
+      "query_file": "heartbeat.sql",
+      "operator": "<",
+      "threshold": 1,
+      "execution_interval": "5m",
+      "repeat_notification_interval": "1h",
+      "time_range_mode": "manual"
+    },
+    {
+      "name": "ERP operational assessment needs attention",
+      "query_file": "health.sql",
+      "operator": ">",
+      "threshold": 0,
+      "execution_interval": "5m",
+      "repeat_notification_interval": "1h",
+      "time_range_mode": "manual"
+    },
+    {
+      "name": "ERP scheduled error logs",
+      "query_file": "cron-errors.sql",
+      "operator": ">",
+      "threshold": 0,
+      "execution_interval": "5m",
+      "repeat_notification_interval": "1h",
+      "time_range_mode": "manual"
+    }
+  ]
+}

@@ -30,6 +30,11 @@ class Bucket:
 
         return SimpleNamespace(size=len(text.encode()), text=body)
 
+    async def head(self, key):
+        if key not in self.objects:
+            return None
+        return SimpleNamespace(key=key, size=len(self.objects[key].encode()))
+
     async def delete(self, keys):
         for key in [keys] if isinstance(keys, str) else keys:
             self.objects.pop(key, None)
