@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -48,24 +49,30 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 export function JournalPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [manualOpen, setManualOpen] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ["accounting", "journal", {}],
     queryFn: () => accountingApi.journalEntries({ limit: 50 }),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["accounting"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["accounting"] })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Journal entries</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Journal entries
+          </h1>
           <p className="text-sm text-muted-foreground">
             Business events post automatically — manual entries must balance
           </p>
         </div>
-        <Button onClick={() => setManualOpen(true)}>New manual entry</Button>
+        {hasPermission("accounting.entry.create") && (
+          <Button onClick={() => setManualOpen(true)}>New manual entry</Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -75,10 +82,18 @@ export function JournalPage() {
           return (
             <div key={entry.id} className="rounded-lg border">
               <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-                <span className="font-mono text-xs font-medium">{entry.number}</span>
-                <span className="text-sm text-muted-foreground">{entry.entry_date}</span>
-                <Badge variant="outline">{SOURCE_LABELS[entry.source_type] ?? entry.source_type}</Badge>
-                <span className="text-sm text-muted-foreground">{entry.memo}</span>
+                <span className="font-mono text-xs font-medium">
+                  {entry.number}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {entry.entry_date}
+                </span>
+                <Badge variant="outline">
+                  {SOURCE_LABELS[entry.source_type] ?? entry.source_type}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {entry.memo}
+                </span>
                 <span className="ml-auto font-mono text-sm">{totalDebit}</span>
               </div>
               <Table>
@@ -90,10 +105,14 @@ export function JournalPage() {
                       </TableCell>
                       <TableCell>{line.account_name}</TableCell>
                       <TableCell className="w-32 text-right font-mono text-sm">
-                        {moneyToCents(line.debit) ? formatMoney(line.debit) : ""}
+                        {moneyToCents(line.debit)
+                          ? formatMoney(line.debit)
+                          : ""}
                       </TableCell>
                       <TableCell className="w-32 pr-4 text-right font-mono text-sm">
-                        {moneyToCents(line.credit) ? formatMoney(line.credit) : ""}
+                        {moneyToCents(line.credit)
+                          ? formatMoney(line.credit)
+                          : ""}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -104,7 +123,11 @@ export function JournalPage() {
         })}
       </div>
 
-      <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} onDone={invalidate} />
+      <ManualEntryDialog
+        open={manualOpen}
+        onOpenChange={setManualOpen}
+        onDone={invalidate}
+      />
     </div>
   )
 }
@@ -166,11 +189,18 @@ function ManualEntryDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="je-memo">Memo</Label>
-            <Input id="je-memo" value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <Input
+              id="je-memo"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label>Debit account</Label>
-            <Select value={debitAccountId} onValueChange={(v) => setDebitAccountId(v ?? "")}>
+            <Select
+              value={debitAccountId}
+              onValueChange={(v) => setDebitAccountId(v ?? "")}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
@@ -185,7 +215,10 @@ function ManualEntryDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label>Credit account</Label>
-            <Select value={creditAccountId} onValueChange={(v) => setCreditAccountId(v ?? "")}>
+            <Select
+              value={creditAccountId}
+              onValueChange={(v) => setCreditAccountId(v ?? "")}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
@@ -215,7 +248,9 @@ function ManualEntryDialog({
             Cancel
           </Button>
           <Button
-            disabled={!memo || !debitAccountId || !creditAccountId || !amount || saving}
+            disabled={
+              !memo || !debitAccountId || !creditAccountId || !amount || saving
+            }
             onClick={() => void save()}
           >
             {saving ? "Posting…" : "Post entry"}
@@ -261,7 +296,10 @@ export function TrialBalancePage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
@@ -274,10 +312,14 @@ export function TrialBalancePage() {
                   <Badge variant="outline">{row.type}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {moneyToCents(row.total_debit) ? formatMoney(row.total_debit) : ""}
+                  {moneyToCents(row.total_debit)
+                    ? formatMoney(row.total_debit)
+                    : ""}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
-                  {moneyToCents(row.total_credit) ? formatMoney(row.total_credit) : ""}
+                  {moneyToCents(row.total_credit)
+                    ? formatMoney(row.total_credit)
+                    : ""}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {formatMoney(row.balance)}

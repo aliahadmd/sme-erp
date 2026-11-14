@@ -30,30 +30,37 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
 }
 
 export function AccountsPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ["accounting", "accounts"],
     queryFn: () => accountingApi.accounts(),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["accounting"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["accounting"] })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Chart of accounts</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Chart of accounts
+          </h1>
           <p className="text-sm text-muted-foreground">
             System accounts power the automatic postings — they cannot be edited
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New account</Button>
+        {hasPermission("accounting.account.create") && (
+          <Button onClick={() => setCreateOpen(true)}>New account</Button>
+        )}
       </div>
       <div className="rounded-lg border">
         <Table>
@@ -68,14 +75,19 @@ export function AccountsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {(data ?? []).map((account) => (
               <TableRow key={account.id}>
-                <TableCell className="font-mono text-xs">{account.code}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {account.code}
+                </TableCell>
                 <TableCell>{account.name}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{account.type}</Badge>
@@ -88,7 +100,11 @@ export function AccountsPage() {
           </TableBody>
         </Table>
       </div>
-      <CreateAccountDialog open={createOpen} onOpenChange={setCreateOpen} onDone={invalidate} />
+      <CreateAccountDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onDone={invalidate}
+      />
     </div>
   )
 }
@@ -134,11 +150,19 @@ function CreateAccountDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="acc-code">Code</Label>
-            <Input id="acc-code" value={code} onChange={(e) => setCode(e.target.value)} />
+            <Input
+              id="acc-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="acc-name">Name</Label>
-            <Input id="acc-name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="acc-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label>Type</Label>
@@ -161,7 +185,10 @@ function CreateAccountDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!code || !name || saving} onClick={() => void create()}>
+          <Button
+            disabled={!code || !name || saving}
+            onClick={() => void create()}
+          >
             Create
           </Button>
         </DialogFooter>

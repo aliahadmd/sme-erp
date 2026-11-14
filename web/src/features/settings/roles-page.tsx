@@ -24,22 +24,28 @@ import {
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
 }
 
 export function RolesPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const rolesQuery = useQuery({ queryKey: queryKeys.roles(), queryFn: () => settingsApi.roles() })
+  const rolesQuery = useQuery({
+    queryKey: queryKeys.roles(),
+    queryFn: () => settingsApi.roles(),
+  })
   const permissionsQuery = useQuery({
     queryKey: queryKeys.permissions(),
     queryFn: () => settingsApi.permissions(),
   })
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: queryKeys.roles() })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.roles() })
 
   return (
     <div className="flex flex-col gap-4">
@@ -47,10 +53,13 @@ export function RolesPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Roles</h1>
           <p className="text-sm text-muted-foreground">
-            System roles are managed in code; create custom roles for special cases
+            System roles are managed in code; create custom roles for special
+            cases
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New role</Button>
+        {hasPermission("core.role.create") && (
+          <Button onClick={() => setCreateOpen(true)}>New role</Button>
+        )}
       </div>
 
       <div className="rounded-lg border">
@@ -134,7 +143,9 @@ function CreateRoleDialog({
 
   const toggle = (permCode: string) =>
     setSelected((prev) =>
-      prev.includes(permCode) ? prev.filter((c) => c !== permCode) : [...prev, permCode],
+      prev.includes(permCode)
+        ? prev.filter((c) => c !== permCode)
+        : [...prev, permCode]
     )
 
   return (
@@ -167,14 +178,17 @@ function CreateRoleDialog({
           <div className="max-h-72 overflow-y-auto rounded-md border p-3">
             {modules.map((module) => (
               <div key={module} className="mb-3 last:mb-0">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {module}
                 </div>
                 <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                   {permissions
                     .filter((p) => p.module === module)
                     .map((p) => (
-                      <label key={p.code} className="flex items-center gap-2 text-sm">
+                      <label
+                        key={p.code}
+                        className="flex items-center gap-2 text-sm"
+                      >
                         <input
                           type="checkbox"
                           checked={selected.includes(p.code)}
@@ -188,14 +202,19 @@ function CreateRoleDialog({
               </div>
             ))}
           </div>
-          <div className="text-xs text-muted-foreground">{selected.length} selected</div>
+          <div className="text-xs text-muted-foreground">
+            {selected.length} selected
+          </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={create.isPending || !code || !name} onClick={() => create.mutate()}>
+          <Button
+            disabled={create.isPending || !code || !name}
+            onClick={() => create.mutate()}
+          >
             {create.isPending ? "Creating…" : "Create role"}
           </Button>
         </DialogFooter>

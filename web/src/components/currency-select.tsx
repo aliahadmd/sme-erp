@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { api } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 type Currency = { id: string; code: string; name: string }
 
@@ -29,13 +30,16 @@ export function CurrencySelect({
   id?: string
   disabled?: boolean
 }) {
+  const { hasPermission } = useAuth()
   const currencies = useQuery({
     queryKey: ["currencies", "list"],
     queryFn: () => api.get<Currency[]>("/api/currencies"),
   })
   const org = useQuery({
     queryKey: ["currencies", "org-base"],
-    queryFn: () => api.get<{ base_currency: string }>("/api/org").catch(() => null),
+    queryFn: () =>
+      api.get<{ base_currency: string }>("/api/org").catch(() => null),
+    enabled: hasPermission("core.org.read"),
   })
   const base = org.data?.base_currency
   const codes = new Set<string>((currencies.data ?? []).map((c) => c.code))
@@ -45,7 +49,9 @@ export function CurrencySelect({
   return (
     <Select
       value={value ?? DEFAULT}
-      onValueChange={(v) => onChange(!v || v === DEFAULT ? undefined : String(v))}
+      onValueChange={(v) =>
+        onChange(!v || v === DEFAULT ? undefined : String(v))
+      }
       disabled={disabled}
     >
       <SelectTrigger id={id}>

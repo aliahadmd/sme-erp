@@ -2,9 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { invoicingApi, type Invoice as InvoiceT } from "@/features/invoicing/api"
+import {
+  invoicingApi,
+  type Invoice as InvoiceT,
+} from "@/features/invoicing/api"
 import { CurrencySelect } from "@/components/currency-select"
 import { formatMoney } from "@/lib/money"
+import { useAuth } from "@/lib/auth"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -52,6 +56,7 @@ const statusVariant = (status: string) =>
         : "outline"
 
 export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -60,7 +65,8 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
     queryFn: () => invoicingApi.invoices({ side, limit: 50 }),
   })
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["invoicing"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["invoicing"] })
 
   const post = useMutation({
     mutationFn: (invoice: InvoiceT) => invoicingApi.postInvoice(invoice.id),
@@ -102,7 +108,9 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
         original_invoice_id: invoice.id,
       }),
     onSuccess: () => {
-      toast.success("Draft credit note created (full amount) — review and post it")
+      toast.success(
+        "Draft credit note created (full amount) — review and post it"
+      )
       invalidate()
       void refetch()
     },
@@ -117,10 +125,15 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
             {side === "ar" ? "Customer invoices" : "Supplier bills"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Posting is final — corrections via void (reversal entries are automatic)
+            Posting is final — corrections via void (reversal entries are
+            automatic)
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New {side === "ar" ? "invoice" : "bill"}</Button>
+        {hasPermission("invoicing.invoice.create") && (
+          <Button onClick={() => setCreateOpen(true)}>
+            New {side === "ar" ? "invoice" : "bill"}
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border">
@@ -140,14 +153,20 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={8}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={8}
+                  className="text-center text-muted-foreground"
+                >
                   No invoices yet
                 </TableCell>
               </TableRow>
@@ -173,7 +192,9 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
                   </TableCell>
                   <TableCell className="text-sm">
                     {invoice.due_date}
-                    {overdue && <span className="ml-1 text-destructive">⚠</span>}
+                    {overdue && (
+                      <span className="ml-1 text-destructive">⚠</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {isCredit(invoice) ? "−" : ""}
@@ -185,36 +206,71 @@ export function InvoicesPage({ side }: { side: "ar" | "ap" }) {
                       : formatMoney(invoice.open_balance)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge>
+                    <Badge variant={statusVariant(invoice.status)}>
+                      {invoice.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap justify-end gap-1">
                       {invoice.status === "draft" && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => post.mutate(invoice)}>
-                            Post
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteDraft.mutate(invoice)}>
-                            Delete
-                          </Button>
+                          {hasPermission("invoicing.invoice.post") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => post.mutate(invoice)}
+                            >
+                              Post
+                            </Button>
+                          )}
+                          {hasPermission("invoicing.invoice.update") && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteDraft.mutate(invoice)}
+                            >
+                              Delete
+                            </Button>
+                          )}
                         </>
                       )}
-                      {!isCredit(invoice) && ["posted", "partial", "paid"].includes(invoice.status) && (
-                        <Button size="sm" variant="ghost" onClick={() => credit.mutate(invoice)}>
-                          Credit note
-                        </Button>
-                      )}
-                      {side === "ar" && invoice.status !== "draft" && invoice.status !== "void" && (
-                        <Button size="sm" variant="ghost" onClick={() => email.mutate(invoice)}>
-                          Email
-                        </Button>
-                      )}
-                      {(invoice.status === "posted" ||
-                        (isCredit(invoice) && ["partial", "paid"].includes(invoice.status))) && (
-                        <Button size="sm" variant="ghost" onClick={() => voidInv.mutate(invoice)}>
-                          Void
-                        </Button>
-                      )}
+                      {hasPermission("invoicing.invoice.create") &&
+                        !isCredit(invoice) &&
+                        ["posted", "partial", "paid"].includes(
+                          invoice.status
+                        ) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => credit.mutate(invoice)}
+                          >
+                            Credit note
+                          </Button>
+                        )}
+                      {hasPermission("invoicing.invoice.post") &&
+                        side === "ar" &&
+                        invoice.status !== "draft" &&
+                        invoice.status !== "void" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => email.mutate(invoice)}
+                          >
+                            Email
+                          </Button>
+                        )}
+                      {hasPermission("invoicing.invoice.void") &&
+                        (invoice.status === "posted" ||
+                          (isCredit(invoice) &&
+                            ["partial", "paid"].includes(invoice.status))) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => voidInv.mutate(invoice)}
+                          >
+                            Void
+                          </Button>
+                        )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -245,6 +301,10 @@ function CreateInvoiceDialog({
   side: "ar" | "ap"
   onDone: () => void
 }) {
+  const { hasPermission } = useAuth()
+  const canReadOrders = hasPermission(
+    `${side === "ar" ? "sales" : "purchasing"}.order.read`
+  )
   const [partyId, setPartyId] = useState("")
   const [orderId, setOrderId] = useState("standalone")
   const [description, setDescription] = useState("")
@@ -257,16 +317,21 @@ function CreateInvoiceDialog({
   const contactsQuery = useQuery({
     queryKey: ["invoicing", "contacts", side],
     queryFn: () => invoicingApi.contacts(),
-    enabled: open,
+    enabled: open && hasPermission("crm.contact.read"),
   })
   const ordersQuery = useQuery({
     queryKey: ["invoicing", "orders", side],
-    queryFn: () => (side === "ar" ? invoicingApi.salesOrders() : invoicingApi.purchaseOrders()),
-    enabled: open,
+    queryFn: () =>
+      side === "ar"
+        ? invoicingApi.salesOrders()
+        : invoicingApi.purchaseOrders(),
+    enabled: open && canReadOrders,
   })
-  const orders = (ordersQuery.data?.items ?? []).filter((o) => INVOICEABLE.has(o.status))
+  const orders = (ordersQuery.data?.items ?? []).filter((o) =>
+    INVOICEABLE.has(o.status)
+  )
   const contacts = (contactsQuery.data?.items ?? []).filter((c) =>
-    side === "ar" ? c.is_customer : c.is_supplier,
+    side === "ar" ? c.is_customer : c.is_supplier
   )
 
   const create = async () => {
@@ -280,7 +345,9 @@ function CreateInvoiceDialog({
       if (orderId !== "standalone") {
         body.source_order_id = orderId
       } else {
-        body.lines = [{ description: description || "Item", qty, unit_price: price || "0" }]
+        body.lines = [
+          { description: description || "Item", qty, unit_price: price || "0" },
+        ]
         body.currency = currency
       }
       await invoicingApi.createInvoice(body)
@@ -304,7 +371,9 @@ function CreateInvoiceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New {side === "ar" ? "customer invoice" : "supplier bill"}</DialogTitle>
+          <DialogTitle>
+            New {side === "ar" ? "customer invoice" : "supplier bill"}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -322,41 +391,68 @@ function CreateInvoiceDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label>From order (optional)</Label>
-            <Select value={orderId} onValueChange={(v) => setOrderId(v ?? "standalone")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="standalone">— standalone lines —</SelectItem>
-                {orders.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.number} — {o.customer_name ?? o.supplier_name} ({formatMoney(o.total)}{" "}
-                    {o.currency}, {o.status})
+          {canReadOrders && (
+            <div className="flex flex-col gap-2">
+              <Label>From order (optional)</Label>
+              <Select
+                value={orderId}
+                onValueChange={(v) => setOrderId(v ?? "standalone")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standalone">
+                    — standalone lines —
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                  {orders.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.number} — {o.customer_name ?? o.supplier_name} (
+                      {formatMoney(o.total)} {o.currency}, {o.status})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {orderId === "standalone" && (
             <div className="flex flex-col gap-3 rounded-md border p-3">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="inv-desc">Description</Label>
-                <Input id="inv-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+                <Input
+                  id="inv-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="inv-currency">Currency</Label>
-                <CurrencySelect id="inv-currency" value={currency} onChange={setCurrency} />
+                <CurrencySelect
+                  id="inv-currency"
+                  value={currency}
+                  onChange={setCurrency}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="inv-qty">Qty</Label>
-                  <Input id="inv-qty" type="number" step="0.0001" value={qty} onChange={(e) => setQty(e.target.value)} />
+                  <Input
+                    id="inv-qty"
+                    type="number"
+                    step="0.0001"
+                    value={qty}
+                    onChange={(e) => setQty(e.target.value)}
+                  />
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="inv-price">Unit price</Label>
-                  <Input id="inv-price" type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+                  <Input
+                    id="inv-price"
+                    type="number"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
                 </div>
               </div>
             </div>

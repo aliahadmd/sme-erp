@@ -1,6 +1,6 @@
 import { LogOut, Menu } from "lucide-react"
 import { useState } from "react"
-import { useLocation } from "react-router"
+import { useLocation, useNavigate } from "react-router"
 import { NavLink, Outlet } from "react-router"
 import { toast } from "sonner"
 
@@ -25,7 +25,7 @@ import { useAuth } from "@/lib/auth"
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const { hasAnyPermission } = useAuth()
   const visible = NAV_ITEMS.filter(
-    (item) => !item.anyPermission || hasAnyPermission(item.anyPermission),
+    (item) => !item.anyPermission || hasAnyPermission(item.anyPermission)
   )
   return (
     <nav className="flex flex-col gap-1 px-2">
@@ -55,7 +55,7 @@ function Brand() {
   return (
     <div className="flex h-14 items-center px-4">
       <span className="text-lg font-semibold tracking-tight">ERP</span>
-      <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+      <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground uppercase">
         SME
       </span>
     </div>
@@ -64,6 +64,7 @@ function Brand() {
 
 function UserMenu() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [prefsOpen, setPrefsOpen] = useState(false)
   if (!user) return null
   const initials = user.full_name
@@ -75,37 +76,46 @@ function UserMenu() {
 
   return (
     <>
-    <EmailPreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button variant="ghost" className="h-9 gap-2 px-2">
-            <Avatar className="size-7">
-              <AvatarFallback className="text-xs">{initials || "?"}</AvatarFallback>
-            </Avatar>
-            <span className="hidden text-sm font-medium sm:inline">{user.full_name}</span>
-          </Button>
-        }
-      />
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>
-          <div className="text-sm font-medium">{user.full_name}</div>
-          <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setPrefsOpen(true)}>
-          Email preferences
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            void logout().then(() => toast.success("Signed out"))
-          }}
-        >
-          <LogOut className="size-4" /> Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      <EmailPreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="ghost" className="h-9 gap-2 px-2">
+              <Avatar className="size-7">
+                <AvatarFallback className="text-xs">
+                  {initials || "?"}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden text-sm font-medium sm:inline">
+                {user.full_name}
+              </span>
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>
+            <div className="text-sm font-medium">{user.full_name}</div>
+            <div className="text-xs font-normal text-muted-foreground">
+              {user.email}
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setPrefsOpen(true)}>
+            Email preferences
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              void logout().then(() => {
+                navigate("/login", { replace: true, state: null })
+                toast.success("Signed out")
+              })
+            }}
+          >
+            <LogOut className="size-4" /> Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   )
 }
@@ -129,7 +139,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Sheet>
             <SheetTrigger
               render={
-                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  aria-label="Open menu"
+                />
               }
             >
               <Menu className="size-5" />

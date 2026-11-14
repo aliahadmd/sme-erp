@@ -33,6 +33,7 @@ import {
 import { ApiError } from "@/lib/api/client"
 import { centsToMoney, lineMathCents } from "@/lib/money"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -40,7 +41,12 @@ function errorMessage(error: unknown): string {
 
 /** Exact preview of the server's line math (decimal strings, banker's rounding). */
 function lineCents(line: OrderLine, ratePct: string) {
-  return lineMathCents(line.qty || "0", line.unit_price || "0", line.discount_pct || "0", ratePct)
+  return lineMathCents(
+    line.qty || "0",
+    line.unit_price || "0",
+    line.discount_pct || "0",
+    ratePct
+  )
 }
 
 function blankLine(): OrderLine {
@@ -54,24 +60,43 @@ function blankLine(): OrderLine {
 }
 
 export function OrderEditorPage({ module }: { module: OrderModule }) {
+  const { hasPermission } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isNew = !id
+  const orderKey =
+    module === "sales"
+      ? queryKeys.salesOrder(id ?? "new")
+      : queryKeys.purchaseOrder(id ?? "new")
 
   const orderQuery = useQuery({
-    queryKey: queryKeys.salesOrder(id ?? "new"),
+    queryKey: orderKey,
     queryFn: () => ordersApi.get(module, id!),
     enabled: !!id,
   })
 
-  const contactsQuery = useQuery({ queryKey: ["pickers", "contacts"], queryFn: () => ordersApi.contacts() })
-  const productsQuery = useQuery({ queryKey: ["pickers", "products"], queryFn: () => ordersApi.products() })
-  const taxesQuery = useQuery({ queryKey: ["pickers", "taxes"], queryFn: () => ordersApi.taxes() })
+  const contactsQuery = useQuery({
+    queryKey: ["pickers", "contacts"],
+    queryFn: () => ordersApi.contacts(),
+    enabled: hasPermission("crm.contact.read"),
+  })
+  const productsQuery = useQuery({
+    queryKey: ["pickers", "products"],
+    queryFn: () => ordersApi.products(),
+    enabled: hasPermission("catalog.product.read"),
+  })
+  const taxesQuery = useQuery({
+    queryKey: ["pickers", "taxes"],
+    queryFn: () => ordersApi.taxes(),
+    enabled: hasPermission("catalog.tax.read"),
+  })
 
   // ---- editor state
   const [partyId, setPartyId] = useState<string>("")
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10))
+  const [orderDate, setOrderDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  )
   const [expectedDate, setExpectedDate] = useState("")
   const [notes, setNotes] = useState("")
   const [currency, setCurrency] = useState<string | undefined>(undefined)
@@ -83,20 +108,33 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
   if (serverOrder && initializedFrom !== serverOrder.id) {
     setInitializedFrom(serverOrder.id)
     setPartyId(
-      (serverOrder.customer_id ?? serverOrder.supplier_id ?? "") as string,
+      (serverOrder.customer_id ?? serverOrder.supplier_id ?? "") as string
     )
     setOrderDate(serverOrder.order_date)
     setExpectedDate(serverOrder.expected_date ?? "")
     setNotes(serverOrder.notes ?? "")
     setCurrency(serverOrder.currency)
-    setLines(serverOrder.lines.map((l) => ({ ...l, qty: String(l.qty), unit_price: String(l.unit_price), discount_pct: String(l.discount_pct ?? "0") })))
+    setLines(
+      serverOrder.lines.map((l) => ({
+        ...l,
+        qty: String(l.qty),
+        unit_price: String(l.unit_price),
+        discount_pct: String(l.discount_pct ?? "0"),
+      }))
+    )
   }
 
   const taxRateFor = (line: OrderLine): string => {
-    if (line.tax_rate_pct !== undefined && line.tax_rate_pct !== null) return String(line.tax_rate_pct)
+    if (line.tax_rate_pct !== undefined && line.tax_rate_pct !== null)
+      return String(line.tax_rate_pct)
     const tax = (taxesQuery.data ?? []).find((t) => t.id === line.tax_id)
     return tax ? String(tax.rate_pct) : "0"
   }
+  const hasTaxRate = (line: OrderLine) =>
+    !line.tax_id ||
+    line.tax_rate_pct != null ||
+    taxesQuery.data?.some((tax) => tax.id === line.tax_id)
+  const unresolvedTax = lines.some((line) => !hasTaxRate(line))
 
   const totals = lines.reduce(
     (acc, line) => {
@@ -108,14 +146,18 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         total: acc.total + base + tax,
       }
     },
-    { subtotal: 0n, discount: 0n, tax: 0n, total: 0n },
+    { subtotal: 0n, discount: 0n, tax: 0n, total: 0n }
   )
 
   const setLine = (index: number, patch: Partial<OrderLine>) =>
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) =>
+      prev.map((line, i) => (i === index ? { ...line, ...patch } : line))
+    )
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.salesOrders({ module }) })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.salesOrders({ module }),
+    })
   }
 
   const save = useMutation({
@@ -135,14 +177,28 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         })),
       }
       if (isNew) {
-        return ordersApi.create(module, { [module === "sales" ? "customer_id" : "supplier_id"]: partyId, ...body })
+        return ordersApi.create(module, {
+          [module === "sales" ? "customer_id" : "supplier_id"]: partyId,
+          ...body,
+        })
       }
-      return ordersApi.update(module, id!, { [module === "sales" ? "customer_id" : "supplier_id"]: partyId, ...body })
+      return ordersApi.update(module, id!, {
+        [module === "sales" ? "customer_id" : "supplier_id"]: partyId,
+        ...body,
+      })
     },
     onSuccess: (saved) => {
       toast.success("Saved")
       invalidate()
-      if (isNew) navigate(`/${module}/${saved.id}`, { replace: true })
+      if (isNew)
+        navigate(
+          `${module === "sales" ? "/sales/orders" : "/purchasing"}/${saved.id}`,
+          { replace: true }
+        )
+      else {
+        queryClient.setQueryData(orderKey, saved)
+        setInitializedFrom(null)
+      }
     },
     onError: (err) => setError(errorMessage(err)),
   })
@@ -168,7 +224,9 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
   })
 
   const status = serverOrder?.status ?? "draft"
-  const editable = status === "draft"
+  const editable =
+    status === "draft" &&
+    hasPermission(`${module}.order.${isNew ? "create" : "update"}`)
   const busy = save.isPending || confirm.isPending || cancel.isPending
 
   return (
@@ -176,9 +234,23 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight">
-            {isNew ? `New ${module === "sales" ? "sales" : "purchase"} order` : serverOrder?.number ?? "…"}
+            {isNew
+              ? `New ${module === "sales" ? "sales" : "purchase"} order`
+              : (serverOrder?.number ?? "…")}
           </h1>
-          {!isNew && <Badge variant={status === "cancelled" ? "destructive" : status === "draft" ? "outline" : "default"}>{status}</Badge>}
+          {!isNew && (
+            <Badge
+              variant={
+                status === "cancelled"
+                  ? "destructive"
+                  : status === "draft"
+                    ? "outline"
+                    : "default"
+              }
+            >
+              {status}
+            </Badge>
+          )}
         </div>
         <div className="flex gap-2">
           <Link to={`/${module}`}>
@@ -189,20 +261,32 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
               {save.isPending ? "Saving…" : "Save draft"}
             </Button>
           )}
-          {status === "draft" && !isNew && (
-            <Button disabled={busy} onClick={() => confirm.mutate()}>
-              {confirm.isPending ? "Confirming…" : "Confirm"}
-            </Button>
-          )}
-          {(status === "draft" || status === "confirmed") && !isNew && (
-            <Button variant="destructive" disabled={busy} onClick={() => cancel.mutate()}>
-              Cancel order
-            </Button>
-          )}
+          {status === "draft" &&
+            !isNew &&
+            hasPermission(`${module}.order.confirm`) && (
+              <Button disabled={busy} onClick={() => confirm.mutate()}>
+                {confirm.isPending ? "Confirming…" : "Confirm"}
+              </Button>
+            )}
+          {(status === "draft" || status === "confirmed") &&
+            !isNew &&
+            hasPermission(`${module}.order.cancel`) && (
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => cancel.mutate()}
+              >
+                Cancel order
+              </Button>
+            )}
         </div>
       </div>
 
-      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>}
+      {error && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* header */}
       <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -210,12 +294,20 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
           <Label>{module === "sales" ? "Customer" : "Supplier"} *</Label>
           <Select
             value={partyId}
-            disabled={!editable}
+            disabled={!editable || !hasPermission("crm.contact.read")}
             onValueChange={(v) => setPartyId(v ?? "")}
             items={{
               "": "Select…",
+              ...(partyId
+                ? {
+                    [partyId]:
+                      serverOrder?.customer_name ??
+                      serverOrder?.supplier_name ??
+                      partyId,
+                  }
+                : {}),
               ...Object.fromEntries(
-                (contactsQuery.data?.items ?? []).map((c) => [c.id, c.name]),
+                (contactsQuery.data?.items ?? []).map((c) => [c.id, c.name])
               ),
             }}
           >
@@ -233,19 +325,38 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         </div>
         <div className="flex flex-col gap-2">
           <Label>Order date</Label>
-          <Input type="date" value={orderDate} disabled={!editable} onChange={(e) => setOrderDate(e.target.value)} />
+          <Input
+            type="date"
+            value={orderDate}
+            disabled={!editable}
+            onChange={(e) => setOrderDate(e.target.value)}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label>Expected date</Label>
-          <Input type="date" value={expectedDate} disabled={!editable} onChange={(e) => setExpectedDate(e.target.value)} />
+          <Input
+            type="date"
+            value={expectedDate}
+            disabled={!editable}
+            onChange={(e) => setExpectedDate(e.target.value)}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="order-currency">Currency</Label>
-          <CurrencySelect id="order-currency" value={currency} onChange={setCurrency} disabled={!editable} />
+          <CurrencySelect
+            id="order-currency"
+            value={currency}
+            onChange={setCurrency}
+            disabled={!editable}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label>Notes</Label>
-          <Input value={notes} disabled={!editable} onChange={(e) => setNotes(e.target.value)} />
+          <Input
+            value={notes}
+            disabled={!editable}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </div>
       </div>
 
@@ -269,30 +380,47 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                 <TableCell>
                   <Select
                     value={line.product_id ?? "none"}
-                    disabled={!editable}
+                    disabled={
+                      !editable || !hasPermission("catalog.product.read")
+                    }
                     items={{
                       none: "—",
+                      ...(line.product_id
+                        ? {
+                            [line.product_id]:
+                              line.product_name ??
+                              line.description ??
+                              line.product_id,
+                          }
+                        : {}),
                       ...Object.fromEntries(
                         (productsQuery.data?.items ?? []).map((p) => [
                           p.id,
                           `${p.name} (${p.sku})`,
-                        ]),
+                        ])
                       ),
                     }}
                     onValueChange={(v) => {
-                      const product = (productsQuery.data?.items ?? []).find((p) => p.id === v)
+                      const product = (productsQuery.data?.items ?? []).find(
+                        (p) => p.id === v
+                      )
                       setLine(index, {
                         product_id: v === "none" ? null : v,
                         unit_price:
                           line.unit_price && Number(line.unit_price) > 0
                             ? line.unit_price
                             : product
-                              ? String(module === "sales" ? Number(product.sale_price) : Number(product.cost_price))
+                              ? module === "sales"
+                                ? product.sale_price
+                                : product.cost_price
                               : line.unit_price,
                         tax_id:
                           line.tax_id ??
-                          (module === "sales" ? product?.sale_tax_id : product?.purchase_tax_id) ??
+                          (module === "sales"
+                            ? product?.sale_tax_id
+                            : product?.purchase_tax_id) ??
                           null,
+                        tax_rate_pct: undefined,
                       })
                     }}
                   >
@@ -326,7 +454,9 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                     className="text-right"
                     disabled={!editable}
                     value={line.unit_price ?? ""}
-                    onChange={(e) => setLine(index, { unit_price: e.target.value })}
+                    onChange={(e) =>
+                      setLine(index, { unit_price: e.target.value })
+                    }
                   />
                 </TableCell>
                 <TableCell>
@@ -336,18 +466,33 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                     className="text-right"
                     disabled={!editable}
                     value={line.discount_pct}
-                    onChange={(e) => setLine(index, { discount_pct: e.target.value })}
+                    onChange={(e) =>
+                      setLine(index, { discount_pct: e.target.value })
+                    }
                   />
                 </TableCell>
                 <TableCell>
                   <Select
                     value={line.tax_id ?? "none"}
-                    disabled={!editable}
-                    onValueChange={(v) => setLine(index, { tax_id: v === "none" ? null : v })}
+                    disabled={!editable || !hasPermission("catalog.tax.read")}
+                    onValueChange={(v) =>
+                      setLine(index, {
+                        tax_id: v === "none" ? null : v,
+                        tax_rate_pct: undefined,
+                      })
+                    }
                     items={{
                       none: "No tax",
+                      ...(line.tax_id
+                        ? {
+                            [line.tax_id]:
+                              line.tax_rate_pct != null
+                                ? `${line.tax_rate_pct}%`
+                                : "Assigned tax",
+                          }
+                        : {}),
                       ...Object.fromEntries(
-                        (taxesQuery.data ?? []).map((t) => [t.id, t.name]),
+                        (taxesQuery.data ?? []).map((t) => [t.id, t.name])
                       ),
                     }}
                   >
@@ -367,7 +512,9 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                 <TableCell className="text-right font-mono text-sm">
                   {(() => {
                     const { base, tax } = lineCents(line, taxRateFor(line))
-                    return centsToMoney(base + tax)
+                    return hasTaxRate(line)
+                      ? centsToMoney(base + tax)
+                      : "Calculated on save"
                   })()}
                   {Number(line.qty_delivered ?? 0) > 0 && (
                     <div className="text-[10px] text-muted-foreground">
@@ -386,7 +533,9 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
                       variant="ghost"
                       size="icon"
                       aria-label="Remove line"
-                      onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))}
+                      onClick={() =>
+                        setLines((prev) => prev.filter((_, i) => i !== index))
+                      }
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -398,7 +547,11 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
         </Table>
         {editable && (
           <div className="border-t p-2">
-            <Button variant="outline" size="sm" onClick={() => setLines((prev) => [...prev, blankLine()])}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLines((prev) => [...prev, blankLine()])}
+            >
               Add line
             </Button>
           </div>
@@ -418,12 +571,18 @@ export function OrderEditorPage({ module }: { module: OrderModule }) {
           </div>
           <div className="flex justify-between py-0.5">
             <span className="text-muted-foreground">Tax</span>
-            <span className="font-mono">{centsToMoney(totals.tax)}</span>
+            <span className="font-mono">
+              {unresolvedTax ? "Calculated on save" : centsToMoney(totals.tax)}
+            </span>
           </div>
           <Separator className="my-2" />
           <div className="flex justify-between text-base font-semibold">
             <span>Total</span>
-            <span className="font-mono">{centsToMoney(totals.total)}</span>
+            <span className="font-mono">
+              {unresolvedTax
+                ? "Calculated on save"
+                : centsToMoney(totals.total)}
+            </span>
           </div>
         </div>
       </div>

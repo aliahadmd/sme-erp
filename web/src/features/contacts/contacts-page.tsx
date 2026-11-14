@@ -4,7 +4,11 @@ import { useState } from "react"
 import { useSearchParams } from "react-router"
 import { toast } from "sonner"
 
-import { contactsApi, type Contact, type ContactInput } from "@/features/contacts/api"
+import {
+  contactsApi,
+  type Contact,
+  type ContactInput,
+} from "@/features/contacts/api"
 import { CurrencySelect } from "@/components/currency-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,6 +32,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -40,6 +45,7 @@ const TABS = [
 ]
 
 export function ContactsPage() {
+  const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const type = searchParams.get("type") ?? "all"
   const [search, setSearch] = useState("")
@@ -66,13 +72,18 @@ export function ContactsPage() {
             Customers and suppliers in one place — a company can be both
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="size-4" /> New contact
-        </Button>
+        {hasPermission("crm.contact.create") && (
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="size-4" /> New contact
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={type} onValueChange={(v) => setSearchParams(v === "all" ? {} : { type: v })}>
+        <Tabs
+          value={type}
+          onValueChange={(v) => setSearchParams(v === "all" ? {} : { type: v })}
+        >
           <TabsList>
             {TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
@@ -118,53 +129,73 @@ export function ContactsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   No contacts yet — create your first one
                 </TableCell>
               </TableRow>
             )}
             {data?.items.map((contact) => (
               <TableRow key={contact.id}>
-                <TableCell className="font-mono text-xs">{contact.code}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {contact.code}
+                </TableCell>
                 <TableCell className="font-medium">{contact.name}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     {contact.is_customer && <Badge>customer</Badge>}
-                    {contact.is_supplier && <Badge variant="secondary">supplier</Badge>}
+                    {contact.is_supplier && (
+                      <Badge variant="secondary">supplier</Badge>
+                    )}
                   </div>
                 </TableCell>
-                <TableCell className="text-sm">{contact.payment_terms_days} days</TableCell>
+                <TableCell className="text-sm">
+                  {contact.payment_terms_days} days
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {contact.tags.join(", ") || "—"}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(contact)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Archive contact"
-                      onClick={async () => {
-                        try {
-                          await contactsApi.archive(contact.id, true)
-                          toast.success("Contact archived")
-                          void refetch()
-                        } catch (err) {
-                          toast.error(errorMessage(err))
-                        }
-                      }}
-                    >
-                      <Archive className="size-4" />
-                    </Button>
+                    {hasPermission("crm.contact.update") && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditing(contact)}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    {hasPermission("crm.contact.archive") && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Archive contact"
+                        onClick={async () => {
+                          try {
+                            await contactsApi.archive(contact.id, true)
+                            toast.success("Contact archived")
+                            void refetch()
+                          } catch (err) {
+                            toast.error(errorMessage(err))
+                          }
+                        }}
+                      >
+                        <Archive className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -243,7 +274,9 @@ function ContactDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{contact ? `Edit ${contact.name}` : "New contact"}</DialogTitle>
+          <DialogTitle>
+            {contact ? `Edit ${contact.name}` : "New contact"}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -260,7 +293,9 @@ function ContactDialog({
                 type="checkbox"
                 className="size-4 accent-primary"
                 checked={form.is_customer}
-                onChange={(e) => setForm((p) => ({ ...p, is_customer: e.target.checked }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, is_customer: e.target.checked }))
+                }
               />
               Customer
             </label>
@@ -269,7 +304,9 @@ function ContactDialog({
                 type="checkbox"
                 className="size-4 accent-primary"
                 checked={form.is_supplier}
-                onChange={(e) => setForm((p) => ({ ...p, is_supplier: e.target.checked }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, is_supplier: e.target.checked }))
+                }
               />
               Supplier
             </label>
@@ -280,7 +317,9 @@ function ContactDialog({
               <Input
                 id="contact-tax"
                 value={form.tax_id ?? ""}
-                onChange={(e) => setForm((p) => ({ ...p, tax_id: e.target.value }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, tax_id: e.target.value }))
+                }
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -290,7 +329,10 @@ function ContactDialog({
                 type="number"
                 value={form.payment_terms_days}
                 onChange={(e) =>
-                  setForm((p) => ({ ...p, payment_terms_days: Number(e.target.value) }))
+                  setForm((p) => ({
+                    ...p,
+                    payment_terms_days: Number(e.target.value),
+                  }))
                 }
               />
             </div>

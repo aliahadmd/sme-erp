@@ -11,37 +11,66 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 type Product = { id: string; name: string; sku: string }
 
 export function AiDraftsPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const productsQuery = useQuery({
     queryKey: ["ai", "products"],
-    queryFn: () => api.get<{ items: Product[]; total: number }>("/api/catalog/products?limit=200"),
+    enabled: hasPermission("catalog.product.read"),
+    queryFn: async () => {
+      const products: Product[] = []
+      let total = Infinity
+      while (products.length < total) {
+        const page = await api.get<{ items: Product[]; total: number }>(
+          `/api/catalog/products?limit=100&offset=${products.length}`
+        )
+        total = page.total
+        if (!page.items.length) break
+        products.push(...page.items)
+      }
+      return products
+    },
   })
   const draftsQuery = useQuery({
     queryKey: ["ai", "drafts"],
     refetchInterval: 5000,
     queryFn: () =>
       api.get<
-        { id: string; entity_id: string; draft_text: string; model: string | null }[]
+        {
+          id: string
+          entity_id: string
+          draft_text: string
+          model: string | null
+        }[]
       >("/api/ai/drafts"),
   })
-  const products = productsQuery.data?.items ?? []
-  const nameOf = (id: string) => products.find((p) => p.id === id)?.name ?? id.slice(0, 8)
+  const products = productsQuery.data ?? []
+  const nameOf = (id: string) =>
+    products.find((p) => p.id === id)?.name ?? id.slice(0, 8)
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["ai"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["ai"] })
 
   const generate = useMutation({
-    mutationFn: () => api.post<{ queued: number }>("/api/catalog/products/generate-missing", undefined),
+    mutationFn: () =>
+      api.post<{ queued: number }>(
+        "/api/catalog/products/generate-missing",
+        undefined
+      ),
     onSuccess: (data) => {
-      toast.success(data.queued > 0
-        ? `Queued ${data.queued} products. Drafts will appear automatically.`
-        : "No products need new descriptions")
+      toast.success(
+        data.queued > 0
+          ? `Queued ${data.queued} products. Drafts will appear automatically.`
+          : "No products need new descriptions"
+      )
       invalidate()
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   const act = useMutation({
@@ -50,7 +79,8 @@ export function AiDraftsPage() {
     onSuccess: () => {
       invalidate()
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   const drafts = draftsQuery.data ?? []
@@ -61,10 +91,15 @@ export function AiDraftsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">AI drafts</h1>
           <p className="text-sm text-muted-foreground">
-            Generated descriptions awaiting review — accept applies them to the product
+            Generated descriptions awaiting review — accept applies them to the
+            product
           </p>
         </div>
-        <Button variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
+        <Button
+          variant="outline"
+          disabled={generate.isPending}
+          onClick={() => generate.mutate()}
+        >
           Generate missing descriptions
         </Button>
       </div>
@@ -81,16 +116,27 @@ export function AiDraftsPage() {
           <TableBody>
             {drafts.map((draft) => (
               <TableRow key={draft.id}>
-                <TableCell className="font-medium">{nameOf(draft.entity_id)}</TableCell>
-                <TableCell className="max-w-md text-sm">{draft.draft_text}</TableCell>
+                <TableCell className="font-medium">
+                  {nameOf(draft.entity_id)}
+                </TableCell>
+                <TableCell className="max-w-md text-sm">
+                  {draft.draft_text}
+                </TableCell>
                 <TableCell className="flex gap-1">
-                  <Button size="sm" onClick={() => act.mutate({ id: draft.id, action: "accept" })}>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      act.mutate({ id: draft.id, action: "accept" })
+                    }
+                  >
                     Accept
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => act.mutate({ id: draft.id, action: "discard" })}
+                    onClick={() =>
+                      act.mutate({ id: draft.id, action: "discard" })
+                    }
                   >
                     Discard
                   </Button>

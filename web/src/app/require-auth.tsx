@@ -9,12 +9,12 @@ export function RequirePermission({
   code,
   children,
 }: {
-  code: string
-  children: ReactNode
+  code: string | string[]
+  children?: ReactNode
 }) {
-  const { hasPermission } = useAuth()
-  if (hasPermission(code)) {
-    return <>{children}</>
+  const { hasAnyPermission } = useAuth()
+  if (hasAnyPermission([code].flat())) {
+    return children ? <>{children}</> : <Outlet />
   }
   return <ForbiddenPage />
 }

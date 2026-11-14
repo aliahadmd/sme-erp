@@ -35,7 +35,7 @@ function KpiCard({
 }
 
 export function DashboardPage() {
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { data } = useQuery({
     queryKey: queryKeys.dashboard(),
     queryFn: reportsApi.dashboard,
@@ -62,28 +62,54 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Sales this month", value: formatMoney(data?.sales_mtd), to: "/invoicing/ar" },
-          { label: "Open receivables", value: formatMoney(data?.open_ar), to: "/invoicing/ar" },
-          { label: "Open payables", value: formatMoney(data?.open_ap), to: "/invoicing/ap" },
-          { label: "Low stock items", value: String(data?.low_stock_count ?? 0), to: "/inventory?low=1" },
+          {
+            label: "Sales this month",
+            value: formatMoney(data?.sales_mtd),
+            to: "/invoicing/ar",
+            permission: "invoicing.invoice.read",
+          },
+          {
+            label: "Open receivables",
+            value: formatMoney(data?.open_ar),
+            to: "/invoicing/ar",
+            permission: "invoicing.invoice.read",
+          },
+          {
+            label: "Open payables",
+            value: formatMoney(data?.open_ap),
+            to: "/invoicing/ap",
+            permission: "invoicing.invoice.read",
+          },
+          {
+            label: "Low stock items",
+            value: String(data?.low_stock_count ?? 0),
+            to: "/inventory?low=1",
+            permission: "inventory.stock.read",
+          },
         ].map((kpi, i) => (
           <div
             key={kpi.label}
             className="stagger-item"
             style={{ animationDelay: `${i * 40}ms` }}
           >
-            <Link to={kpi.to ?? "#"} className="block rounded-lg border p-4 transition-colors hover:bg-muted/40">
-              <div className="text-sm text-muted-foreground">{kpi.label}</div>
-              <div className="mt-2 text-2xl font-semibold">{kpi.value}</div>
-            </Link>
+            <KpiCard
+              label={kpi.label}
+              value={kpi.value}
+              to={hasPermission(kpi.permission) ? kpi.to : undefined}
+            />
           </div>
         ))}
       </div>
 
       <div className="rounded-lg border p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Sales vs purchases — last 12 weeks</h2>
-          <Link to="/reports" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          <h2 className="text-sm font-semibold">
+            Sales vs purchases — last 12 weeks
+          </h2>
+          <Link
+            to="/reports"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
             All reports →
           </Link>
         </div>
@@ -96,22 +122,41 @@ export function DashboardPage() {
                 <YAxis fontSize={12} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="Sales" fill="var(--color-primary)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Purchases" fill="var(--color-muted-foreground)" radius={[3, 3, 0, 0]} />
+                <Bar
+                  dataKey="Sales"
+                  fill="var(--color-primary)"
+                  radius={[3, 3, 0, 0]}
+                />
+                <Bar
+                  dataKey="Purchases"
+                  fill="var(--color-muted-foreground)"
+                  radius={[3, 3, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-            Post invoices to see the trend — or run <code className="mx-1">make seed-demo</code>
+            Post invoices to see the trend — or run{" "}
+            <code className="mx-1">make seed-demo</code>
             for sample data
           </div>
         )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <KpiCard label="Purchases this month" value={formatMoney(data?.purchases_mtd)} to="/purchasing" />
-        <KpiCard label="Reports" value="Sales · Stock · Aging · Tax" to="/reports" />
+        <KpiCard
+          label="Purchases this month"
+          value={formatMoney(data?.purchases_mtd)}
+          to={
+            hasPermission("purchasing.order.read") ? "/purchasing" : undefined
+          }
+        />
+        <KpiCard
+          label="Reports"
+          value="Sales · Stock · Aging · Tax"
+          to="/reports"
+        />
       </div>
     </div>
   )

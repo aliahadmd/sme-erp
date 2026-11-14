@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
 }
 
 function OrgForm({ org }: { org: OrganizationOut }) {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Partial<OrganizationOut>>(org)
 
@@ -39,8 +41,11 @@ function OrgForm({ org }: { org: OrganizationOut }) {
       <Label htmlFor={`org-${key}`}>{label}</Label>
       <Input
         id={`org-${key}`}
+        readOnly={!hasPermission("core.org.update")}
         value={(form[key] as string) ?? ""}
-        onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
+        onChange={(e) =>
+          setForm((prev) => ({ ...prev, [key]: e.target.value }))
+        }
       />
     </div>
   )
@@ -58,16 +63,19 @@ function OrgForm({ org }: { org: OrganizationOut }) {
         {field("city", "City")}
         {field("country", "Country code")}
       </div>
-      <div>
-        <Button disabled={save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Saving…" : "Save organization"}
-        </Button>
-      </div>
+      {hasPermission("core.org.update") && (
+        <div>
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? "Saving…" : "Save organization"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
 
 export function OrganizationPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const orgQuery = useQuery({
     queryKey: queryKeys.organization(),
@@ -76,13 +84,15 @@ export function OrganizationPage() {
   const branchesQuery = useQuery({
     queryKey: queryKeys.branches(),
     queryFn: () => settingsApi.branches(),
+    enabled: hasPermission("core.branch.read"),
   })
 
   const [branchCode, setBranchCode] = useState("")
   const [branchName, setBranchName] = useState("")
 
   const addBranch = useMutation({
-    mutationFn: () => settingsApi.createBranch({ code: branchCode, name: branchName }),
+    mutationFn: () =>
+      settingsApi.createBranch({ code: branchCode, name: branchName }),
     onSuccess: () => {
       toast.success("Branch created")
       setBranchCode("")
@@ -97,63 +107,75 @@ export function OrganizationPage() {
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Organization</h1>
-          <p className="text-sm text-muted-foreground">Company profile used on documents</p>
+          <p className="text-sm text-muted-foreground">
+            Company profile used on documents
+          </p>
         </div>
-        {orgQuery.data && <OrgForm key={orgQuery.data.id} org={orgQuery.data} />}
+        {orgQuery.data && (
+          <OrgForm key={orgQuery.data.id} org={orgQuery.data} />
+        )}
       </div>
 
-      <div className="flex flex-col gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Branches</h2>
-          <p className="text-sm text-muted-foreground">Locations / warehouses of the company</p>
-        </div>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Active</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {branchesQuery.data?.map((branch) => (
-                <TableRow key={branch.id}>
-                  <TableCell className="font-mono text-xs">{branch.code}</TableCell>
-                  <TableCell>{branch.name}</TableCell>
-                  <TableCell>{branch.is_active ? "yes" : "no"}</TableCell>
+      {hasPermission("core.branch.read") && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Branches</h2>
+            <p className="text-sm text-muted-foreground">
+              Locations / warehouses of the company
+            </p>
+          </div>
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Active</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="branch-code">Code</Label>
-            <Input
-              id="branch-code"
-              className="w-28"
-              value={branchCode}
-              onChange={(e) => setBranchCode(e.target.value.toUpperCase())}
-            />
+              </TableHeader>
+              <TableBody>
+                {branchesQuery.data?.map((branch) => (
+                  <TableRow key={branch.id}>
+                    <TableCell className="font-mono text-xs">
+                      {branch.code}
+                    </TableCell>
+                    <TableCell>{branch.name}</TableCell>
+                    <TableCell>{branch.is_active ? "yes" : "no"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="branch-name">Name</Label>
-            <Input
-              id="branch-name"
-              value={branchName}
-              onChange={(e) => setBranchName(e.target.value)}
-            />
-          </div>
-          <Button
-            variant="outline"
-            disabled={!branchCode || !branchName || addBranch.isPending}
-            onClick={() => addBranch.mutate()}
-          >
-            Add branch
-          </Button>
+          {hasPermission("core.branch.create") && (
+            <div className="flex items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="branch-code">Code</Label>
+                <Input
+                  id="branch-code"
+                  className="w-28"
+                  value={branchCode}
+                  onChange={(e) => setBranchCode(e.target.value.toUpperCase())}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="branch-name">Name</Label>
+                <Input
+                  id="branch-name"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={!branchCode || !branchName || addBranch.isPending}
+                onClick={() => addBranch.mutate()}
+              >
+                Add branch
+              </Button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

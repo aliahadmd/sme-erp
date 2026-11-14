@@ -25,6 +25,7 @@ const statusVariant = (status: string) =>
       : "secondary"
 
 export function EmployeesPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [fullName, setFullName] = useState("")
   const [position, setPosition] = useState("")
@@ -35,15 +36,15 @@ export function EmployeesPage() {
   })
 
   const create = useMutation({
-    mutationFn: () =>
-      hrApi.createEmployee({ full_name: fullName, position }),
+    mutationFn: () => hrApi.createEmployee({ full_name: fullName, position }),
     onSuccess: () => {
       toast.success("Employee added")
       setFullName("")
       setPosition("")
       void queryClient.invalidateQueries({ queryKey: ["hr", "employees"] })
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   return (
@@ -54,19 +55,35 @@ export function EmployeesPage() {
           <p className="text-sm text-muted-foreground">Company directory</p>
         </div>
       </div>
-      <div className="flex items-end gap-2">
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="emp-name">Full name</Label>
-          <Input id="emp-name" className="w-52" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+      {hasPermission("hr.employee.create") && (
+        <div className="flex items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="emp-name">Full name</Label>
+            <Input
+              id="emp-name"
+              className="w-52"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="emp-position">Position</Label>
+            <Input
+              id="emp-position"
+              className="w-44"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            disabled={!fullName || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Add employee
+          </Button>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="emp-position">Position</Label>
-          <Input id="emp-position" className="w-44" value={position} onChange={(e) => setPosition(e.target.value)} />
-        </div>
-        <Button variant="outline" disabled={!fullName || create.isPending} onClick={() => create.mutate()}>
-          Add employee
-        </Button>
-      </div>
+      )}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
@@ -80,7 +97,9 @@ export function EmployeesPage() {
           <TableBody>
             {(employees.data ?? []).map((emp) => (
               <TableRow key={emp.id}>
-                <TableCell className="font-mono text-xs">{emp.number}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {emp.number}
+                </TableCell>
                 <TableCell className="font-medium">{emp.full_name}</TableCell>
                 <TableCell>{emp.position ?? "—"}</TableCell>
                 <TableCell>{emp.status}</TableCell>
@@ -102,7 +121,7 @@ export function LeaveRequestsPage() {
   const [typeName, setTypeName] = useState("")
   const [typeDays, setTypeDays] = useState("20")
 
-  const { hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
   const canSeeEmployees = hasPermission("hr.employee.read")
   const canDecide = hasPermission("hr.leave.approve")
   const canManageTypes = hasPermission("hr.employee.update")
@@ -116,10 +135,19 @@ export function LeaveRequestsPage() {
   const me = useQuery({
     queryKey: ["hr", "employees", "me"],
     queryFn: () => hrApi.myEmployee(),
+    enabled: !canSeeEmployees,
     retry: false,
   })
-  const selectable: Employee[] = canSeeEmployees ? (employees.data ?? []) : me.data ? [me.data] : []
-  const selectedEmployee = employeeId || (!canSeeEmployees && me.data ? me.data.id : "")
+  const ownEmployee = canSeeEmployees
+    ? employees.data?.find((employee) => employee.user_id === user?.id)
+    : me.data
+  const selectable: Employee[] = canSeeEmployees
+    ? (employees.data ?? [])
+    : me.data
+      ? [me.data]
+      : []
+  const selectedEmployee =
+    employeeId || (!canSeeEmployees && me.data ? me.data.id : "")
   const leaveTypes = useQuery({
     queryKey: ["hr", "leave-types"],
     queryFn: () => hrApi.leaveTypes(),
@@ -128,7 +156,8 @@ export function LeaveRequestsPage() {
     queryKey: ["hr", "leave-requests", {}],
     queryFn: () => hrApi.leaveRequests({}),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["hr", "leave-requests"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["hr", "leave-requests"] })
 
   const employeeName = (id: string) =>
     selectable.find((e) => e.id === id)?.full_name ?? id.slice(0, 8)
@@ -136,17 +165,22 @@ export function LeaveRequestsPage() {
     (leaveTypes.data ?? []).find((t) => t.id === id)?.name ?? id.slice(0, 8)
 
   const addType = useMutation({
-    mutationFn: () => hrApi.createLeaveType({ name: typeName, days_per_year: typeDays }),
+    mutationFn: () =>
+      hrApi.createLeaveType({ name: typeName, days_per_year: typeDays }),
     onSuccess: (created) => {
       toast.success(`Leave type "${created.name}" added`)
       setTypeName("")
       void queryClient.invalidateQueries({ queryKey: ["hr", "leave-types"] })
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   const decide = useMutation({
-    mutationFn: (vars: { id: string; action: "approve" | "reject" | "cancel" }) =>
+    mutationFn: (vars: {
+      id: string
+      action: "approve" | "reject" | "cancel"
+    }) =>
       vars.action === "approve"
         ? hrApi.approveLeave(vars.id)
         : vars.action === "reject"
@@ -156,7 +190,8 @@ export function LeaveRequestsPage() {
       toast.success(`Leave ${request.status}`)
       invalidate()
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   return (
@@ -164,7 +199,9 @@ export function LeaveRequestsPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Leave requests</h1>
         <p className="text-sm text-muted-foreground">
-          {canDecide ? "Submit and decide on time off" : "Request time off — working days only"}
+          {canDecide
+            ? "Submit and decide on time off"
+            : "Request time off — working days only"}
         </p>
       </div>
 
@@ -202,11 +239,19 @@ export function LeaveRequestsPage() {
         </div>
         <div className="flex flex-col gap-1">
           <Label>From</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <Label>To</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
         </div>
         <Button
           variant="outline"
@@ -262,7 +307,9 @@ export function LeaveRequestsPage() {
           {(leaveTypes.data ?? []).length > 0 && (
             <p className="text-xs text-muted-foreground">
               Existing:{" "}
-              {(leaveTypes.data ?? []).map((t) => `${t.name} (${Number(t.days_per_year)})`).join(", ")}
+              {(leaveTypes.data ?? [])
+                .map((t) => `${t.name} (${Number(t.days_per_year)})`)
+                .join(", ")}
             </p>
           )}
         </div>
@@ -288,39 +335,51 @@ export function LeaveRequestsPage() {
                 <TableCell>{leaveTypeName(r.type_id)}</TableCell>
                 <TableCell className="text-sm">{r.date_from}</TableCell>
                 <TableCell className="text-sm">{r.date_to}</TableCell>
-                <TableCell className="font-mono text-sm">{Number(r.days)}</TableCell>
+                <TableCell className="font-mono text-sm">
+                  {Number(r.days)}
+                </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
                 </TableCell>
                 <TableCell>
                   {r.status === "pending" && (
                     <div className="flex flex-wrap justify-end gap-1">
-                      {canDecide && r.employee_id !== me.data?.id && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={decide.isPending}
-                            onClick={() => decide.mutate({ id: r.id, action: "approve" })}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={decide.isPending}
-                            onClick={() => decide.mutate({ id: r.id, action: "reject" })}
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                      {(canDecide || r.employee_id === me.data?.id) && (
+                      {canDecide &&
+                        (canSeeEmployees
+                          ? employees.isSuccess
+                          : me.isSuccess) &&
+                        r.employee_id !== ownEmployee?.id && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={decide.isPending}
+                              onClick={() =>
+                                decide.mutate({ id: r.id, action: "approve" })
+                              }
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={decide.isPending}
+                              onClick={() =>
+                                decide.mutate({ id: r.id, action: "reject" })
+                              }
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                      {(canDecide || r.employee_id === ownEmployee?.id) && (
                         <Button
                           size="sm"
                           variant="ghost"
                           disabled={decide.isPending}
-                          onClick={() => decide.mutate({ id: r.id, action: "cancel" })}
+                          onClick={() =>
+                            decide.mutate({ id: r.id, action: "cancel" })
+                          }
                         >
                           Cancel
                         </Button>

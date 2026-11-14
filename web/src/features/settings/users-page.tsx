@@ -51,6 +51,7 @@ export function UsersPage() {
   const rolesQuery = useQuery({
     queryKey: queryKeys.roles(),
     queryFn: () => settingsApi.roles(),
+    enabled: hasPermission("core.role.read"),
   })
 
   const invalidate = () => {
@@ -101,7 +102,10 @@ export function UsersPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
@@ -144,7 +148,13 @@ export function UsersPage() {
                   {canUpdate && (
                     <DropdownMenu>
                       <DropdownMenuTrigger
-                        render={<Button variant="ghost" size="icon" aria-label="User actions" />}
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="User actions"
+                          />
+                        }
                       >
                         <MoreHorizontal className="size-4" />
                       </DropdownMenuTrigger>
@@ -253,11 +263,19 @@ function CreateUserDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-user-email">Email</Label>
-            <Input id="new-user-email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input
+              id="new-user-email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-user-name">Full name</Label>
-            <Input id="new-user-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input
+              id="new-user-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-user-password">Password (min 8 chars)</Label>
@@ -275,7 +293,9 @@ function CreateUserDialog({
               selected={selected}
               onToggle={(code) =>
                 setSelected((prev) =>
-                  prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+                  prev.includes(code)
+                    ? prev.filter((c) => c !== code)
+                    : [...prev, code]
                 )
               }
             />
@@ -337,7 +357,11 @@ function EditUserDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="edit-user-name">Full name</Label>
-            <Input id="edit-user-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input
+              id="edit-user-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="edit-user-password">New password (optional)</Label>
@@ -355,7 +379,9 @@ function EditUserDialog({
               selected={selected}
               onToggle={(code) =>
                 setSelected((prev) =>
-                  prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+                  prev.includes(code)
+                    ? prev.filter((c) => c !== code)
+                    : [...prev, code]
                 )
               }
             />

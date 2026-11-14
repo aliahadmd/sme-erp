@@ -33,6 +33,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api/client"
 import { formatMoney } from "@/lib/money"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -48,17 +49,26 @@ const statusVariant = (status: string) =>
         : "outline"
 
 export function QuotesPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["quotes"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["quotes"] })
   const [status, setStatus] = useState("all")
   const [creating, setCreating] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["quotes", { status }],
-    queryFn: () => quotesApi.list({ status: status === "all" ? undefined : status, limit: 50 }),
+    queryFn: () =>
+      quotesApi.list({
+        status: status === "all" ? undefined : status,
+        limit: 50,
+      }),
   })
 
-  const act = async (quote: Quotation, action: "send" | "accept" | "reject" | "cancel" | "convert") => {
+  const act = async (
+    quote: Quotation,
+    action: "send" | "accept" | "reject" | "cancel" | "convert"
+  ) => {
     try {
       const fn = {
         send: quotesApi.send,
@@ -69,7 +79,9 @@ export function QuotesPage() {
       }[action]
       const result = await fn(quote.id)
       if (action === "convert") {
-        toast.success(`Converted to ${(result as { order_number: string }).order_number}`)
+        toast.success(
+          `Converted to ${(result as { order_number: string }).order_number}`
+        )
       } else {
         toast.success(`Quotation ${action === "send" ? "sent" : `${action}ed`}`)
       }
@@ -89,18 +101,22 @@ export function QuotesPage() {
             Accepted quotes convert into draft sales orders — exactly once
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="size-4" /> New quotation
-        </Button>
+        {hasPermission("sales.quote.create") && (
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="size-4" /> New quotation
+          </Button>
+        )}
       </div>
 
       <Tabs value={status} onValueChange={setStatus}>
         <TabsList>
-          {["all", "draft", "sent", "accepted", "converted", "expired"].map((s) => (
-            <TabsTrigger key={s} value={s}>
-              {s}
-            </TabsTrigger>
-          ))}
+          {["all", "draft", "sent", "accepted", "converted", "expired"].map(
+            (s) => (
+              <TabsTrigger key={s} value={s}>
+                {s}
+              </TabsTrigger>
+            )
+          )}
         </TabsList>
       </Tabs>
 
@@ -119,58 +135,82 @@ export function QuotesPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground"
+                >
                   No quotations yet
                 </TableCell>
               </TableRow>
             )}
             {data?.items.map((quote) => (
               <TableRow key={quote.id}>
-                <TableCell className="font-mono text-xs">{quote.number}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {quote.number}
+                </TableCell>
                 <TableCell>{quote.customer_name}</TableCell>
                 <TableCell className="text-sm">
                   {quote.valid_until ?? "—"}
-                  {quote.status === "sent" && quote.valid_until && new Date(quote.valid_until) < new Date() && (
-                    <Badge variant="destructive" className="ml-1">
-                      expired
-                    </Badge>
-                  )}
+                  {quote.status === "sent" &&
+                    quote.valid_until &&
+                    new Date(quote.valid_until) < new Date() && (
+                      <Badge variant="destructive" className="ml-1">
+                        expired
+                      </Badge>
+                    )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(quote.status)}>{quote.status}</Badge>
+                  <Badge variant={statusVariant(quote.status)}>
+                    {quote.status}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {formatMoney(quote.total)}
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">
-                    {quote.status === "draft" && (
-                      <Button size="sm" variant="outline" onClick={() => act(quote, "send")}>
-                        Send
-                      </Button>
-                    )}
-                    {quote.status === "sent" && (
-                      <Button size="sm" onClick={() => act(quote, "accept")}>
-                        Accept
-                      </Button>
-                    )}
-                    {quote.status === "accepted" && (
-                      <Button size="sm" onClick={() => act(quote, "convert")}>
-                        Convert
-                      </Button>
-                    )}
-                    {["draft", "sent", "accepted"].includes(quote.status) && (
-                      <Button size="sm" variant="ghost" onClick={() => act(quote, "cancel")}>
-                        Cancel
-                      </Button>
-                    )}
+                    {hasPermission("sales.quote.update") &&
+                      quote.status === "draft" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => act(quote, "send")}
+                        >
+                          Send
+                        </Button>
+                      )}
+                    {hasPermission("sales.quote.update") &&
+                      quote.status === "sent" && (
+                        <Button size="sm" onClick={() => act(quote, "accept")}>
+                          Accept
+                        </Button>
+                      )}
+                    {hasPermission("sales.order.create") &&
+                      quote.status === "accepted" && (
+                        <Button size="sm" onClick={() => act(quote, "convert")}>
+                          Convert
+                        </Button>
+                      )}
+                    {hasPermission("sales.quote.cancel") &&
+                      ["draft", "sent", "accepted"].includes(quote.status) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => act(quote, "cancel")}
+                        >
+                          Cancel
+                        </Button>
+                      )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -179,7 +219,11 @@ export function QuotesPage() {
         </Table>
       </div>
 
-      <CreateQuoteDialog open={creating} onOpenChange={setCreating} onDone={invalidate} />
+      <CreateQuoteDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onDone={invalidate}
+      />
     </div>
   )
 }
@@ -214,7 +258,14 @@ function CreateQuoteDialog({
       const quote = await quotesApi.create({
         customer_id: partyId,
         valid_until: validUntil || null,
-        lines: [{ product_id: null, description: description || "Item", qty, unit_price: price || "0" }],
+        lines: [
+          {
+            product_id: null,
+            description: description || "Item",
+            qty,
+            unit_price: price || "0",
+          },
+        ],
       })
       // send right away — drafts need an explicit send action otherwise
       await quotesApi.send(quote.id)
@@ -257,20 +308,41 @@ function CreateQuoteDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="quote-valid">Valid until</Label>
-              <Input id="quote-valid" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+              <Input
+                id="quote-valid"
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="quote-qty">Qty</Label>
-              <Input id="quote-qty" type="number" step="0.0001" value={qty} onChange={(e) => setQty(e.target.value)} />
+              <Input
+                id="quote-qty"
+                type="number"
+                step="0.0001"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+              />
             </div>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="quote-desc">Line description</Label>
-            <Input id="quote-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input
+              id="quote-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="quote-price">Unit price</Label>
-            <Input id="quote-price" type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+            <Input
+              id="quote-price"
+              type="number"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
@@ -278,7 +350,10 @@ function CreateQuoteDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!partyId || !description || saving} onClick={() => void create()}>
+          <Button
+            disabled={!partyId || !description || saving}
+            onClick={() => void create()}
+          >
             {saving ? "Creating…" : "Create & send"}
           </Button>
         </DialogFooter>

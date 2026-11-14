@@ -65,6 +65,14 @@ does not start uvicorn or use PostgreSQL/Redis/S3 connection strings.
   rounding, FX conventions and reversal snapshots.
 - External mail, AI, Queue and R2 I/O belong outside the financial coordinator.
   Use the atomic outbox for post-commit effects and tolerate duplicate delivery.
+- Wrap new pages in `RequirePermission` before mounting their queries. Section
+  tabs/defaults live in `web/src/app/section-tabs.ts`; keep sidebar eligibility
+  consistent. Gate each action with its server command's permission, including
+  separate post, void, archive and create permissions.
+- Gate form reference queries by both permission and whether the form is open.
+  Preserve existing IDs when hiding inaccessible lookup controls. Keep the
+  identity-scoped `SessionQueries` boundary inside `AuthProvider` so a later
+  account cannot reuse the previous account's cache or page state.
 
 Add versioned D1 SQL migrations for schema changes. Applied migration files are
 immutable. New tables need the verified insert/update/delete maintenance guards
@@ -113,6 +121,25 @@ Both remote demo scripts accept `--ipv4` for a broken local IPv6 path while
 retaining normal certificate verification.
 After users change demo data, review the seed acceptance baseline before trying
 to apply it again.
+
+For native browser checks, open a Playwright CLI session named `erp-roles` at
+the fresh demo's `/login` page, then run:
+
+```sh
+uv run python scripts/verify_browser_session_remote.py --scenario roles
+uv run python scripts/verify_browser_session_remote.py
+```
+
+The first command walks all nine active profiles, checks navigation/access
+controls and opens/closes authorized forms without submitting them. Use
+`--scenario roles --role warehouse` to narrow a diagnostic run. The default
+scenario switches from administrator to employee in the same live application
+and verifies that only the employee's leave is rendered. Both scenarios sign
+out their actors. The launcher reads the ignored demo credentials, creates a
+temporary 0600 callback, captures/redacts CLI source echo, deletes that callback,
+and writes non-credential evidence under `.cloudflare/verification/role-browser/`.
+Keep the browser's normal TLS verification enabled. A passing navigation/form
+check does not prove every financial or HR submission workflow.
 
 ## CI and Workers Builds
 

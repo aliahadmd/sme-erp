@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
 import { allocateFifo, formatMoney, moneyToCents, sumMoney } from "@/lib/money"
+import { useAuth } from "@/lib/auth"
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong"
@@ -52,6 +53,7 @@ function refundableCredits(statement: Statement | undefined) {
 }
 
 export function PaymentsPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [recordOpen, setRecordOpen] = useState(false)
   const [allocating, setAllocating] = useState<Payment | null>(null)
@@ -84,7 +86,9 @@ export function PaymentsPage() {
             refunds of credit notes
           </p>
         </div>
-        <Button onClick={() => setRecordOpen(true)}>Record payment</Button>
+        {hasPermission("invoicing.payment.create") && (
+          <Button onClick={() => setRecordOpen(true)}>Record payment</Button>
+        )}
       </div>
 
       <div className="rounded-lg border">
@@ -166,7 +170,8 @@ export function PaymentsPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap justify-end gap-1">
-                    {payment.status === "recorded" &&
+                    {hasPermission("invoicing.payment.create") &&
+                      payment.status === "recorded" &&
                       moneyToCents(payment.unallocated) > 0n && (
                         <Button
                           size="sm"
@@ -176,15 +181,16 @@ export function PaymentsPage() {
                           Allocate
                         </Button>
                       )}
-                    {payment.status === "recorded" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => voidPay.mutate(payment.id)}
-                      >
-                        Void
-                      </Button>
-                    )}
+                    {hasPermission("invoicing.payment.void") &&
+                      payment.status === "recorded" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => voidPay.mutate(payment.id)}
+                        >
+                          Void
+                        </Button>
+                      )}
                   </div>
                 </TableCell>
               </TableRow>

@@ -4,6 +4,7 @@ import { api } from "@/lib/api/client"
 
 export type Employee = {
   id: string
+  user_id: string | null
   number: string
   full_name: string
   work_email: string | null
@@ -15,7 +16,12 @@ export type Employee = {
 
 export type Department = { id: string; name: string }
 
-export type LeaveType = { id: string; name: string; days_per_year: string; accrues: boolean }
+export type LeaveType = {
+  id: string
+  name: string
+  days_per_year: string
+  accrues: boolean
+}
 
 export type LeaveRequest = {
   id: string
@@ -41,15 +47,21 @@ export const hrApi = {
     hired_at?: string
   }) => api.post<Employee>("/api/hr/employees", body),
   departments: () => api.get<Department[]>("/api/hr/departments"),
-  createDepartment: (body: { name: string }) => api.post<Department>("/api/hr/departments", body),
+  createDepartment: (body: { name: string }) =>
+    api.post<Department>("/api/hr/departments", body),
   leaveTypes: () => api.get<LeaveType[]>("/api/hr/leave-types"),
   createLeaveType: (body: { name: string; days_per_year: string }) =>
     api.post<LeaveType>("/api/hr/leave-types", body),
   leaveRequests: (params: { status?: string } = {}) => {
     const clean = Object.fromEntries(
-      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [string, string][],
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== "") as [
+        string,
+        string,
+      ][]
     )
-    return api.get<LeaveRequest[]>(`/api/hr/leave-requests?${new URLSearchParams(clean)}`)
+    return api.get<LeaveRequest[]>(
+      `/api/hr/leave-requests?${new URLSearchParams(clean)}`
+    )
   },
   createLeaveRequest: (body: {
     employee_id: string
@@ -58,7 +70,10 @@ export const hrApi = {
     date_to: string
     reason?: string
   }) => api.post<LeaveRequest>("/api/hr/leave-requests", body),
-  approveLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/approve`, undefined),
-  rejectLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/reject`, undefined),
-  cancelLeave: (id: string) => api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/cancel`, undefined),
+  approveLeave: (id: string) =>
+    api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/approve`, undefined),
+  rejectLeave: (id: string) =>
+    api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/reject`, undefined),
+  cancelLeave: (id: string) =>
+    api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/cancel`, undefined),
 }

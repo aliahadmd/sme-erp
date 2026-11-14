@@ -39,7 +39,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
   AI, mail delivery, full backup/recovery and fresh demo/migrations have passed 309 local backend
-  tests. The frontend has passed 14 tests, its TypeScript/
+  tests. The frontend has passed 26 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -906,13 +906,70 @@ are disabled.
 
 A real Chrome login displayed the exact demo dashboard balances/low-stock count
 and signed out. The private screenshot is
-`cloudflare/.cloudflare/verification/demo-browser/dashboard.png`. Full browser
-role/action walkthroughs remain open; API-role coverage alone does not prove
-that every role's UI hides or handles every unavailable action correctly.
+`cloudflare/.cloudflare/verification/demo-browser/dashboard.png`. Subsequent
+browser role/navigation evidence is recorded below. Financial and HR mutation
+workflows still need broader browser acceptance.
+
+## Browser account isolation and role navigation
+
+Version `db91e37e-8256-489b-a8b9-a11496368eb3` serves the role-aware UI on the
+fresh demo Worker, with reported startup of 2,887 ms. The deployment retains
+closed bootstrap, enabled jobs/daily backups, test email and disabled restoration.
+The public Docker deployment and domain are unchanged.
+
+The original application reused one React Query cache across accounts. A local
+application regression and the deployed same-browser test reproduced an
+employee seeing five administrator leave rows instead of their own three.
+`SessionQueries` now creates a new client/page tree for each signed-in identity
+and clears the old client on unmount. The original browser scenario passes
+without reloading between administrator logout and employee login. Explicit
+sign-out also clears the prior page's login-return location.
+
+Navigation, section defaults, direct-route guards and action controls now use
+the current permission catalog. Employees land on leave, HR staff on employees,
+and warehouse staff on stock; report readers retain the dashboard. Invoicing
+and Accounting open permitted tabs rather than blank sections. Sales tabs,
+new-order links, detail links and save navigation use the actual order routes.
+Reference-data queries run only when the role may read them; closed product
+editors no longer query those lists. Product edits preserve assigned tax/unit/
+category IDs when their lookup controls are unavailable. HR resolves its own
+employee from the permitted directory before offering approval, avoiding the
+administrator's missing-employee request while retaining self-approval hiding.
+No backend role grants were expanded.
+
+The Chrome navigation verifier opened every visible sidebar section/tab and
+permitted creation form, checked forbidden action visibility, and tested one
+restricted direct link for each non-administrator profile. Forms were closed
+without submission; AI generation and real mail were not triggered.
+
+| Profile | Page checks | Form openings | Unexpected API/JavaScript failures |
+|---|---:|---:|---:|
+| Administrator | 28 | 15 | 0 |
+| Accountant | 15 | 4 | 0 |
+| Sales | 10 | 5 | 0 |
+| Purchasing | 9 | 4 | 0 |
+| Warehouse | 9 | 3 | 0 |
+| HR | 4 | 0 | 0 |
+| Viewer | 17 | 0 | 0 |
+| Employee | 3 | 0 | 0 |
+| Peer employee | 3 | 0 | 0 |
+| Total | 98 | 31 | 0 |
+
+Ignored evidence lives in `cloudflare/.cloudflare/verification/role-browser/`:
+`roles.json` and `session-cache.json`. The launcher uses temporary mode-0600
+credential payloads and removes them after each run. All browser actors signed
+out. Native D1 checks found zero live proof sessions, pending events and SQL
+assertions, clean foreign keys and successful Cron with no scheduler error.
+Replaying the existing demo checkpoint retained stock `2220.60`, open AR
+`543.96`, open AP `2372.00`, ten invoices/five payments and balanced journals.
+
+These checks prove navigation, form loading and the tested access boundaries.
+They do not complete browser submission/reversal/approval acceptance, realistic
+capacity, restart/network-loss proofs or production cutover acceptance.
 
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 309 backend tests, 14 frontend tests, lint/formatting, the
+`pnpm quality` passes 309 backend tests, 26 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and

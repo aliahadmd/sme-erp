@@ -14,11 +14,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 type Currency = { id: string; code: string; name: string }
 type Rate = { id: string; currency: string; rate_date: string; rate: string }
 
 export function CurrenciesPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
@@ -46,7 +48,8 @@ export function CurrenciesPage() {
       setName("")
       invalidate()
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
   const upsertRate = useMutation({
     mutationFn: () =>
@@ -59,31 +62,50 @@ export function CurrenciesPage() {
       toast.success("Rate saved")
       invalidate()
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Currencies & FX rates</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Currencies & FX rates
+          </h1>
           <p className="text-sm text-muted-foreground">
             Documents in foreign currencies post journals at the snapshot rate
           </p>
         </div>
-        <div className="flex items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="cur-code">Code</Label>
-            <Input id="cur-code" className="w-24" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+        {hasPermission("core.settings.update") && (
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="cur-code">Code</Label>
+              <Input
+                id="cur-code"
+                className="w-24"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="cur-name">Name</Label>
+              <Input
+                id="cur-name"
+                className="w-44"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="outline"
+              disabled={!code || !name || addCurrency.isPending}
+              onClick={() => addCurrency.mutate()}
+            >
+              Add currency
+            </Button>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="cur-name">Name</Label>
-            <Input id="cur-name" className="w-44" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <Button variant="outline" disabled={!code || !name || addCurrency.isPending} onClick={() => addCurrency.mutate()}>
-            Add currency
-          </Button>
-        </div>
+        )}
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
@@ -106,23 +128,46 @@ export function CurrenciesPage() {
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">FX rates (per 1 base unit)</h2>
-        <div className="flex items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="fx-cur">Currency</Label>
-            <Input id="fx-cur" className="w-24" value={rateCode} onChange={(e) => setRateCode(e.target.value.toUpperCase())} />
+        {hasPermission("core.settings.update") && (
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="fx-cur">Currency</Label>
+              <Input
+                id="fx-cur"
+                className="w-24"
+                value={rateCode}
+                onChange={(e) => setRateCode(e.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="fx-date">Date</Label>
+              <Input
+                id="fx-date"
+                type="date"
+                value={rateDate}
+                onChange={(e) => setRateDate(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="fx-rate">Rate</Label>
+              <Input
+                id="fx-rate"
+                type="number"
+                step="0.00000001"
+                className="w-32"
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="outline"
+              disabled={!rateCode || !rateDate || !rate || upsertRate.isPending}
+              onClick={() => upsertRate.mutate()}
+            >
+              Save rate
+            </Button>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="fx-date">Date</Label>
-            <Input id="fx-date" type="date" value={rateDate} onChange={(e) => setRateDate(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="fx-rate">Rate</Label>
-            <Input id="fx-rate" type="number" step="0.00000001" className="w-32" value={rate} onChange={(e) => setRate(e.target.value)} />
-          </div>
-          <Button variant="outline" disabled={!rateCode || !rateDate || !rate || upsertRate.isPending} onClick={() => upsertRate.mutate()}>
-            Save rate
-          </Button>
-        </div>
+        )}
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
@@ -135,9 +180,13 @@ export function CurrenciesPage() {
             <TableBody>
               {(rates.data ?? []).map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.currency}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {r.currency}
+                  </TableCell>
                   <TableCell>{r.rate_date}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{Number(r.rate)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {Number(r.rate)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -3,7 +3,12 @@ import { Plus, Search } from "lucide-react"
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router"
 
-import { ordersApi, partyLabel, type Order, type OrderModule } from "@/features/documents/api"
+import {
+  ordersApi,
+  partyLabel,
+  type Order,
+  type OrderModule,
+} from "@/features/documents/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,9 +22,20 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
+import { useAuth } from "@/lib/auth"
 import { formatMoney } from "@/lib/money"
 
-const STATUS_TABS = ["all", "in progress", "draft", "confirmed", "delivered", "invoiced", "received", "closed", "cancelled"]
+const STATUS_TABS = [
+  "all",
+  "in progress",
+  "draft",
+  "confirmed",
+  "delivered",
+  "invoiced",
+  "received",
+  "closed",
+  "cancelled",
+]
 
 function statusesFor(tab: string): string | undefined {
   if (tab === "all") return undefined
@@ -27,7 +43,10 @@ function statusesFor(tab: string): string | undefined {
   return tab
 }
 
-const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const STATUS_COLORS: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
   draft: "outline",
   confirmed: "default",
   delivered: "default",
@@ -38,6 +57,7 @@ const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "o
 }
 
 export function OrdersListPage({ module }: { module: OrderModule }) {
+  const { hasPermission } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const status = searchParams.get("status") ?? "all"
   const [search, setSearch] = useState("")
@@ -53,7 +73,9 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
       }),
   })
   const visible = (data?.items ?? []).filter((o) =>
-    status === "in progress" ? !["closed", "cancelled"].includes(o.status) : true,
+    status === "in progress"
+      ? !["closed", "cancelled"].includes(o.status)
+      : true
   )
 
   const label = module === "sales" ? "Sales orders" : "Purchase orders"
@@ -64,18 +86,29 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{label}</h1>
           <p className="text-sm text-muted-foreground">
-            Documents are immutable once confirmed — corrections happen by cancelling or reversing
+            Documents are immutable once confirmed — corrections happen by
+            cancelling or reversing
           </p>
         </div>
-        <Link to={`/${module}/new`}>
-          <Button>
-            <Plus className="size-4" /> New {module === "sales" ? "sales order" : "purchase order"}
-          </Button>
-        </Link>
+        {hasPermission(`${module}.order.create`) && (
+          <Link
+            to={`${module === "sales" ? "/sales/orders" : "/purchasing"}/new`}
+          >
+            <Button>
+              <Plus className="size-4" /> New{" "}
+              {module === "sales" ? "sales order" : "purchase order"}
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={status} onValueChange={(v) => setSearchParams(v === "all" ? {} : { status: v })}>
+        <Tabs
+          value={status}
+          onValueChange={(v) =>
+            setSearchParams(v === "all" ? {} : { status: v })
+          }
+        >
           <TabsList>
             {STATUS_TABS.map((tab) => (
               <TabsTrigger key={tab} value={tab}>
@@ -120,14 +153,20 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center text-muted-foreground"
+                >
                   Nothing here yet
                 </TableCell>
               </TableRow>
@@ -136,7 +175,7 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
               <TableRow key={order.id}>
                 <TableCell>
                   <Link
-                    to={`/${module}/${order.id}`}
+                    to={`${module === "sales" ? "/sales/orders" : "/purchasing"}/${order.id}`}
                     className="font-mono text-xs font-medium underline-offset-4 hover:underline"
                   >
                     {order.number}
@@ -147,7 +186,9 @@ export function OrdersListPage({ module }: { module: OrderModule }) {
                 </TableCell>
                 <TableCell className="text-sm">{order.order_date}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_COLORS[order.status] ?? "outline"}>{order.status}</Badge>
+                  <Badge variant={STATUS_COLORS[order.status] ?? "outline"}>
+                    {order.status}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">
                   {formatMoney(order.total)} {order.currency}

@@ -13,22 +13,23 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 
 type NumberingRow = { entity: string; prefix: string; next_number: string }
 
-function NumberingRows({
-  rows,
-}: {
-  rows: NumberingRow[]
-}) {
+function NumberingRows({ rows }: { rows: NumberingRow[] }) {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
 
   const save = useMutation({
     mutationFn: (vars: { entity: string; prefix: string }) =>
-      api.put<{ entity: string; prefix: string }>(`/api/numbering/${vars.entity}`, {
-        value: { prefix: vars.prefix },
-      }),
+      api.put<{ entity: string; prefix: string }>(
+        `/api/numbering/${vars.entity}`,
+        {
+          value: { prefix: vars.prefix },
+        }
+      ),
     onSuccess: (_data, vars) => {
       toast.success(`Prefix for ${vars.entity} updated`)
       setDrafts((prev) => {
@@ -36,9 +37,12 @@ function NumberingRows({
         delete next[vars.entity]
         return next
       })
-      void queryClient.invalidateQueries({ queryKey: ["settings", "numbering"] })
+      void queryClient.invalidateQueries({
+        queryKey: ["settings", "numbering"],
+      })
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed"),
   })
 
   return (
@@ -60,25 +64,35 @@ function NumberingRows({
                   <TableCell className="font-medium">{row.entity}</TableCell>
                   <TableCell>
                     <Input
+                      readOnly={!hasPermission("core.settings.update")}
                       className="w-28 font-mono text-xs"
                       value={draft ?? row.prefix}
                       onChange={(e) =>
-                        setDrafts((prev) => ({ ...prev, [row.entity]: e.target.value }))
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [row.entity]: e.target.value,
+                        }))
                       }
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{row.next_number}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {row.next_number}
+                  </TableCell>
                   <TableCell className="w-24">
-                    {draft !== undefined && draft !== row.prefix && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={save.isPending}
-                        onClick={() => save.mutate({ entity: row.entity, prefix: draft })}
-                      >
-                        Save
-                      </Button>
-                    )}
+                    {hasPermission("core.settings.update") &&
+                      draft !== undefined &&
+                      draft !== row.prefix && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={save.isPending}
+                          onClick={() =>
+                            save.mutate({ entity: row.entity, prefix: draft })
+                          }
+                        >
+                          Save
+                        </Button>
+                      )}
                   </TableCell>
                 </TableRow>
               )
@@ -99,7 +113,9 @@ export function NumberingPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Document numbering</h1>
+        <h1 className="text-xl font-semibold tracking-tight">
+          Document numbering
+        </h1>
         <p className="text-sm text-muted-foreground">
           Prefixes apply to newly created documents; counters never reset
         </p>

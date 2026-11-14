@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
 import { formatMoney } from "@/lib/money"
 
 function errorMessage(error: unknown): string {
@@ -42,15 +43,21 @@ function errorMessage(error: unknown): string {
 }
 
 const badgeFor = (status: string) =>
-  status === "posted" ? "default" : status === "void" ? "destructive" : "outline"
+  status === "posted"
+    ? "default"
+    : status === "void"
+      ? "destructive"
+      : "outline"
 
 export function StockPage() {
+  const { hasPermission } = useAuth()
   const [warehouseId, setWarehouseId] = useState("all")
   const [lowOnly, setLowOnly] = useState(false)
 
   const warehousesQuery = useQuery({
     queryKey: ["inventory", "warehouses"],
     queryFn: () => inventoryApi.warehouses(),
+    enabled: hasPermission("inventory.warehouse.read"),
   })
   const { data, isLoading } = useQuery({
     queryKey: ["inventory", "stock", warehouseId, lowOnly],
@@ -65,8 +72,12 @@ export function StockPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Stock on hand</h1>
-          <p className="text-sm text-muted-foreground">Valued at moving-average cost</p>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Stock on hand
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Valued at moving-average cost
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
@@ -78,19 +89,24 @@ export function StockPage() {
             />
             Low stock only
           </label>
-          <Select value={warehouseId} onValueChange={(v) => setWarehouseId(v ?? "all")}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All warehouses</SelectItem>
-              {(warehousesQuery.data ?? []).map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {hasPermission("inventory.warehouse.read") && (
+            <Select
+              value={warehouseId}
+              onValueChange={(v) => setWarehouseId(v ?? "all")}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All warehouses</SelectItem>
+                {(warehousesQuery.data ?? []).map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -108,15 +124,22 @@ export function StockPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center text-muted-foreground"
+                >
                   Loading…
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && data?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  No stock movements yet — receive a purchase order to fill the shelves
+                <TableCell
+                  colSpan={5}
+                  className="text-center text-muted-foreground"
+                >
+                  No stock movements yet — receive a purchase order to fill the
+                  shelves
                 </TableCell>
               </TableRow>
             )}
@@ -124,10 +147,14 @@ export function StockPage() {
               <TableRow key={`${row.product_id}-${row.warehouse_id}`}>
                 <TableCell>
                   <div className="font-medium">{row.product_name}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{row.product_sku}</div>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {row.product_sku}
+                  </div>
                 </TableCell>
                 <TableCell className="text-sm">{row.warehouse_code}</TableCell>
-                <TableCell className={`text-right font-mono text-sm ${row.is_low ? "font-semibold text-destructive" : ""}`}>
+                <TableCell
+                  className={`text-right font-mono text-sm ${row.is_low ? "font-semibold text-destructive" : ""}`}
+                >
                   {Number(row.qty_on_hand).toFixed(2)}
                   {row.is_low && " ⚠"}
                 </TableCell>
@@ -147,24 +174,31 @@ export function StockPage() {
 }
 
 export function ReceiptsPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["inventory", "receipts", {}],
     queryFn: () => inventoryApi.receipts({ limit: 50 }),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["inventory"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["inventory"] })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Receipts</h1>
-          <p className="text-sm text-muted-foreground">Goods in — posting raises stock and updates average cost</p>
+          <p className="text-sm text-muted-foreground">
+            Goods in — posting raises stock and updates average cost
+          </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New receipt</Button>
+        {hasPermission("inventory.receipt.create") && (
+          <Button onClick={() => setCreateOpen(true)}>New receipt</Button>
+        )}
       </div>
       <DocTable
+        permission="inventory.receipt"
         isLoading={isLoading}
         items={(data?.items ?? []) as DocRow[]}
         onAction={async (doc, action) => {
@@ -190,24 +224,31 @@ export function ReceiptsPage() {
 }
 
 export function DeliveriesPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["inventory", "deliveries", {}],
     queryFn: () => inventoryApi.deliveries({ limit: 50 }),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["inventory"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["inventory"] })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Deliveries</h1>
-          <p className="text-sm text-muted-foreground">Goods out — posting reduces stock and captures COGS</p>
+          <p className="text-sm text-muted-foreground">
+            Goods out — posting reduces stock and captures COGS
+          </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New delivery</Button>
+        {hasPermission("inventory.delivery.create") && (
+          <Button onClick={() => setCreateOpen(true)}>New delivery</Button>
+        )}
       </div>
       <DocTable
+        permission="inventory.delivery"
         isLoading={isLoading}
         items={(data?.items ?? []) as DocRow[]}
         onAction={async (doc, action) => {
@@ -233,24 +274,31 @@ export function DeliveriesPage() {
 }
 
 export function AdjustmentsPage() {
+  const { hasPermission } = useAuth()
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["inventory", "adjustments", {}],
     queryFn: () => inventoryApi.adjustments({ limit: 50 }),
   })
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["inventory"] })
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ["inventory"] })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Adjustments</h1>
-          <p className="text-sm text-muted-foreground">Corrections, damages, count differences</p>
+          <p className="text-sm text-muted-foreground">
+            Corrections, damages, count differences
+          </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>New adjustment</Button>
+        {hasPermission("inventory.adjustment.create") && (
+          <Button onClick={() => setCreateOpen(true)}>New adjustment</Button>
+        )}
       </div>
       <DocTable
+        permission="inventory.adjustment"
         isLoading={isLoading}
         allowVoid={false}
         items={(data?.items ?? []) as DocRow[]}
@@ -265,7 +313,11 @@ export function AdjustmentsPage() {
           }
         }}
       />
-      <CreateAdjustmentDialog open={createOpen} onOpenChange={setCreateOpen} onDone={invalidate} />
+      <CreateAdjustmentDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onDone={invalidate}
+      />
     </div>
   )
 }
@@ -276,16 +328,19 @@ type DocRow = (Receipt | Delivery | Adjustment) & {
 }
 
 function DocTable({
+  permission,
   isLoading,
   items,
   onAction,
   allowVoid = true,
 }: {
+  permission: string
   isLoading: boolean
   items: DocRow[]
   onAction: (doc: DocRow, action: "post" | "void") => void
   allowVoid?: boolean
 }) {
+  const { hasPermission } = useAuth()
   return (
     <div className="rounded-lg border">
       <Table>
@@ -301,14 +356,20 @@ function DocTable({
         <TableBody>
           {isLoading && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell
+                colSpan={5}
+                className="text-center text-muted-foreground"
+              >
                 Loading…
               </TableCell>
             </TableRow>
           )}
           {!isLoading && items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
+              <TableCell
+                colSpan={5}
+                className="text-center text-muted-foreground"
+              >
                 Nothing here yet
               </TableCell>
             </TableRow>
@@ -326,16 +387,27 @@ function DocTable({
               <TableCell className="text-sm">{doc.lines.length}</TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  {doc.status === "draft" && (
-                    <Button size="sm" variant="outline" onClick={() => onAction(doc, "post")}>
-                      Post
-                    </Button>
-                  )}
-                  {doc.status === "posted" && allowVoid && (
-                    <Button size="sm" variant="ghost" onClick={() => onAction(doc, "void")}>
-                      Void
-                    </Button>
-                  )}
+                  {hasPermission(`${permission}.post`) &&
+                    doc.status === "draft" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onAction(doc, "post")}
+                      >
+                        Post
+                      </Button>
+                    )}
+                  {hasPermission(`${permission}.void`) &&
+                    doc.status === "posted" &&
+                    allowVoid && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onAction(doc, "void")}
+                      >
+                        Void
+                      </Button>
+                    )}
                 </div>
               </TableCell>
             </TableRow>
@@ -363,12 +435,17 @@ function CreateFromOrderDialog({
 
   const ordersQuery = useQuery({
     queryKey: ["inventory", "source-orders", kind, open],
-    queryFn: () => (kind === "receipt" ? inventoryApi.purchaseOrders() : inventoryApi.salesOrders()),
+    queryFn: () =>
+      kind === "receipt"
+        ? inventoryApi.purchaseOrders()
+        : inventoryApi.salesOrders(),
     enabled: open,
   })
   // Goods may still be outstanding on partly moved or already-invoiced orders.
   const movable = new Set(["confirmed", "delivered", "received", "invoiced"])
-  const orders = (ordersQuery.data?.items ?? []).filter((o) => movable.has(o.status))
+  const orders = (ordersQuery.data?.items ?? []).filter((o) =>
+    movable.has(o.status)
+  )
 
   const create = async () => {
     setSaving(true)
@@ -379,7 +456,9 @@ function CreateFromOrderDialog({
       } else {
         await inventoryApi.createDelivery({ source_so_id: orderId })
       }
-      toast.success(`${kind === "receipt" ? "Receipt" : "Delivery"} created from order`)
+      toast.success(
+        `${kind === "receipt" ? "Receipt" : "Delivery"} created from order`
+      )
       onDone()
       onOpenChange(false)
       setOrderId("")
@@ -395,7 +474,8 @@ function CreateFromOrderDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            New {kind} from a confirmed {kind === "receipt" ? "purchase" : "sales"} order
+            New {kind} from a confirmed{" "}
+            {kind === "receipt" ? "purchase" : "sales"} order
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -413,7 +493,8 @@ function CreateFromOrderDialog({
                 )}
                 {orders.map((order) => (
                   <SelectItem key={order.id} value={order.id}>
-                    {order.number} — {order.customer_name ?? order.supplier_name}
+                    {order.number} —{" "}
+                    {order.customer_name ?? order.supplier_name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -488,12 +569,17 @@ function CreateAdjustmentDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label>Reason</Label>
-            <Select value={reason} onValueChange={(v) => setReason(v ?? "stock_correction")}>
+            <Select
+              value={reason}
+              onValueChange={(v) => setReason(v ?? "stock_correction")}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="stock_correction">Stock correction</SelectItem>
+                <SelectItem value="stock_correction">
+                  Stock correction
+                </SelectItem>
                 <SelectItem value="damage">Damage</SelectItem>
                 <SelectItem value="count">Count difference</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
@@ -502,7 +588,10 @@ function CreateAdjustmentDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label>Product</Label>
-            <Select value={productId} onValueChange={(v) => setProductId(v ?? "")}>
+            <Select
+              value={productId}
+              onValueChange={(v) => setProductId(v ?? "")}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select product…" />
               </SelectTrigger>
@@ -517,7 +606,13 @@ function CreateAdjustmentDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="adj-qty">Quantity (negative for shrinkage)</Label>
-            <Input id="adj-qty" type="number" step="0.0001" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input
+              id="adj-qty"
+              type="number"
+              step="0.0001"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+            />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
@@ -525,7 +620,10 @@ function CreateAdjustmentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!productId || !qty || saving} onClick={() => void create()}>
+          <Button
+            disabled={!productId || !qty || saving}
+            onClick={() => void create()}
+          >
             {saving ? "Posting…" : "Create & post"}
           </Button>
         </DialogFooter>
