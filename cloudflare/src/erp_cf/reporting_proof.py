@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from erp_cf.bootstrap import staging_secret
+from erp_cf.command_routing import command_stub
 from erp_cf.db import D1Database, plain
 from erp_cf.errors import ConflictError, DomainError, PermissionDeniedError, ValidationError
 from erp_cf.identity import bearer, current_actor, environment
@@ -62,7 +63,7 @@ async def void_after_first_page(body: InterleavingInput, request: Request):
 
     async def commit():
         result = plain(
-            await env.COMMANDS.getByName(org_id).execute(
+            await command_stub(env).execute(
                 {
                     "operation": "invoicing.invoice.void",
                     "token": bearer(request),

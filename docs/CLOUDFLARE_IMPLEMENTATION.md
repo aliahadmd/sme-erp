@@ -1199,7 +1199,7 @@ Native read-only assessments and previews are saved privately under
 
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 325 backend tests, 39 frontend tests, lint/formatting, the
+`pnpm quality` passes 330 backend tests, 39 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
@@ -1228,6 +1228,23 @@ route-presence regression test requires no missing original operation. Route
 presence is not proof of full workflow, role or operational parity.
 
 ## Work still required
+
+The first bounded command/report load test found a concrete placement defect:
+the organization command object ran in AMS while D1's primary was in APAC.
+A shared route helper now keeps HTTP, jobs and proof paths on one explicit
+coordinator generation. The verification environment was switched under a native
+fenced write pause; the demo retains its previous route. Native analytics verifies
+the new object in SIN, and an old command replays its original entry without
+another posting. No business data or idempotency receipts live only in the object.
+
+The same workload then completed 54 journal commands and 126 report requests
+without response failures. Normal command p95 improved from 13.24 to 5.71 seconds,
+and burst p95 from 23.58 to 10.61 seconds, still above the original five/ten-second
+targets. The first run's four committed response-loss outcomes and one uncommitted
+outcome were reconciled using receipts and the original session's revocation.
+See [the reproducible capacity report](CLOUDFLARE_CAPACITY.md) for sample counts,
+placement evidence, cleanup and remaining limits. This is evidence of improvement,
+not completed capacity acceptance.
 
 The full ERP migration remains incomplete. Next, complete
 realistic backup/recovery capacity, production alert replication, live ERP email acceptance/delivery,

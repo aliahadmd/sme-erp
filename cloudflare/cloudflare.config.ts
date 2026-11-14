@@ -70,6 +70,10 @@ export default defineConfig(({ mode }) => {
           worker: application,
           exportName: "ERPCommands",
         }),
+        // app-staging's first object was placed in AMS while D1 is in APAC.
+        // Switch only under a verified D1 write pause; generations are not shards.
+        COMMAND_COORDINATOR_GENERATION: bindings.text(demo ? "" : "apac-v1"),
+        COMMAND_LOCATION_HINT: bindings.text(demo ? "" : "apac"),
         ENVIRONMENT: bindings.text("staging"),
         PUBLIC_ORIGIN: bindings.text(`https://${application}.aliahad.workers.dev`),
         ORG_ID: bindings.text(demo ? "01a1d6bf-eca3-7654-b225-ae37c723ed96" : "019a78e1-6d80-7000-8000-000000000001"),

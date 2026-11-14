@@ -9,6 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError as PydanticValidationError
 
+from erp_cf.command_routing import command_stub
 from erp_cf.db import D1Database
 from erp_cf.errors import DomainError, NotFoundError, ValidationError
 from erp_cf.identity import bearer, from_token
@@ -146,7 +147,7 @@ async def invoke(request: Request, operation: str, payload: dict):
     if not 1 <= len(key) <= 128:
         raise ValidationError("Idempotency key must contain 1 to 128 characters")
     env = request.scope["env"]
-    result = await env.COMMANDS.getByName(str(env.ORG_ID)).execute(
+    result = await command_stub(env).execute(
         {
             "operation": operation,
             "token": bearer(request),

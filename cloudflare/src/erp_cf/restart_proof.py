@@ -4,6 +4,7 @@ from contextlib import suppress
 
 from fastapi import APIRouter, Request
 
+from erp_cf.command_routing import command_stub
 from erp_cf.db import plain
 from erp_cf.errors import NotFoundError, PermissionDeniedError
 from erp_cf.identity import bearer, environment, from_token
@@ -30,14 +31,7 @@ async def administrator(env, token):
 
 
 def stub(env):
-    options = {"retry": {"maxRetries": 0}}
-    try:
-        from js import JSON
-    except ImportError:
-        pass
-    else:
-        options = JSON.parse('{"retry":{"maxRetries":0}}')
-    return env.COMMANDS.getByName(str(env.ORG_ID), options)
+    return command_stub(env, no_retry=True)
 
 
 @router.get("/instance")

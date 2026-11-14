@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from erp_cf.business_clock import business_time
+from erp_cf.command_routing import command_stub
 from erp_cf.db import D1Database, Statement, plain
 from erp_cf.store import now
 
@@ -46,9 +47,7 @@ def decode_message(body, org_id):
 
 async def system(env, operation, key, payload):
     response = plain(
-        await env.COMMANDS.getByName(str(env.ORG_ID)).run_system(
-            {"operation": operation, "key": key, "payload": payload}
-        )
+        await command_stub(env).run_system({"operation": operation, "key": key, "payload": payload})
     )
     if response["status"] != 200:
         raise JobFailed(response["body"]["error"]["code"])
