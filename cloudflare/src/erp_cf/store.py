@@ -266,7 +266,7 @@ class Repository:
                 )
         return where, params
 
-    async def find(self, where="1", params=(), *, order_by="", limit=None, offset=0):
+    def select(self, where="1", params=(), *, order_by="", limit=None, offset=0):
         where, params = self.condition(where, params)
         sql = f"SELECT {self.table.projection()} FROM {quote(self.table.name)} WHERE {where}"
         if order_by:
@@ -288,7 +288,11 @@ class Repository:
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params = (*params, limit, offset)
-        return [self.table.decode(r) for r in await self.db.all(sql, params)]
+        return Statement(sql, params)
+
+    async def find(self, where="1", params=(), *, order_by="", limit=None, offset=0):
+        statement = self.select(where, params, order_by=order_by, limit=limit, offset=offset)
+        return [self.table.decode(r) for r in await self.db.all(statement.sql, statement.params)]
 
     async def first(self, where="1", params=()):
         result = await self.find(where, params, limit=1)
@@ -368,9 +372,57 @@ class UnitOfWork:
             ).hexdigest()
         self.statements: list[Statement] = []
         self.pending_numbers: dict[tuple, dict] = {}
+        self._reference_data = None
 
     def repository(self, name: str):
         return Repository(self.db, name, self.org_id)
+
+    async def reference_data(self):
+        if self._reference_data is None:
+            from erp_cf.command_references import load
+
+            self._reference_data = await load(self)
+        return self._reference_data
+
+    async def organization(self):
+        row = (await self.reference_data())["organization"]
+        if row is None:
+            raise NotFoundError("core_organizations record not found")
+        self.guard("core_organizations", row)
+        return row
+
+    async def setting(self, key):
+        from erp_cf.command_references import SETTING_KEYS
+
+        if key in SETTING_KEYS:
+            return (await self.reference_data())["settings"].get(key)
+        return await self.repository("core_settings").first("key=?", (key,))
+
+    async def sequence(self, entity, year):
+        references = await self.reference_data()
+        from app.modules.core.defaults import DEFAULT_SETTINGS
+
+        if year == references["year"] and entity in DEFAULT_SETTINGS["numbering.prefixes"]:
+            return references["sequences"].get(entity)
+        return await self.repository("core_document_sequences").first(
+            "entity=? AND year=?", (entity, year)
+        )
+
+    async def document(self, name, lines_name, parent, identity, *, order_by="id"):
+        header, lines = self.repository(name), self.repository(lines_name)
+        if lines.table.owner != (parent, name, "id"):
+            raise ValueError("Document lines must belong to their scoped header")
+        result = await self.db.batch(
+            [
+                header.select("id=?", (str(identity),), limit=1),
+                lines.select(quote(parent) + "=?", (str(identity),), order_by=order_by),
+            ]
+        )
+        if not result[0]["results"]:
+            raise NotFoundError(f"{name} record not found")
+        row = header.table.decode(plain(result[0]["results"][0]))
+        row["lines"] = [lines.table.decode(plain(item)) for item in result[1]["results"]]
+        return row
 
     def add(self, name: str, data: dict):
         table = tables()[name]

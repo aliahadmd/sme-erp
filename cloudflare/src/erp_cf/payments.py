@@ -128,7 +128,7 @@ class Payments:
             currencies.add(body.currency)
         if len(currencies) > 1:
             raise ValidationError("A payment and its documents must share one currency")
-        org = await self.plan.repository("core_organizations").get(self.plan.org_id)
+        org = await self.plan.organization()
         currency = (
             next(iter(currencies)) if currencies else party["currency"] or org["base_currency"]
         )

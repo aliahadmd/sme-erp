@@ -17,7 +17,7 @@ def valid_prefix(value):
 
 async def next_number(plan, entity, default=None, *, year=None):
     default = default or DEFAULT_SETTINGS["numbering.prefixes"][entity]
-    setting = await plan.repository("core_settings").first("key=?", ("numbering.prefixes",))
+    setting = await plan.setting("numbering.prefixes")
     if setting:
         plan.guard("core_settings", setting)
     chosen = (setting["value"] if setting else {}).get(entity, default)
@@ -27,9 +27,7 @@ async def next_number(plan, entity, default=None, *, year=None):
     key = (entity, year)
     sequence = plan.pending_numbers.get(key)
     if sequence is None:
-        sequence = await plan.repository("core_document_sequences").first(
-            "entity=? AND year=?", (entity, year)
-        )
+        sequence = await plan.sequence(entity, year)
     value = sequence["last_number"] + 1 if sequence else 1
     if sequence:
         sequence = plan.update("core_document_sequences", sequence, {"last_number": value})

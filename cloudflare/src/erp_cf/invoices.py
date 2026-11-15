@@ -55,6 +55,13 @@ class Invoices:
     def __init__(self, plan):
         self.plan = plan
         self.settlements = Settlements(plan)
+        self.order_flows = {}
+
+    def order_flow(self, invoice_type):
+        kind = order_kind(invoice_type)
+        if kind.table not in self.order_flows:
+            self.order_flows[kind.table] = OrderFlow(self.plan, kind)
+        return self.order_flows[kind.table]
 
     async def party(self, identity, invoice_type):
         row = await self.plan.repository("crm_contacts").get(str(identity), required=False)
@@ -92,7 +99,7 @@ class Invoices:
 
     async def source(self, row):
         cfg = order_kind(row["invoice_type"])
-        source = await DocumentPlan(self.plan, cfg).load(row["source_id"])
+        source = await self.order_flow(row["invoice_type"]).load(row["source_id"])
         if source[cfg.party] != row["party_id"]:
             raise ValidationError("Invoice party must match the source order")
         if source["currency"] != row["currency"]:
@@ -171,7 +178,7 @@ class Invoices:
             lines = await self.input_lines(body.lines, body.invoice_type)
         if not data.get("source_id") and any(r.get("source_line_id") for r in lines):
             raise ValidationError("Source line IDs require a source order")
-        org = await self.plan.repository("core_organizations").get(self.plan.org_id)
+        org = await self.plan.organization()
         data["currency"] = data["currency"] or party["currency"] or org["base_currency"]
         data.update(totals(lines))
         data.update(
@@ -263,7 +270,7 @@ class Invoices:
             )
             if key:
                 target[key] = target.get(key, ZERO) + line["qty"]
-        await OrderFlow(self.plan, order_kind(row["invoice_type"])).change(
+        await self.order_flow(row["invoice_type"]).change(
             row["source_id"],
             "qty_invoiced",
             by_line=list(by_line.items()),
@@ -389,7 +396,7 @@ class Invoices:
         to = party_email(SimpleNamespace(**party)) if party else None
         if not to:
             raise ValidationError("Customer has no valid email address")
-        org = await self.plan.repository("core_organizations").get(self.plan.org_id)
+        org = await self.plan.organization()
         subject, text = document_email(SimpleNamespace(**row), org["name"])
         self.plan.guard(INVOICES, row)
         self.plan.emit(

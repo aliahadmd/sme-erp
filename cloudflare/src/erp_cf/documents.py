@@ -189,11 +189,9 @@ class DocumentPlan:
         return lines
 
     async def load(self, identity):
-        row = await self.plan.repository(self.kind.table).get(str(identity))
-        lines = await self.plan.repository(self.kind.lines).find(
-            f"{self.kind.parent}=?", (row["id"],), order_by="position,id"
+        return await self.plan.document(
+            self.kind.table, self.kind.lines, self.kind.parent, identity, order_by="position,id"
         )
-        return {**row, "lines": lines}
 
     def add_lines(self, identity, lines):
         return [
@@ -205,7 +203,7 @@ class DocumentPlan:
         body = cfg.create.model_validate(payload["body"])
         data = body.model_dump(exclude={"lines"})
         party = await self.party(data[cfg.party])
-        org = await self.plan.repository("core_organizations").get(self.plan.org_id)
+        org = await self.plan.organization()
         data[cfg.party], data[cfg.party_name] = party["id"], party["name"]
         data[cfg.date] = data[cfg.date] or today()
         data["currency"] = data["currency"] or party["currency"] or org["base_currency"]

@@ -41,14 +41,21 @@ class Settlements:
         self.invoices, self.used = {}, {}
         self.with_lines = set()
 
-    async def preload(self, identities):
-        missing = list(
-            {str(value) for value in identities if value is not None} - self.invoices.keys()
-        )
-        rows = await self.plan.repository(INVOICES).many(missing)
-        self.invoices.update(rows)
+    async def preload(self, identities, *, lines=False):
+        identities = list(dict.fromkeys(str(value) for value in identities if value is not None))
+        missing = [identity for identity in identities if identity not in self.invoices]
+        line_missing = [
+            identity for identity in identities if lines and identity not in self.with_lines
+        ]
         self.used.update({key: ZERO for key in missing})
-        statements = []
+        statements, definitions = [], []
+        invoices, line_repository = self.plan.repository(INVOICES), self.plan.repository(LINES)
+        for start in range(0, len(missing), 80):
+            chunk = missing[start : start + 80]
+            statements.append(
+                invoices.select("id IN (" + ",".join("?" for _ in chunk) + ")", tuple(chunk))
+            )
+            definitions.append("invoice")
         for start in range(0, len(missing), 80):
             chunk = missing[start : start + 80]
             statements.append(
@@ -62,23 +69,42 @@ class Settlements:
                     (self.plan.org_id, *chunk),
                 )
             )
+            definitions.append("effect")
+        for start in range(0, len(line_missing), 80):
+            chunk = line_missing[start : start + 80]
+            statements.append(
+                line_repository.select(
+                    "invoice_id IN (" + ",".join("?" for _ in chunk) + ")",
+                    tuple(chunk),
+                    order_by="position,id",
+                )
+            )
+            definitions.append("line")
+        loaded_lines = {identity: [] for identity in line_missing}
         if statements:
-            for result in await self.plan.db.batch(statements):
+            for kind, result in zip(definitions, await self.plan.db.batch(statements), strict=True):
                 for item in result["results"]:
                     item = plain(item)
-                    self.used[item["invoice_id"]] += from_coefficient(item["amount_base"], 2)
+                    if kind == "invoice":
+                        row = invoices.table.decode(item)
+                        self.invoices[row["id"]] = row
+                    elif kind == "effect":
+                        self.used[item["invoice_id"]] += from_coefficient(item["amount_base"], 2)
+                    else:
+                        row = line_repository.table.decode(item)
+                        loaded_lines[row["invoice_id"]].append(row)
+        if set(missing) - self.invoices.keys():
+            raise NotFoundError("Invoice not found")
+        for identity, rows in loaded_lines.items():
+            self.invoices[identity]["lines"] = rows
+            self.with_lines.add(identity)
 
     async def invoice(self, identity, *, lines=False):
         identity = str(identity)
-        await self.preload([identity])
+        await self.preload([identity], lines=lines)
         row = self.invoices.get(identity)
         if row is None:
             raise NotFoundError("Invoice not found")
-        if lines and identity not in self.with_lines:
-            row["lines"] = await self.plan.repository(LINES).find(
-                "invoice_id=?", (identity,), order_by="position,id"
-            )
-            self.with_lines.add(identity)
         return row
 
     def change(self, row, changes):

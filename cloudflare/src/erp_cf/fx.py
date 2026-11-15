@@ -8,7 +8,7 @@ from erp_cf.money import money
 
 
 async def snapshot(plan, currency, on_date, total):
-    org = await plan.repository("core_organizations").get(plan.org_id)
+    org = await plan.organization()
     plan.guard("core_organizations", org)
     rate = Decimal("1.00000000")
     if currency != org["base_currency"]:

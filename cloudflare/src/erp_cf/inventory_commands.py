@@ -88,11 +88,9 @@ class InventoryPlan:
         self.stock = StockBook(plan)
 
     async def load(self, identity):
-        row = await self.plan.repository(self.kind.table).get(identity)
-        lines = await self.plan.repository(self.kind.lines).find(
-            f"{self.kind.parent}=?", (str(identity),), order_by="id"
+        return await self.plan.document(
+            self.kind.table, self.kind.lines, self.kind.parent, identity
         )
-        return {**row, "lines": lines}
 
     async def create(self, payload):
         cfg, plan = self.kind, self.plan

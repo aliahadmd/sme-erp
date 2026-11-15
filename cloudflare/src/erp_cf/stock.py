@@ -19,32 +19,60 @@ class StockBook:
         self.states = {}
 
     async def prepare(self, product_ids, warehouse_id):
+        warehouse_id = str(warehouse_id)
         identities = list(dict.fromkeys(str(value) for value in product_ids))
         missing = [identity for identity in identities if identity not in self.products]
-        for identity, row in (
-            await self.plan.repository("catalog_products").many(missing, required=False)
-        ).items():
-            if row["type"] != "goods" or not row["track_inventory"]:
-                raise ValidationError(
-                    "Stock lines must reference existing stock-tracked goods products"
-                )
-            self.plan.guard("catalog_products", row)
-            self.products[identity] = row
-        if set(identities) - self.products.keys():
-            raise ValidationError(
-                "Stock lines must reference existing stock-tracked goods products"
+        statements, definitions = [], []
+
+        def select(kind, name, where, params):
+            repository = self.plan.repository(name)
+            statements.append(repository.select(where, params))
+            definitions.append((kind, repository.table))
+
+        for start in range(0, len(missing), 80):
+            chunk = missing[start : start + 80]
+            select(
+                "product",
+                "catalog_products",
+                "id IN (" + ",".join("?" for _ in chunk) + ")",
+                tuple(chunk),
             )
         missing = [identity for identity in identities if (identity, warehouse_id) not in self.rows]
         for start in range(0, len(missing), 80):
             chunk = missing[start : start + 80]
             for identity in chunk:
                 self.rows[(identity, warehouse_id)] = None
-            rows = await self.plan.repository("inventory_stock").find(
+            select(
+                "stock",
+                "inventory_stock",
                 "warehouse_id=? AND product_id IN (" + ",".join("?" for _ in chunk) + ")",
                 (warehouse_id, *chunk),
             )
-            for row in rows:
-                self.rows[(row["product_id"], warehouse_id)] = row
+        if warehouse_id not in self.warehouses:
+            select("warehouse", "inventory_warehouses", "id=?", (warehouse_id,))
+        if statements:
+            results = await self.plan.db.batch(statements)
+            for (kind, table), result in zip(definitions, results, strict=True):
+                for item in result["results"]:
+                    row = table.decode(plain(item))
+                    if kind == "product":
+                        if row["type"] != "goods" or not row["track_inventory"]:
+                            raise ValidationError(
+                                "Stock lines must reference existing stock-tracked goods products"
+                            )
+                        self.plan.guard("catalog_products", row)
+                        self.products[row["id"]] = row
+                    elif kind == "stock":
+                        self.rows[(row["product_id"], warehouse_id)] = row
+                    else:
+                        self.plan.guard("inventory_warehouses", row)
+                        self.warehouses[warehouse_id] = row
+        if set(identities) - self.products.keys():
+            raise ValidationError(
+                "Stock lines must reference existing stock-tracked goods products"
+            )
+        if warehouse_id not in self.warehouses:
+            raise NotFoundError("inventory_warehouses record not found")
 
     async def prepare_reversals(self, originals):
         statements = []
@@ -102,7 +130,7 @@ class StockBook:
 
     async def allow_negative(self):
         if self.negative is None:
-            setting = await self.plan.repository("core_settings").first("key='inventory.guard'")
+            setting = await self.plan.setting("inventory.guard")
             if setting:
                 self.plan.guard("core_settings", setting)
             self.negative = bool(setting and setting["value"].get("allow_negative"))

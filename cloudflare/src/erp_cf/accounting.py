@@ -42,9 +42,7 @@ class Ledger:
 
     async def account(self, key):
         if self.mapping is None:
-            setting = await self.plan.repository("core_settings").first(
-                "key=?", ("accounting.mapping",)
-            )
+            setting = await self.plan.setting("accounting.mapping")
             if setting:
                 self.plan.guard("core_settings", setting)
             self.mapping = setting["value"] if setting else {}
@@ -52,7 +50,9 @@ class Ledger:
         if not code:
             raise ValidationError(f"No account mapping for '{key}' — configure accounting.mapping")
         if code not in self.by_code:
-            account = await self.plan.repository("accounting_accounts").first("code=?", (code,))
+            account = (await self.plan.reference_data())["accounts"].get(code)
+            if account is None:
+                account = await self.plan.repository("accounting_accounts").first("code=?", (code,))
             if account is None:
                 default = next((row for row in DEFAULT_COA if row[0] == code), None)
                 if default is None:

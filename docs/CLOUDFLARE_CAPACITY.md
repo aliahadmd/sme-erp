@@ -435,3 +435,31 @@ references only within the current command and batch independent reads. Retain
 fresh authorization after the mutex, durable receipt claims, uncertain-response
 reconciliation, exact decimal transport, all revision guards and the one atomic
 write batch. A changed query count alone does not prove the native targets pass.
+
+### Batching changes prepared for native remeasurement
+
+The command plan now batches bounded organization/settings/numbering/mapped-
+account references once within the current command. Aggregate headers/lines,
+stock references and settlement effects are also read in native batches.
+Invoice validation and progress share one guarded source-order context, which
+carries planned progress. Each new command starts fresh; authorization and the
+atomic write/receipt boundary are retained. The shared app-staging quality gate
+passes 339 backend and 39 frontend tests, including custom account mapping,
+next-command policy freshness, stale-policy rollback and one source-order read.
+
+The same local API trace now reports:
+
+| Command | Before D1 calls | After D1 calls |
+|---|---:|---:|
+| sales/orders | 11 | 8 |
+| sales/orders/:id/confirm | 7 | 6 |
+| inventory/deliveries | 13 | 10 |
+| inventory/deliveries/:id/post | 18 | 10 |
+| invoicing/invoices | 10 | 8 |
+| invoicing/invoices/:id/post | 23 | 9 |
+| invoicing/payments | 17 | 8 |
+
+These counts include the independent HTTP/coordinator authorization, receipt
+checks and one atomic commit. They demonstrate fewer boundaries, not accepted
+native latency. Deployment and the unchanged native profiles must verify that
+the new code meets the original targets. No cross-request cache was added.
