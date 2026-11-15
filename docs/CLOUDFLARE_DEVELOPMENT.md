@@ -226,28 +226,53 @@ The backup-density correction also passes hosted quality at `5c7412c`
 (333 backend/39 frontend tests):
 [run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
 
-Workers Builds can run the same gate with repository root directory
-`cloudflare`, build command `pnpm install --frozen-lockfile && pnpm quality`,
-and deploy command `uv run python scripts/deploy_from_env.py --deploy`.
-Use build variables `NODE_VERSION=24`, `PYTHON_VERSION=3.14`,
-`PNPM_VERSION=12.8.1`, `SKIP_DEPENDENCY_INSTALL=1`, and `CF_MODE=demo-staging`.
-These settings are prepared; no automatic repository deployment is enabled by
-these local files alone.
+Workers Builds uses repository root directory `cloudflare` and this build command:
+
+```sh
+python3 -m pip install --no-deps --target .cloudflare/build-tools uv==0.12.11 && export PATH="$PWD/.cloudflare/build-tools/bin:$PATH" && pnpm install --frozen-lockfile && pnpm quality
+```
+
+Build variables are `NODE_VERSION=24`, `PYTHON_VERSION=3.14.8`,
+`PNPM_VERSION=12.8.1`, `SKIP_DEPENDENCY_INSTALL=1`, `CF_MODE=demo-staging`,
+`UV_MANAGED_PYTHON=1`, and `UV_LINK_MODE=copy`. The pinned uv installs a managed
+Python for the quality gate. The first native build
+`9bdbb29a-b4ac-42f2-9758-10af6367d330` exposed missing `_sqlite3` in the build
+image's asdf Python; it failed before any deployment. Requiring managed Python
+addresses that host test dependency without changing the Worker runtime. The
+corrected preflight `451e7ba6-c419-4530-ae66-79fe1c75599d` passed all 333 backend
+and 39 frontend tests, model metadata, lint, locked vendoring and both builds.
+Its deploy command was `true`: this success alone did not deploy the Worker.
 
 The Cloudflare repository connection is now registered as
 `7a75bed4-15f0-40af-8ef8-87610f78ff1a` for `aliahadmd/sme-erp` (GitHub repository
 `1401814256`, owner `90032081`). Native configuration autofill can read the
 published branch and detects `cf`/pnpm under `cloudflare`. The demo's script tag
-is `4e525a3549a143688686d174f81fe2ca`. No build trigger, deployment token or
-automatic Workers Builds deployment has been activated yet.
+is `4e525a3549a143688686d174f81fe2ca`. Trigger
+`3251fc06-f856-4af4-8c87-2bc9f4a63cb4` listens only to
+`codex/cloudflare-python-d1`, with paths `cloudflare/**`, `web/**`, and
+`api/app/**`. It uses an existing Cloudflare-managed build credential; no new
+credential was created or exposed. The initial preflight deploy command is
+`true`; it is replaced by the guarded demo deploy command after preflight passes.
 
-Store the existing runtime values as secret build variables `ERP_JWT_SECRET`
-and `ERP_COMMAND_HASH_KEY`, plus a scoped Cloudflare deployment credential.
+The existing runtime values are now stored as secret build variables
+`ERP_JWT_SECRET` and `ERP_COMMAND_HASH_KEY`. Native reads confirm both are secret
+and return null values. The deployment command is:
+
+```sh
+PATH="$PWD/.cloudflare/build-tools/bin:$PATH" uv run python scripts/deploy_from_env.py --deploy
+```
+
+Set PATH in this command too: the build and deploy steps use separate shells.
 The deploy wrapper verifies the exact prebuilt target and closed-bootstrap
 state, writes runtime secrets into a temporary 0600 file for `cf`, and removes
 that file afterward. Without `--deploy`, it only validates. Missing secrets fail
 closed; no secret is a Vite variable or a public asset. Migrations and seeding
 remain explicit operator steps, separate from code deployment.
+In Workers Builds it also requires the migration branch and a full commit SHA,
+then records that SHA in the deployed version's tag and message. Local read-only
+checks accept the expected identity and reject another branch, a missing commit
+or a missing secret. Native deployment acceptance is recorded after the first
+repository-triggered release finishes.
 
 Primary tooling references: [Workers build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/),
 [Workers build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/),

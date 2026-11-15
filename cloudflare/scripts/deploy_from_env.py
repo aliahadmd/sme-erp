@@ -8,6 +8,7 @@ removed afterward. This cannot target production or initialize/seed a database.
 import argparse
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -36,6 +37,14 @@ console.log(JSON.stringify({name:c.name,mode:o.rootConfig.buildContext.mode,
     actual = json.loads(inspection)
     if actual != {"name": WORKER, "mode": MODE, "bootstrap": "false", "jobs": "true"}:
         raise RuntimeError("Unexpected build target/initialization state")
+    provenance = []
+    if os.environ.get("WORKERS_CI") == "1":
+        commit = os.environ.get("WORKERS_CI_COMMIT_SHA", "")
+        if os.environ.get("WORKERS_CI_BRANCH") != "codex/cloudflare-python-d1" or not re.fullmatch(
+            r"[0-9a-f]{40}", commit
+        ):
+            raise RuntimeError("Unexpected Workers Builds branch or missing commit identity")
+        provenance = ["--tag", "git-" + commit[:12], "--message", "ERP demo commit " + commit]
     secrets = {
         "JWT_SECRET": os.environ.get("ERP_JWT_SECRET", ""),
         "COMMAND_HASH_KEY": os.environ.get("ERP_COMMAND_HASH_KEY", ""),
@@ -70,6 +79,7 @@ console.log(JSON.stringify({name:c.name,mode:o.rootConfig.buildContext.mode,
                 MODE,
                 "--secrets-file",
                 str(filename),
+                *provenance,
             ],
             cwd=ROOT,
             check=True,
