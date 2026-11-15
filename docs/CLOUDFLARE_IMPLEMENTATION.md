@@ -1216,9 +1216,12 @@ passed the full gate at `757451f` (332 backend/39 frontend tests at that commit)
 The larger-backup correction at `5c7412c` also passes the complete hosted gate
 (333 backend/39 frontend tests):
 [run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
-Cloudflare's repository connection is registered and can read that branch, but
-repository-triggered Workers Builds remains unactivated. Build settings and secret names are documented
-in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
+Cloudflare's repository connection is registered and can read that branch. Its
+hosted quality gate and explicit-commit demo deployment now pass; the real
+GitHub push did not reach Cloudflare, whose dashboard reports a disconnected
+Git account. GitHub reauthentication is required to inspect the installed app's
+repository scope. Build settings, deployment evidence and the remaining push
+delivery check are documented in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
 
 ## HTTP surface coverage
 
@@ -1303,11 +1306,43 @@ sessions, held external delivery and unchanged source balances. Source health
 is again `ok`; both accepted targets remain preserved and occupied. The full
 evidence and remaining scale limits are in the capacity/recovery guides.
 
+## Cloudflare hosted build and demo deployment
+
+The public migration branch is published through code commit `5787c40`.
+[GitHub run 43687806672](https://github.com/aliahadmd/sme-erp/actions/runs/43687806672)
+passes 333 backend and 39 frontend tests plus the complete shared quality gate.
+Cloudflare's first preflight exposed missing SQLite support in its asdf Python;
+the pinned uv now selects managed Python for host tests. The corrected native
+preflight and subsequent complete build both pass the same gate.
+
+Native build `dc43abf0-85ce-40df-825f-96785cafcdcb` deployed the explicit code
+commit to demo version `566fc464-d983-4f21-ba76-5311c9f44aa0` at 07:10:19 UTC
+on 15 November. This was a manually started Cloudflare build, using hidden
+existing runtime keys and an existing managed deployment credential. The
+guarded wrapper enforces the closed-bootstrap demo target, requires the expected
+branch/full SHA in Workers Builds and annotates the version with its commit.
+Deployment performs no database migrations or seeding.
+
+The existing pre-deployment login remains valid with unchanged permissions.
+Exact dashboard/trial-balance comparisons pass, operational health is `ok`,
+jobs remain enabled and email remains in test mode. The frontend asset is
+unchanged. Bootstrap and the coordinator diagnostic route remain closed; the
+owned acceptance session is signed out and revoked. The production domain
+and its original runtime are unchanged.
+
+Automatic push deployment is still unaccepted: the qualifying source push
+started GitHub quality checks but no Cloudflare push build. The dashboard
+reports a disconnected Git account despite `auto_build_enabled=true` in native
+configuration. The Cloudflare GitHub app exists, but its settings require the
+user's GitHub confirmation before repository scope can be inspected. Repair
+that access and observe a real qualifying push; do not relabel the successful
+manual build as evidence of automatic delivery.
+
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
 larger-history and representative document capacity, production alert replication,
-live ERP email acceptance/delivery, complete browser/role parity, Workers Builds activation,
+live ERP email acceptance/delivery, complete browser/role parity, Workers Builds push delivery,
 production environment, cutover and
 safe old-runtime retirement. The completed-payment coordinator reset/response-loss
 case passes; broader Worker restart, in-flight failure, frontend recovery and

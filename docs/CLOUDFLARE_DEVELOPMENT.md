@@ -225,6 +225,8 @@ It uses no Cloudflare deployment secrets and performs no remote migrations.
 The backup-density correction also passes hosted quality at `5c7412c`
 (333 backend/39 frontend tests):
 [run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
+The deployment-wrapper update at `5787c40` also passes the hosted quality gate:
+[run 43687806672](https://github.com/aliahadmd/sme-erp/actions/runs/43687806672).
 
 Workers Builds uses repository root directory `cloudflare` and this build command:
 
@@ -251,8 +253,17 @@ is `4e525a3549a143688686d174f81fe2ca`. Trigger
 `3251fc06-f856-4af4-8c87-2bc9f4a63cb4` listens only to
 `codex/cloudflare-python-d1`, with paths `cloudflare/**`, `web/**`, and
 `api/app/**`. It uses an existing Cloudflare-managed build credential; no new
-credential was created or exposed. The initial preflight deploy command is
-`true`; it is replaced by the guarded demo deploy command after preflight passes.
+credential was created or exposed. After the passing preflight its deploy command
+was changed from `true` to the guarded demo wrapper below. Previews are disabled.
+
+Automatic push delivery is not yet accepted: the real push of `5787c40` started
+GitHub Actions, but no Cloudflare push build appeared. Native configuration
+reports `auto_build_enabled=true`; the dashboard additionally reports that this
+project is disconnected from its Git account. Cloudflare Workers and Pages is
+installed on GitHub as installation `49939379`, but GitHub requires account
+reauthentication before that installation's repository scope can be inspected.
+Do not infer that the app is absent from the GitHub CLI's unrelated installation
+API permission error, or treat a manually started build as push-trigger proof.
 
 The existing runtime values are now stored as secret build variables
 `ERP_JWT_SECRET` and `ERP_COMMAND_HASH_KEY`. Native reads confirm both are secret
@@ -271,8 +282,27 @@ remain explicit operator steps, separate from code deployment.
 In Workers Builds it also requires the migration branch and a full commit SHA,
 then records that SHA in the deployed version's tag and message. Local read-only
 checks accept the expected identity and reject another branch, a missing commit
-or a missing secret. Native deployment acceptance is recorded after the first
-repository-triggered release finishes.
+or a missing secret. A native build of the explicit published commit is used to
+verify deployment independently of GitHub push delivery. Reconnect and verify
+the app's repository access, then observe a real qualifying push before claiming
+automatic deployment works.
+
+Native build `dc43abf0-85ce-40df-825f-96785cafcdcb`, manually started with the
+explicit published commit `5787c401917d197a86b3c80b43e1e2be8b819432`, passed the
+complete quality gate and deployed demo version
+`566fc464-d983-4f21-ba76-5311c9f44aa0` at **2026-11-15 07:10:19 UTC**. Native
+version metadata contains tag `git-5787c401917d` and the full commit message.
+Readback confirms this version serves 100% of demo traffic. This proves the
+Cloudflare build environment, existing deployment credential, secret transfer
+and guarded deploy command; its trigger source is **manual**, not GitHub push.
+
+Post-deployment native checks retain the pre-deployment login and permissions,
+exact dashboard and trial-balance results, healthy operational assessment and
+frontend asset `/assets/index-C3bnUq5k.js`. Jobs remain enabled, email remains in
+test mode, maintenance is inactive, and valid-body bootstrap plus the coordinator
+diagnostic route return 404. The owned session was signed out and its original
+access token returns 401. Private acceptance evidence has no remaining access
+or refresh token. No migrations or financial commands were run by this check.
 
 Primary tooling references: [Workers build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/),
 [Workers build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/),
