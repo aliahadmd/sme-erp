@@ -1330,13 +1330,12 @@ unchanged. Bootstrap and the coordinator diagnostic route remain closed; the
 owned acceptance session is signed out and revoked. The production domain
 and its original runtime are unchanged.
 
-Automatic push deployment is still unaccepted: the qualifying source push
-started GitHub quality checks but no Cloudflare push build. The dashboard
-reports a disconnected Git account despite `auto_build_enabled=true` in native
-configuration. The Cloudflare GitHub app exists, but its settings require the
-user's GitHub confirmation before repository scope can be inspected. Repair
-that access and observe a real qualifying push; do not relabel the successful
-manual build as evidence of automatic delivery.
+The user chose direct Cloudflare CLI deployment after reviewing the optional
+GitHub setup on 15 November. The unsaved GitHub repository-access addition was
+cancelled and the demo's Workers Builds configuration removed. Native readback
+confirms that configuration is absent and the deployed Worker is retained at
+100%. GitHub remains a source host and optional quality-check service; automatic
+GitHub deployment and repository app access are not migration requirements.
 
 ## Linked trade contention and reconciliation
 
@@ -1372,7 +1371,7 @@ dashboard 503, then rerun the same profiles; see the complete evidence in
 
 The full ERP migration remains incomplete. Next, complete
 larger-history and representative document capacity, production alert replication,
-live ERP email acceptance/delivery, complete browser/role parity, Workers Builds push delivery,
+live ERP email acceptance/delivery, complete browser/role parity, direct CLI release verification,
 production environment, cutover and
 safe old-runtime retirement. The completed-payment coordinator reset/response-loss
 case passes; broader Worker restart, in-flight failure, frontend recovery and

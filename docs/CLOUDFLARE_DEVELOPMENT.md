@@ -213,101 +213,57 @@ outcome and leaves cleanup pending; inspect the original browser actions before
 compensating or starting another run. Other forms and recovery across page
 reloads still need acceptance before complete browser recovery is claimed.
 
-## CI and Workers Builds
+## Direct CLI deployment and quality checks
 
-`.github/workflows/cloudflare.yml` runs `pnpm quality` without database services,
-Cloudflare credentials, deployment or migrations. Action commits, Node/pnpm and
-uv versions are pinned. The legacy workflow remains a reference-runtime check
-until retirement is accepted. The user authorized publishing the migration
-branch to the public repository. The first hosted Ubuntu run passed the complete
-gate at commit `757451f`: [run 43682947568](https://github.com/aliahadmd/sme-erp/actions/runs/43682947568).
-It uses no Cloudflare deployment secrets and performs no remote migrations.
-The backup-density correction also passes hosted quality at `5c7412c`
-(333 backend/39 frontend tests):
-[run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
-The deployment-wrapper update at `5787c40` also passes the hosted quality gate:
-[run 43687806672](https://github.com/aliahadmd/sme-erp/actions/runs/43687806672).
+Deployment uses the authenticated Cloudflare CLI directly. GitHub hosts the
+published migration branch and can run optional quality checks; it is not a
+runtime or deployment dependency. The user chose direct CLI deployment after
+reviewing the optional GitHub integration on 15 November. Its unsaved repository
+permission change was cancelled, and the demo's Workers Builds configuration
+was removed. Native readback confirms the build configuration is absent while
+the current demo deployment remains at 100%.
 
-Workers Builds uses repository root directory `cloudflare` and this build command:
+From `cloudflare/`, build/check and deploy the same mode together:
 
 ```sh
-python3 -m pip install --no-deps --target .cloudflare/build-tools uv==0.12.11 && export PATH="$PWD/.cloudflare/build-tools/bin:$PATH" && pnpm install --frozen-lockfile && pnpm quality
+CF_MODE=demo-staging pnpm quality
+pnpm deploy:demo-staging
 ```
 
-Build variables are `NODE_VERSION=24`, `PYTHON_VERSION=3.14.8`,
-`PNPM_VERSION=12.8.1`, `SKIP_DEPENDENCY_INSTALL=1`, `CF_MODE=demo-staging`,
-`UV_MANAGED_PYTHON=1`, and `UV_LINK_MODE=copy`. The pinned uv installs a managed
-Python for the quality gate. The first native build
-`9bdbb29a-b4ac-42f2-9758-10af6367d330` exposed missing `_sqlite3` in the build
-image's asdf Python; it failed before any deployment. Requiring managed Python
-addresses that host test dependency without changing the Worker runtime. The
-corrected preflight `451e7ba6-c419-4530-ae66-79fe1c75599d` passed all 333 backend
-and 39 frontend tests, model metadata, lint, locked vendoring and both builds.
-Its deploy command was `true`: this success alone did not deploy the Worker.
-
-The Cloudflare repository connection is now registered as
-`7a75bed4-15f0-40af-8ef8-87610f78ff1a` for `aliahadmd/sme-erp` (GitHub repository
-`1401814256`, owner `90032081`). Native configuration autofill can read the
-published branch and detects `cf`/pnpm under `cloudflare`. The demo's script tag
-is `4e525a3549a143688686d174f81fe2ca`. Trigger
-`3251fc06-f856-4af4-8c87-2bc9f4a63cb4` listens only to
-`codex/cloudflare-python-d1`, with paths `cloudflare/**`, `web/**`, and
-`api/app/**`. It uses an existing Cloudflare-managed build credential; no new
-credential was created or exposed. After the passing preflight its deploy command
-was changed from `true` to the guarded demo wrapper below. Previews are disabled.
-
-Automatic push delivery is not yet accepted: the real push of `5787c40` started
-GitHub Actions, but no Cloudflare push build appeared. Native configuration
-reports `auto_build_enabled=true`; the dashboard additionally reports that this
-project is disconnected from its Git account. Cloudflare Workers and Pages is
-installed on GitHub as installation `49939379`, but GitHub requires account
-reauthentication before that installation's repository scope can be inspected.
-Do not infer that the app is absent from the GitHub CLI's unrelated installation
-API permission error, or treat a manually started build as push-trigger proof.
-
-The existing runtime values are now stored as secret build variables
-`ERP_JWT_SECRET` and `ERP_COMMAND_HASH_KEY`. Native reads confirm both are secret
-and return null values. The deployment command is:
+For the separate financial verification environment:
 
 ```sh
-PATH="$PWD/.cloudflare/build-tools/bin:$PATH" uv run python scripts/deploy_from_env.py --deploy
+CF_MODE=app-staging pnpm quality
+pnpm deploy:app-staging
 ```
 
-Set PATH in this command too: the build and deploy steps use separate shells.
-The deploy wrapper verifies the exact prebuilt target and closed-bootstrap
-state, writes runtime secrets into a temporary 0600 file for `cf`, and removes
-that file afterward. Without `--deploy`, it only validates. Missing secrets fail
-closed; no secret is a Vite variable or a public asset. Migrations and seeding
-remain explicit operator steps, separate from code deployment.
-In Workers Builds it also requires the migration branch and a full commit SHA,
-then records that SHA in the deployed version's tag and message. Local read-only
-checks accept the expected identity and reject another branch, a missing commit
-or a missing secret. A native build of the explicit published commit is used to
-verify deployment independently of GitHub push delivery. Reconnect and verify
-the app's repository access, then observe a real qualifying push before claiming
-automatic deployment works.
+The deployment scripts call the pinned `cf deploy --prebuilt` with the explicit
+mode and its ignored local secrets file. Complete one environment's build and
+deployment before building another: Build Output holds the latest build. Keep
+local secrets at mode 0600 and preserve the command hash key across deployments.
+Migrations and seeding remain separate explicit steps. Production configuration
+and cutover remain outstanding; these commands select only staging environments.
 
-Native build `dc43abf0-85ce-40df-825f-96785cafcdcb`, manually started with the
-explicit published commit `5787c401917d197a86b3c80b43e1e2be8b819432`, passed the
-complete quality gate and deployed demo version
-`566fc464-d983-4f21-ba76-5311c9f44aa0` at **2026-11-15 07:10:19 UTC**. Native
-version metadata contains tag `git-5787c401917d` and the full commit message.
-Readback confirms this version serves 100% of demo traffic. This proves the
-Cloudflare build environment, existing deployment credential, secret transfer
-and guarded deploy command; its trigger source is **manual**, not GitHub push.
+The optional `.github/workflows/cloudflare.yml` quality workflow uses no
+Cloudflare credentials and performs no deployment, migration or seeding. The
+published verifier at `e5c02ee` passed the complete hosted gate with 336 backend
+and 39 frontend tests:
+[run 43691642662](https://github.com/aliahadmd/sme-erp/actions/runs/43691642662).
 
-Post-deployment native checks retain the pre-deployment login and permissions,
-exact dashboard and trial-balance results, healthy operational assessment and
-frontend asset `/assets/index-C3bnUq5k.js`. Jobs remain enabled, email remains in
-test mode, maintenance is inactive, and valid-body bootstrap plus the coordinator
-diagnostic route return 404. The owned session was signed out and its original
-access token returns 401. Private acceptance evidence has no remaining access
-or refresh token. No migrations or financial commands were run by this check.
+### Earlier hosted-build proof
 
-Primary tooling references: [Workers build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/),
-[Workers build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/),
-[checkout](https://github.com/actions/checkout), [setup-node](https://github.com/actions/setup-node),
-[setup-uv](https://github.com/astral-sh/setup-uv).
+Before the direct-CLI choice, a Cloudflare hosted preflight exposed missing
+SQLite support in the build image's asdf Python. Requiring the pinned uv's
+managed Python fixed host tests. Native build
+`dc43abf0-85ce-40df-825f-96785cafcdcb` passed all then-current checks and invoked
+`cf` to deploy published commit `5787c401917d197a86b3c80b43e1e2be8b819432` as demo
+version `566fc464-d983-4f21-ba76-5311c9f44aa0` at 07:10:19 UTC on 15 November.
+Native metadata records the full commit and tag `git-5787c401917d`. Existing
+login/permissions, exact dashboard/trial balance, healthy assessment and closed
+bootstrap/diagnostics passed afterward. Its owned session was signed out and
+revoked. This was a manual hosted build, not a GitHub push-triggered deployment.
+That optional build configuration is now removed; reconnecting GitHub is not an
+outstanding migration requirement.
 
 See [implementation evidence](CLOUDFLARE_IMPLEMENTATION.md) and the
 [backup/recovery runbook](CLOUDFLARE_RECOVERY.md) for current acceptance and limits.
