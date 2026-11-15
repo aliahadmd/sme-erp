@@ -1213,6 +1213,9 @@ afterward. Its read-only check passes with the existing private keys. After the
 user authorized publication to the public repository, the branch was pushed.
 [Hosted run 43682947568](https://github.com/aliahadmd/sme-erp/actions/runs/43682947568)
 passed the full gate at `757451f` (332 backend/39 frontend tests at that commit).
+The larger-backup correction at `5c7412c` also passes the complete hosted gate
+(333 backend/39 frontend tests):
+[run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
 Cloudflare's repository connection is registered and can read that branch, but
 repository-triggered Workers Builds remains unactivated. Build settings and secret names are documented
 in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).

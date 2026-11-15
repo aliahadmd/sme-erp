@@ -222,6 +222,9 @@ until retirement is accepted. The user authorized publishing the migration
 branch to the public repository. The first hosted Ubuntu run passed the complete
 gate at commit `757451f`: [run 43682947568](https://github.com/aliahadmd/sme-erp/actions/runs/43682947568).
 It uses no Cloudflare deployment secrets and performs no remote migrations.
+The backup-density correction also passes hosted quality at `5c7412c`
+(333 backend/39 frontend tests):
+[run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
 
 Workers Builds can run the same gate with repository root directory
 `cloudflare`, build command `pnpm install --frozen-lockfile && pnpm quality`,
