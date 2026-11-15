@@ -3,10 +3,10 @@
 import time
 from dataclasses import dataclass
 
-from fastapi import Request
+from fastapi import Depends, Request
 
 from erp_cf.crypto import decode_access
-from erp_cf.db import D1Database, assertion
+from erp_cf.db import D1Database, Statement, assertion, plain
 from erp_cf.errors import AuthenticationError, PermissionDeniedError
 from erp_cf.store import tables
 
@@ -65,36 +65,41 @@ async def from_token(env, token: str) -> Actor:
     payload = decode_access(env, token)
     db = D1Database(env.DB)
     user_table = tables()["core_users"]
-    row = await db.first(
-        f"SELECT {user_table.projection('u')} FROM core_users u "
-        "JOIN platform_sessions s ON s.user_id=u.id "
-        "WHERE u.id=? AND s.id=? AND u.is_active=1 AND s.revoked_at IS NULL AND s.expires_at>?",
-        (payload["sub"], payload["sid"], int(time.time())),
-    )
-    if row is None:
-        raise AuthenticationError("Account or session is disabled")
-    user = user_table.decode(row)
     role_table = tables()["core_roles"]
-    roles = tuple(
-        role_table.decode(r)
-        for r in await db.all(
-            f"SELECT {role_table.projection('r')} FROM core_roles r "
-            "JOIN core_user_roles ur ON ur.role_id=r.id WHERE ur.user_id=? ORDER BY r.code",
-            (user["id"],),
-        )
+    # Keep identity, roles and permissions at one primary read boundary. This
+    # eliminates sequential network trips without caching authorization across
+    # requests or across the independent coordinator commit boundary.
+    results = await db.batch(
+        [
+            Statement(
+                f"SELECT {user_table.projection('u')} FROM core_users u "
+                "JOIN platform_sessions s ON s.user_id=u.id "
+                "WHERE u.id=? AND s.id=? AND u.is_active=1 "
+                "AND s.revoked_at IS NULL AND s.expires_at>?",
+                (payload["sub"], payload["sid"], int(time.time())),
+            ),
+            Statement(
+                f"SELECT {role_table.projection('r')} FROM core_roles r "
+                "JOIN core_user_roles ur ON ur.role_id=r.id WHERE ur.user_id=? ORDER BY r.code",
+                (payload["sub"],),
+            ),
+            Statement(
+                "SELECT p.code FROM core_permissions p WHERE EXISTS("
+                "SELECT 1 FROM core_users u WHERE u.id=? AND u.is_superuser=1) "
+                "UNION SELECT p.code FROM core_permissions p "
+                "JOIN core_role_permissions rp ON rp.permission_id=p.id "
+                "JOIN core_user_roles ur ON ur.role_id=rp.role_id "
+                "WHERE ur.user_id=? ORDER BY code",
+                (payload["sub"], payload["sub"]),
+            ),
+        ]
     )
-    if user["is_superuser"]:
-        permissions = await db.all("SELECT code FROM core_permissions ORDER BY code")
-    else:
-        permissions = await db.all(
-            "SELECT DISTINCT p.code FROM core_permissions p "
-            "JOIN core_role_permissions rp ON rp.permission_id=p.id "
-            "JOIN core_user_roles ur ON ur.role_id=rp.role_id WHERE ur.user_id=? ORDER BY p.code",
-            (user["id"],),
-        )
-    return Actor(
-        user, roles, frozenset(p["code"] for p in permissions), payload["sid"], payload["exp"]
-    )
+    if not results[0]["results"]:
+        raise AuthenticationError("Account or session is disabled")
+    user = user_table.decode(plain(results[0]["results"][0]))
+    roles = tuple(role_table.decode(plain(row)) for row in results[1]["results"])
+    permissions = frozenset(plain(row)["code"] for row in results[2]["results"])
+    return Actor(user, roles, permissions, payload["sid"], payload["exp"])
 
 
 async def current_actor(request: Request) -> Actor:
@@ -102,8 +107,7 @@ async def current_actor(request: Request) -> Actor:
 
 
 def require(permission: str):
-    async def check(request: Request):
-        actor = await current_actor(request)
+    async def check(actor: Actor = Depends(current_actor)):
         actor.require(permission)
         return actor
 

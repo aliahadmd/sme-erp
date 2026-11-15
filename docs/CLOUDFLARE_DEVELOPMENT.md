@@ -8,8 +8,9 @@ and is served by Workers Static Assets on the same origin. The current public
 Command routing and database placement are part of deployment configuration.
 See [capacity measurements and the quiesced coordinator transition](CLOUDFLARE_CAPACITY.md).
 An existing Durable Object does not move when a location hint changes. The
-verification environment uses generation `apac-v1` with an `apac` hint; the demo
-keeps its existing route until its own controlled transition. Every HTTP/job/
+verification environment uses generation `apac-v1` with an `apac` hint. Native
+analytics found the demo's existing command object already in SIN, so the demo
+keeps its existing route and now supplies an `apac` creation hint too. Every HTTP/job/
 proof command uses the shared route helper. Never change generation per request
 or run multiple generations as write shards against this database.
 

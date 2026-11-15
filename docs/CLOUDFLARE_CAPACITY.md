@@ -173,10 +173,86 @@ invocations all report SIN/success, averaging 66.3 ms CPU and 3,221 ms wall time
 The window includes background work and some cleanup, so these are corroborating
 placement/timing observations, not matched per-request profiler spans.
 
-The next performance work should reduce avoidable primary round trips while
-preserving fresh authorization and atomic financial guards, then repeat the same
-targets. In particular, authorization currently reads the user/session, roles
-and permissions sequentially, and some HTTP dependency paths repeat that work
-within one request. Do not introduce cross-request permission caches to improve
-these measurements. Larger histories and representative invoice/stock/payment
-loads remain necessary before claiming a wider SME operating envelope.
+## Fresh authorization with fewer database trips
+
+Two new regression cases first failed against the sequential authorization
+implementation: the real trial-balance dependency graph performed identity
+authorization twice, and identity reads escaped a single native batch. Identity
+now reads the user/session, roles and permissions in one primary D1 batch. The
+permission query determines superuser status inside that same batch. FastAPI's
+dependency graph shares the actor only within the current HTTP request; the next
+request starts fresh. Command coordination still independently reauthorizes
+after acquiring its mutex, and commit-time session/user guards are unchanged.
+No cross-request permission cache was added. [D1 batches](https://developers.cloudflare.com/d1/worker-api/d1-database/),
+[FastAPI dependency caching](https://fastapi.tiangolo.com/tutorial/dependencies/sub-dependencies/)
+
+The focused boundary/auth/management checks pass, as does the shared quality gate
+with 332 backend and 39 frontend tests. Verification version
+`bf0cb996-f6a0-4972-b861-3a3c9f50f2c3` was deployed at 100% at 16:32:41 UTC on
+14 November, reported startup 2,653 ms, retaining the SIN `apac-v1` coordinator
+and unchanged frontend asset. The demo received the same authorization change as
+version `3559ee6f-54a5-45ea-968c-9335910cd3f7` on 15 November at 05:33:17 UTC,
+reported startup 2,710 ms. Its existing command object was independently found in
+SIN, so its original organization route is preserved, with an `apac` hint for
+creation. All 112 native role/ownership checks and the coherent 95-step seed
+checkpoint verification pass on that version, with exact stock/open balances and
+balanced journals. Production remains on its original runtime.
+
+`scripts/verify_identity_remote.py` passes 21 native HTTP checks: administrator
+permissions, a restricted staff role, allowed reads and one allowed command,
+forbidden access, immediate role revocation for an existing token, and immediate
+access/refresh rejection after password reset. It reconciles creation receipts,
+deactivates the fixture user, clears the fixture role and archives the product;
+both sessions sign out. Its private resumable checkpoint is under
+`.cloudflare/verification/identity/`. It sends no mail or financial commands.
+
+The rerun started at 16:35:11 UTC with 420 journals and 4,996 lines already
+present. Its immutable history is larger than both earlier runs.
+
+| Profile | Commands | Command p50 / p95 | Trial balance p95 | Ledger p95 | Dashboard p95 | Result |
+|---|---:|---:|---:|---:|---:|---|
+| Baseline | 8 | 1.29 / 3.86 s | 2.74 s | 0.77 s | 1.76 s | Passed |
+| Normal | 20 | 3.27 / 3.54 s | 2.62 s | 1.17 s | 1.70 s | Passed |
+| Burst | 24 | 6.39 / 7.97 s | 2.89 s | 0.83 s | 1.56 s | Passed |
+| Large | 2 | 1.46 / 1.52 s | 2.72 s | 0.99 s | 1.41 s | Passed; only two commands |
+
+All 54 commands and 115 reports returned their expected success responses and
+passed arithmetic/content checks. All four profiles meet the unchanged latency
+and zero-error targets. The slowest normal command was 5.21 seconds; the target
+is a p95, not a promise that every request takes under five seconds. Measurements
+ended at 16:36:37; receipt reconciliation and exact compensation completed at
+16:38:08. Every original account balance and dashboard value was restored,
+fixture accounts deactivated, and the session signed out. Final history contains
+528 journals, 7,188 lines and 1,124 command receipts. The checkpoint's health
+assessment is `ok`; later native checks also find clean foreign keys, zero
+assertions, no active maintenance lease, no scheduler error and no active
+sessions created during these checks.
+
+This accepts only the stated journal/report experiment at its measured data
+size. It establishes neither an open-loop maximum rate nor a years-of-history
+capacity guarantee. Larger histories, representative invoice/stock/payment
+loads and recovery headroom remain necessary before claiming a wider SME
+operating envelope. The small sample counts and successive-run design above
+continue to apply.
+
+## Scheduled recovery capacity finding
+
+A fresh health check on 15 November finds the coherent demo healthy. Its
+scheduled backup `01a1db37-c986-76f7-8b01-3d4e83577669` completed on 14 November
+between 18:00:28 and 18:05:20 UTC: 1,609 rows, 77 pages, 470,434 bytes, manifest
+`40f770be7adafc324519bfc7f2d91ce1a49dbea8a480530bfec1f620292bd0b0`.
+
+The larger verification database's scheduled backup
+`01a1db37-fc50-736d-8747-dabc347ed5ce` failed at 18:10:43 UTC with
+`backup_timeout: Backup exceeded its maximum write pause`, after 13,895 rows,
+312 pages and 6,405,815 bytes, at table index 49. Its lease is released, but its
+latest successful backup is overdue, so its current operational assessment is
+**critical** (`backup_overdue`, `backup_failed`). This supersedes the earlier
+post-load `ok` assessment for current recovery readiness; the journal/report
+timing measurements remain valid at their recorded times.
+
+The ten-minute pause bound remains unchanged. Backup throughput and larger
+recovery acceptance need correction before production cutover. The failure is
+retained as evidence; neither an incomplete archive nor its manifest is treated
+as recoverable. Private current health/backup readbacks are saved under
+`.cloudflare/verification/identity/`.

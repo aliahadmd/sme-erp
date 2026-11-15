@@ -5,7 +5,7 @@ Status: in progress. The active objective is the complete migration described in
 functionality. A fresh demo database is authorized. This file records evidence
 and outstanding work; the feasibility slice is a gate, not the final deliverable.
 
-Last updated: 14 November 2026 (UTC+08:00). The architecture remains Python Workers with
+Last updated: 15 November 2026 (UTC+08:00). The architecture remains Python Workers with
 FastAPI/Pydantic and D1. The synchronous SQLAlchemy adapter passed the isolated
 runtime proof; the application currently uses typed native D1 repositories and
 batches for explicit persistence and atomic multi-statement commands. No
@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 325 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 332 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1199,7 +1199,7 @@ Native read-only assessments and previews are saved privately under
 
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 330 backend tests, 39 frontend tests, lint/formatting, the
+`pnpm quality` passes 332 backend tests, 39 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
@@ -1227,7 +1227,7 @@ The captured inventory is `cloudflare/fixtures/reference_routes.json`; the
 route-presence regression test requires no missing original operation. Route
 presence is not proof of full workflow, role or operational parity.
 
-## Work still required
+## Command/report latency and fresh authorization
 
 The first bounded command/report load test found a concrete placement defect:
 the organization command object ran in AMS while D1's primary was in APAC.
@@ -1245,6 +1245,47 @@ outcome were reconciled using receipts and the original session's revocation.
 See [the reproducible capacity report](CLOUDFLARE_CAPACITY.md) for sample counts,
 placement evidence, cleanup and remaining limits. This is evidence of improvement,
 not completed capacity acceptance.
+
+The next change removes repeated authorization work while retaining fresh
+primary-backed checks. Identity, roles and permissions are read in one D1 batch,
+and the HTTP dependency graph shares that result only within its current request.
+The command coordinator still authorizes again after acquiring its mutex, with
+unchanged commit guards. Two new regression cases failed before the change and
+now pass, including next-request revocation and independent command authorization.
+The shared quality gate passes 332 backend and 39 frontend tests.
+
+Application verification version `bf0cb996-f6a0-4972-b861-3a3c9f50f2c3`, deployed
+14 November at 16:32:41 UTC (reported startup 2,653 ms), passes 21 native
+administrator/restricted-staff checks, immediate role revocation and password-reset
+session revocation. The fixture user was disabled, its role cleared and product
+archived, and both sessions signed out. No mail or financial commands were sent
+by this authorization verifier.
+
+The unchanged four-profile journal/report experiment then passes all targets:
+54 successful commands, 115 successful reports, normal command p95 3.54 seconds
+and burst p95 7.97 seconds. All exact financial compensations and baseline balance/
+dashboard checks pass. The checkpoint is cleaned and its session signed out.
+This accepts the stated experiment at its measured data size, not broader invoice,
+stock/payment, open-loop saturation or long-term recovery capacity.
+
+The demo now runs version `3559ee6f-54a5-45ea-968c-9335910cd3f7`, deployed on
+15 November at 05:33:17 UTC, reported startup 2,710 ms, with unchanged frontend
+asset. Native analytics found its existing command object in SIN, so its
+organization route is preserved and now carries an `apac` creation hint. All
+112 native role/ownership checks and the coherent seed checkpoint verification
+pass, retaining stock value `2220.60`, open AR `543.96`, open AP `2372.00`, one
+low-stock item, balanced books and all four leave states. All successful proof
+sessions sign out.
+
+A later current-state check also exposes the next recovery capacity issue:
+the larger verification database's scheduled backup failed its ten-minute write
+pause after 13,895 rows/312 pages. Its pause is released, but its operational
+assessment is now critical because backup completion is overdue. The demo's
+scheduled backup completed 1,609 rows/77 pages and its assessment remains healthy.
+The failed run and exact timestamps are in the capacity report. Correct backup
+throughput while retaining the pause bound before cutover.
+
+## Work still required
 
 The full ERP migration remains incomplete. Next, complete
 realistic backup/recovery capacity, production alert replication, live ERP email acceptance/delivery,
