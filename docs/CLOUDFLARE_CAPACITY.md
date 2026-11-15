@@ -53,6 +53,44 @@ ignored by Git. It contains timings and fixture information, never credentials.
 
 ## Platform constraints
 
+### Linked document workload planned before measurement
+
+The next acceptance uses the existing verification database, including its
+compensated journal history, and a separate fixture customer/warehouse with
+three shared products. Each closed-loop cycle creates and confirms a three-line
+sales order, creates/posts its stock delivery, creates/posts its source-linked
+invoice, and records a fully allocated `60.00` bank payment: seven real commands.
+One initial receipt supplies 20 units of each product at cost `10.00`; each
+completed cycle consumes one unit of each. No invoice email is requested.
+
+| Profile | Writers × cycles each | Report readers | Per-command and per-report p95 target |
+|---|---:|---:|---:|
+| Baseline | 1 × 2 | 1 | 5 seconds |
+| Normal | 4 × 2 | 2 | 5 seconds |
+| Burst | 8 × 1 | 4 | 10 seconds |
+
+The 18 cycles produce 126 measured commands. Readers alternate trial balance,
+fixture stock and dashboard; stock must expose equal quantities for all three
+products with exact cost/value, and books must balance at every accepted read.
+Every HTTP/transport/validation failure counts against acceptance, including
+`report_busy`; measurement has no automatic retries. Percentiles are descriptive
+for the recorded sample counts, rather than population-tail guarantees. Cycle
+elapsed time is reported separately. This is closed-loop contention, not an
+offered-RPS saturation claim.
+
+`scripts/verify_trade_capacity_remote.py --run` writes immutable requests/keys
+before transmission to its private `trade-capacity/measurement.json` checkpoint.
+It fences the original session and reconciles native receipts before cleanup;
+`--cleanup` resumes that cleanup without repeating original requests. Cleanup
+voids payments, invoices and deliveries before cancelling orders and voiding
+the supply receipt. It checks every original account balance, dashboard, empty
+fixture stock, numbering, foreign keys and assertion cleanup, then archives its
+customer/products. The empty fixture warehouse and immutable history remain in
+verification staging because warehouse removal is not part of the API.
+
+Results will be recorded below after native execution; these targets are not
+evidence of a passing result.
+
 D1 executes a primary database's queries serially, so expensive report queries
 compete with commands. The current application uses primary reads and does not
 activate read replication. Replicas require the Sessions API and deliberate
