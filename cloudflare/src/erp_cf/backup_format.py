@@ -10,6 +10,7 @@ from erp_cf.maintenance import EXEMPT, identifier, protected
 
 FORMAT = "erp-d1-exact-v2"
 PAGE_BYTES = 2 * 1024 * 1024
+PAGE_ROWS = 500
 MAX_OBJECT_BYTES = 16 * 1024 * 1024
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_PAGES = 20000
@@ -112,9 +113,10 @@ def chunk(table, records):
     }
 
 
-async def page(db, lease, table, cursor, *, limit=50):
+async def page(db, lease, table, cursor, *, limit=PAGE_ROWS):
     # Size candidates inside SQLite before crossing the Worker boundary. Even
-    # very large rows cannot make a 50-row result consume the Worker's memory.
+    # wide rows cannot make the larger candidate count become an unbounded
+    # Worker response. Narrow tables amortize each D1/R2 page exchange.
     where = " WHERE _rowid_>CAST(? AS INTEGER)" if cursor is not None else ""
     sql = (
         f"WITH candidates AS (SELECT _rowid_ AS rid,{row_json(table)} AS value "
@@ -123,7 +125,7 @@ async def page(db, lease, table, cursor, *, limit=50):
         "ROW_NUMBER() OVER(ORDER BY rid) AS n FROM candidates) "
         "SELECT CAST(rid AS TEXT) AS cursor,value FROM sized WHERE bytes<=? OR n=1 ORDER BY rid"
     )
-    params = (*((cursor,) if cursor is not None else ()), min(max(limit, 1), 50), PAGE_BYTES)
+    params = (*((cursor,) if cursor is not None else ()), min(max(limit, 1), PAGE_ROWS), PAGE_BYTES)
     result = await protected(db, lease, [Statement(sql, params)])
     value = chunk(table, [plain(row) for row in result[0]["results"]])
     if len(canonical(value).encode()) > MAX_OBJECT_BYTES:

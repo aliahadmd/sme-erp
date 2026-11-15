@@ -8,7 +8,12 @@ uses the original runtime until cutover is accepted. Staging resources are:
 | Application | `erp-migration-staging-20261113` |
 | Source D1 | `0f278204-3190-49e1-96d2-a9312fa57e3d` |
 | Private backup bucket | `erp-staging-backups-20261113` |
-| Recovery D1 | `d7bb688c-8009-4eb0-a21f-993310c23fcc` |
+| Current recovery D1 | `bd4015b2-46eb-48d4-baef-8651420ef6f3` (`erp-recovery-capacity-20261115`) |
+| Earlier accepted recovery D1, preserved | `d7bb688c-8009-4eb0-a21f-993310c23fcc` |
+
+Both recovery targets are occupied accepted proofs. Never reset either target to
+repeat verification. The current binding was switched to a new empty APAC D1
+before the larger recovery run; the earlier database was preserved.
 
 The bucket's managed public domain is disabled. Application routes expose job
 metadata and archive IDs; they do not expose the snapshot contents. Backups
@@ -27,6 +32,31 @@ separate verification application's database. The demo still has restoration
 disabled and no recovery-database binding.
 
 ## Capture and publication
+
+Capture now considers up to 500 rows per page, retaining the existing SQLite-side
+2 MiB payload budget and 16 MiB absolute object bound. Wide rows reduce the actual
+row count before data crosses into the Worker. The exact v2 format is unchanged,
+so older archives remain compatible. Restoring a 500-row page still uses one
+atomic batch and its durable receipt, with each statement's parameters bounded.
+
+On 15 November, the larger native verification dataset captured 14,415 rows in
+83 pages/6,519,252 bytes in 218 seconds from capture start through publication,
+within the unchanged 600-second pause limit. Backup
+`01a1ddc5-9ef0-7617-821c-18736e9f1b87` has manifest SHA-256
+`7a1b49f07e47b3e1a689369e93f40dd3892aad98c7225e4718c02d626ec8b3e2`.
+Recovery `01a1ddc9-10f8-7519-acfe-f31939ac7941` completed in about 10 minutes
+34 seconds into the new target. Cron drove both jobs; the verifier sent no
+manual advance calls and created no financial fixture. All 62 tables and exact
+rows, schema and foreign keys passed. Native target checks find 528 journals,
+7,188 journal lines, coefficient `999999999999999999`, revoked sessions and an
+active external-delivery hold. Source balances remain unchanged and its health
+returns `ok`.
+
+The resumable verifier is `scripts/verify_backup_capacity_remote.py`; its private
+checkpoint records fixed job/target IDs and preserves an interrupted owned
+session for logout on resume. It refuses to overwrite a completed proof and
+never resets a target. Larger histories still need their own measured operating
+envelope. See [the capacity report](CLOUDFLARE_CAPACITY.md).
 
 An authenticated superuser with settings access requests a backup using
 `POST /api/backups`. An idempotency key returns the same request receipt.

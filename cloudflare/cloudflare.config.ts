@@ -109,9 +109,9 @@ export default defineConfig(({ mode }) => {
         }),
         ...(!demo ? {
           RESTORE_DB: bindings.d1({
-            name: "erp-recovery-staging-20261113", id: "d7bb688c-8009-4eb0-a21f-993310c23fcc",
+            name: "erp-recovery-capacity-20261115", id: "bd4015b2-46eb-48d4-baef-8651420ef6f3",
           }),
-          RESTORE_DATABASE_ID: bindings.text("d7bb688c-8009-4eb0-a21f-993310c23fcc"),
+          RESTORE_DATABASE_ID: bindings.text("bd4015b2-46eb-48d4-baef-8651420ef6f3"),
         } : {}),
         BACKUPS_ENABLED: bindings.text("true"),
         RESTORE_ENABLED: bindings.text(String(!demo)),

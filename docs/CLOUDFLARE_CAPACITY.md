@@ -246,7 +246,7 @@ The larger verification database's scheduled backup
 `01a1db37-fc50-736d-8747-dabc347ed5ce` failed at 18:10:43 UTC with
 `backup_timeout: Backup exceeded its maximum write pause`, after 13,895 rows,
 312 pages and 6,405,815 bytes, at table index 49. Its lease is released, but its
-latest successful backup is overdue, so its current operational assessment is
+latest successful backup was overdue, so that check's operational assessment was
 **critical** (`backup_overdue`, `backup_failed`). This supersedes the earlier
 post-load `ok` assessment for current recovery readiness; the journal/report
 timing measurements remain valid at their recorded times.
@@ -254,5 +254,54 @@ timing measurements remain valid at their recorded times.
 The ten-minute pause bound remains unchanged. Backup throughput and larger
 recovery acceptance need correction before production cutover. The failure is
 retained as evidence; neither an incomplete archive nor its manifest is treated
-as recoverable. Private current health/backup readbacks are saved under
+as recoverable. Private health/backup readbacks are saved under
 `.cloudflare/verification/identity/`.
+
+## Larger snapshot correction and exact recovery
+
+The next regression used 1,250 small audit rows. It first reproduced 26 page
+exchanges, then passed with three pages after increasing the candidate row cap
+from 50 to 500. SQLite still applies the existing normal 2 MiB byte budget before
+returning values to the Worker, and the 16 MiB absolute object bound remains.
+The same test restores native SQL batches containing 500 rows plus their
+receipt, preserving Unicode and the 18-digit invoice coefficient. Wide-row,
+lost-response, corruption, occupied-target and lease-expiry tests still pass.
+The exact v2 archive format and 600-second pause limit are unchanged.
+
+The first variable changed was page density; the backup object remains in ATL,
+and D1/R2 routing, controller loop and maximum pause were retained. This isolates
+the correction from a simultaneous controller placement change. Version
+`ea8a98e0-61f1-4674-9eeb-df804f0b81ca` was deployed to verification on 15 November
+at 05:52:44 UTC, reported startup 2,643 ms. The shared quality gate passes 333
+backend and 39 frontend tests.
+
+Cron-driven backup `01a1ddc5-9ef0-7617-821c-18736e9f1b87` completed 14,415 rows
+across all 62 data tables in 83 pages and 6,519,252 bytes. Capture began at
+05:54:40.803 UTC and publication completed at 05:58:18.815: **218 seconds**,
+comfortably inside the unchanged pause bound. Native metadata confirms pages
+with 500 rows. The manifest hash is
+`7a1b49f07e47b3e1a689369e93f40dd3892aad98c7225e4718c02d626ec8b3e2`.
+
+A new APAC target, `bd4015b2-46eb-48d4-baef-8651420ef6f3`, was verified empty
+before binding it for this run. The earlier accepted target remains preserved.
+Recovery `01a1ddc9-10f8-7519-acfe-f31939ac7941`, requested at 05:58:24.249 UTC,
+completed at 06:08:58.452: about **10 minutes 34 seconds**. All exact rows/schema,
+foreign keys, target session revocation and external delivery holds passed.
+Direct target reads find 528 journals, 7,188 journal lines and coefficient
+`999999999999999999`, no active sessions, no assertions and `hold_external=1`.
+Source balances match their pre-run baseline and source health returns `ok`.
+
+`scripts/verify_backup_capacity_remote.py` observes the saved jobs while Cron
+drives them; it makes no manual advance calls and creates no financial fixture.
+Its private checkpoint is complete, the proof session signed out and its
+temporary refresh cookie removed. Both accepted recovery databases are occupied
+and must not be reset to repeat a verifier. This resolves the observed larger
+snapshot failure at this dataset size; it does not establish an unbounded backup
+or recovery envelope.
+
+The coherent demo also received the page-density correction as version
+`b0bf18a0-1937-4b82-895c-7a12bfd478eb` on 15 November at 06:19:06 UTC,
+reported startup 2,816 ms. Its frontend asset remains unchanged. Native checks
+confirm healthy assessment, closed bootstrap/restart probes, enabled jobs and
+test-mode email; the proof session signed out. No new demo recovery binding was
+added.

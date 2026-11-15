@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 332 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 333 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1199,7 +1199,7 @@ Native read-only assessments and previews are saved privately under
 
 ## Shared quality gate and prepared CI
 
-`pnpm quality` passes 332 backend tests, 39 frontend tests, lint/formatting, the
+`pnpm quality` passes 333 backend tests, 39 frontend tests, lint/formatting, the
 45-table schema check, locked Pyodide vendoring and SPA/Worker Build Output.
 Host-only `uuid-utils==1.0.0` enables metadata inspection without installing the
 legacy server dependencies; it is not a Worker runtime dependency. Node 24 and
@@ -1209,9 +1209,12 @@ pnpm 12.8.1 are declared for the build.
 Cloudflare secrets, deployment or migrations, using pinned action commits.
 `scripts/deploy_from_env.py` validates the exact closed-bootstrap demo build and
 runtime secrets; optional deployment uses a temporary 0600 secrets file, removed
-afterward. Its read-only check passes with the existing private keys. Hosted CI
-execution and repository-triggered Workers Builds remain unverified/unactivated:
-this branch has not been pushed. Build settings and secret names are documented
+afterward. Its read-only check passes with the existing private keys. After the
+user authorized publication to the public repository, the branch was pushed.
+[Hosted run 43682947568](https://github.com/aliahadmd/sme-erp/actions/runs/43682947568)
+passed the full gate at `757451f` (332 backend/39 frontend tests at that commit).
+Cloudflare's repository connection is registered and can read that branch, but
+repository-triggered Workers Builds remains unactivated. Build settings and secret names are documented
 in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
 
 ## HTTP surface coverage
@@ -1285,12 +1288,24 @@ scheduled backup completed 1,609 rows/77 pages and its assessment remains health
 The failed run and exact timestamps are in the capacity report. Correct backup
 throughput while retaining the pause bound before cutover.
 
+The larger backup correction now passes natively. Raising the row candidate cap
+from 50 to 500 retains SQLite-side byte limits, the exact v2 format and the
+600-second pause cap. A regression first reproduced 26 pages for 1,250 audit rows,
+then passed with three pages and exact 500-row batch recovery. The shared gate
+passes 333 backend tests. Verification version
+`ea8a98e0-61f1-4674-9eeb-df804f0b81ca` captured 14,415 rows/83 pages in 218
+seconds under Cron. Exact recovery into a separately admitted empty APAC target
+completed in 10 minutes 34 seconds, with clean schema/FKs, revoked target
+sessions, held external delivery and unchanged source balances. Source health
+is again `ok`; both accepted targets remain preserved and occupied. The full
+evidence and remaining scale limits are in the capacity/recovery guides.
+
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
-realistic backup/recovery capacity, production alert replication, live ERP email acceptance/delivery,
-complete browser/role parity, hosted CI/Workers Builds activation,
-production environment, capacity acceptance, cutover and
+larger-history and representative document capacity, production alert replication,
+live ERP email acceptance/delivery, complete browser/role parity, Workers Builds activation,
+production environment, cutover and
 safe old-runtime retirement. The completed-payment coordinator reset/response-loss
 case passes; broader Worker restart, in-flight failure, frontend recovery and
 capacity proofs remain open. The synthetic proof is not the migrated ERP.

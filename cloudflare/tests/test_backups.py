@@ -286,6 +286,52 @@ async def test_page_size_is_bounded_before_crossing_worker_boundary(client, env)
     assert len(collected) >= 4
 
 
+async def test_dense_pages_reduce_round_trips_and_restore_exactly(client, env):
+    headers, doc, _ = await ready(client, env)
+    env.DB.connection.executemany(
+        "INSERT INTO core_audit_logs(id,org_id,action,entity_type,after) "
+        "VALUES(?,?,'capacity','test',?)",
+        [
+            (
+                str(uuid.uuid4()),
+                env.ORG_ID,
+                json.dumps({"index": index, "label": "精确"}, ensure_ascii=False),
+            )
+            for index in range(1250)
+        ],
+    )
+    identity = await request(client, headers)
+    backup = await finish(env, identity)
+    manifest = await backup_capture.committed(env.BACKUPS, backup)
+    pages = [ref for ref in manifest["pages"] if ref["table_name"] == "core_audit_logs"]
+    assert len(pages) == 3, "Small audit rows should not require dozens of R2/D1 page exchanges"
+    assert int(pages[0]["rows"]) == 500
+    source = rows(env, "SELECT id,after FROM core_audit_logs ORDER BY id")
+    native = env.RESTORE_DB.batch
+    batches = []
+
+    async def inspect(statements):
+        batches.append(len(statements))
+        return await native(statements)
+
+    env.RESTORE_DB.batch = inspect
+    result = await restore(client, env, headers, backup)
+    assert result["status"] == "complete" and max(batches) >= 501
+    target = [
+        dict(row)
+        for row in env.RESTORE_DB.connection.execute(
+            "SELECT id,after FROM core_audit_logs ORDER BY id"
+        )
+    ]
+    assert source == target
+    assert (
+        env.RESTORE_DB.connection.execute(
+            "SELECT CAST(total AS TEXT) FROM invoicing_invoices WHERE id=?", (doc["id"],)
+        ).fetchone()[0]
+        == "999999999999999999"
+    )
+
+
 async def test_restored_backup_immutability_triggers_are_live(client, env):
     headers, doc, backup = await ready(client, env)
     await restore(client, env, headers, backup)

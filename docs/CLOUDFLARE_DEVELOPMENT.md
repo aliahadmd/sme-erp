@@ -218,8 +218,10 @@ reloads still need acceptance before complete browser recovery is claimed.
 `.github/workflows/cloudflare.yml` runs `pnpm quality` without database services,
 Cloudflare credentials, deployment or migrations. Action commits, Node/pnpm and
 uv versions are pinned. The legacy workflow remains a reference-runtime check
-until retirement is accepted. Hosted execution of the new workflow still needs
-verification after publication.
+until retirement is accepted. The user authorized publishing the migration
+branch to the public repository. The first hosted Ubuntu run passed the complete
+gate at commit `757451f`: [run 43682947568](https://github.com/aliahadmd/sme-erp/actions/runs/43682947568).
+It uses no Cloudflare deployment secrets and performs no remote migrations.
 
 Workers Builds can run the same gate with repository root directory
 `cloudflare`, build command `pnpm install --frozen-lockfile && pnpm quality`,
@@ -228,6 +230,13 @@ Use build variables `NODE_VERSION=24`, `PYTHON_VERSION=3.14`,
 `PNPM_VERSION=12.8.1`, `SKIP_DEPENDENCY_INSTALL=1`, and `CF_MODE=demo-staging`.
 These settings are prepared; no automatic repository deployment is enabled by
 these local files alone.
+
+The Cloudflare repository connection is now registered as
+`7a75bed4-15f0-40af-8ef8-87610f78ff1a` for `aliahadmd/sme-erp` (GitHub repository
+`1401814256`, owner `90032081`). Native configuration autofill can read the
+published branch and detects `cf`/pnpm under `cloudflare`. The demo's script tag
+is `4e525a3549a143688686d174f81fe2ca`. No build trigger, deployment token or
+automatic Workers Builds deployment has been activated yet.
 
 Store the existing runtime values as secret build variables `ERP_JWT_SECRET`
 and `ERP_COMMAND_HASH_KEY`, plus a scoped Cloudflare deployment credential.
