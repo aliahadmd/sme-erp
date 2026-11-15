@@ -25,6 +25,8 @@ from verify_capacity_remote import distribution
 ROOT = Path(__file__).resolve().parents[1]
 URL = "https://erp-migration-staging-20261113.aliahad.workers.dev"
 ORG = "019a78e1-6d80-7000-8000-000000000001"
+WAREHOUSE_ID = "01a1de1b-1da8-70e3-802f-dc0c97af2310"
+WAREHOUSE_CODE = "TCA9884D3B39BB"
 DIRECTORY = ROOT / ".cloudflare/verification/trade-capacity"
 CHECKPOINT = DIRECTORY / "measurement.json"
 PROFILES = [
@@ -169,18 +171,19 @@ class Experiment:
         )
         assert (await self.read("/api/operations/health"))["status"] == "ok"
         save(self.proof)
+        warehouse = next(
+            (w for w in await self.read("/api/inventory/warehouses") if w["id"] == WAREHOUSE_ID),
+            None,
+        )
+        assert warehouse and warehouse["code"] == WAREHOUSE_CODE
+        assert await self.read("/api/inventory/stock?warehouse_id=" + warehouse["id"]) == []
+        self.proof["warehouse"] = warehouse
+        save(self.proof)
         await self.command(
             "setup:party",
             "party",
             "/api/crm/contacts",
             {"name": "Trade capacity " + self.proof["run"], "is_customer": True},
-            expected=201,
-        )
-        warehouse = await self.command(
-            "setup:warehouse",
-            "warehouse",
-            "/api/inventory/warehouses",
-            {"code": "TC" + self.proof["run"][:12], "name": "Trade capacity fixture"},
             expected=201,
         )
         products = []
@@ -325,6 +328,13 @@ class Experiment:
                 try:
                     response = await self.client.get(path)
                     sample["status"] = response.status_code
+                    if response.status_code != 200:
+                        try:
+                            sample["error_code"] = str(
+                                response.json().get("error", {}).get("code", "http_error")
+                            )[:64]
+                        except ValueError:
+                            sample["error_code"] = "non_json_response"
                     assert response.status_code == 200
                     body = response.json()
                     if kind == "trial-balance":
@@ -364,6 +374,8 @@ class Experiment:
         return not failed.is_set()
 
     def entity(self, name):
+        if name == "setup:warehouse" and self.proof.get("warehouse"):
+            return self.proof["warehouse"]
         return next((c.get("result") for c in self.proof["commands"] if c["name"] == name), None)
 
     async def books(self):
@@ -481,7 +493,27 @@ class Experiment:
             Decimal(current.get(k, "0")) == Decimal(baseline.get(k, "0"))
             for k in current.keys() | baseline.keys()
         ), "Original account balances changed"
-        assert await self.read("/api/reports/dashboard") == self.proof["dashboard"]
+        expected_dashboard = dict(self.proof["dashboard"])
+        # The first verifier created an immutable-history warehouse. Its
+        # low-stock effect is derived independently, never from the observed
+        # dashboard difference. Later runs reuse that admitted empty warehouse.
+        if any(
+            c["name"] == "setup:warehouse" and c.get("receipt_verified")
+            for c in self.proof["commands"]
+        ):
+            low = await native(
+                "SELECT COUNT(*) AS n FROM catalog_products WHERE org_id="
+                + literal(ORG)
+                + " AND status='active' AND type='goods' AND track_inventory=1 AND min_stock>0"
+            )
+            delta = low[0]["n"]
+            expected_dashboard["low_stock_count"] += delta
+            self.proof["retained_warehouse_effect"] = {
+                "id": warehouse["id"],
+                "low_stock_count_delta": delta,
+            }
+            save(self.proof)
+        assert await self.read("/api/reports/dashboard") == expected_dashboard
         for name, path in [
             ("setup:party", "/api/crm/contacts"),
             *[(f"setup:product:{i}", "/api/catalog/products") for i in range(3)],
@@ -515,7 +547,7 @@ class Experiment:
         )
         save(self.proof)
         print(
-            "PASS: owned trade fixtures reversed; original stock/books/dashboard restored",
+            "PASS: trades reversed; original books, zero fixture stock and expected dashboard",
             flush=True,
         )
 

@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 333 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 336 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1337,6 +1337,36 @@ configuration. The Cloudflare GitHub app exists, but its settings require the
 user's GitHub confirmation before repository scope can be inspected. Repair
 that access and observe a real qualifying push; do not relabel the successful
 manual build as evidence of automatic delivery.
+
+## Linked trade contention and reconciliation
+
+The broader native workload is now measured on the verification Worker, with
+the original five/ten-second per-endpoint targets recorded before execution.
+All 18 three-product order/delivery/invoice/payment cycles complete correctly:
+126 commands succeed, quantities progress together, invoices settle for exactly
+`60.00`, stock and journals agree, and every original account balance is restored
+after exact voids. Of 403 concurrent reports, one burst dashboard returns 503.
+The four-writer invoice-post p95 is 9.32 seconds and the eight-writer p95 is
+18.19 seconds. Thus the linked normal/burst workload **fails capacity acceptance**
+despite the earlier passing journal-only experiment.
+
+Cleanup resumed its original receipts after discovering a nonfinancial fixture
+effect: the first empty warehouse adds four low-stock alerts for existing
+eligible products. That effect is independently derived and recorded; later
+runs reuse the same admitted empty warehouse rather than creating more. All
+financial reversals, zero fixture stock, other dashboard fields, numbering/FKs,
+empty assertions and session revocation pass. Final operational health is `ok`.
+The retained staging history has 638 journals, 7,408 lines, 60 invoices and 52
+payments. Production and the coherent demo were excluded.
+
+Local regressions exercise committed payment response loss, the required
+original-session fence, resumed cleanup without another posting, and an
+existing low-stock product with both reused and retained warehouses. The full
+quality gate now passes **336 backend and 39 frontend tests**. A local trace of
+the real API finds 23 D1 boundaries for invoice posting, including three reads
+of the source order/lines. Reduce repeated command-local reads and diagnose the
+dashboard 503, then rerun the same profiles; see the complete evidence in
+[the capacity report](CLOUDFLARE_CAPACITY.md).
 
 ## Work still required
 

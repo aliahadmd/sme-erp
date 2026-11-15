@@ -51,13 +51,11 @@ uv run python scripts/verify_capacity_remote.py --new --run
 The checkpoint is `.cloudflare/verification/capacity/measurement.json` (0600),
 ignored by Git. It contains timings and fixture information, never credentials.
 
-## Platform constraints
-
-### Linked document workload planned before measurement
+## Linked document workload planned before measurement
 
 The next acceptance uses the existing verification database, including its
-compensated journal history, and a separate fixture customer/warehouse with
-three shared products. Each closed-loop cycle creates and confirms a three-line
+compensated journal history, a separate fixture customer/three products and an
+admitted empty verification warehouse. Each closed-loop cycle creates and confirms a three-line
 sales order, creates/posts its stock delivery, creates/posts its source-linked
 invoice, and records a fully allocated `60.00` bank payment: seven real commands.
 One initial receipt supplies 20 units of each product at cost `10.00`; each
@@ -85,11 +83,16 @@ It fences the original session and reconciles native receipts before cleanup;
 voids payments, invoices and deliveries before cancelling orders and voiding
 the supply receipt. It checks every original account balance, dashboard, empty
 fixture stock, numbering, foreign keys and assertion cleanup, then archives its
-customer/products. The empty fixture warehouse and immutable history remain in
-verification staging because warehouse removal is not part of the API.
+customer/products. The first run created warehouse
+`01a1de1b-1da8-70e3-802f-dc0c97af2310` (`TCA9884D3B39BB`); later runs require
+that same admitted warehouse to be empty and reuse it. The warehouse and
+immutable history remain in staging because warehouse removal is not part of
+the API. The first run's derived low-stock effect is recorded in its results.
 
 Results will be recorded below after native execution; these targets are not
 evidence of a passing result.
+
+## Platform constraints
 
 D1 executes a primary database's queries serially, so expensive report queries
 compete with commands. The current application uses primary reads and does not
@@ -343,3 +346,92 @@ reported startup 2,816 ms. Its frontend asset remains unchanged. Native checks
 confirm healthy assessment, closed bootstrap/restart probes, enabled jobs and
 test-mode email; the proof session signed out. No new demo recovery binding was
 added.
+
+## Linked trade measurement on 15 November
+
+The first run (`a9884d3b39bb4edd8cf3684901f7f1da`) started at 07:27:44 UTC
+on verification version `ea8a98e0-61f1-4674-9eeb-df804f0b81ca`, with 528 journals,
+7,188 journal lines, 42 invoices and 34 payments already present. All 18 linked
+cycles complete: orders are closed, three product lines have matching delivered/
+invoiced quantities, invoices are paid for exactly `60.00`, payment allocations
+are complete, and final stock/COGS/revenue/AR checks match the known quantities.
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 2.76 s | 7.51 s | 11.12 s |
+| order-confirm | 1.42 s | 5.52 s | 8.59 s |
+| delivery-create | 1.57 s | 6.43 s | 11.57 s |
+| delivery-post | 2.27 s | 7.55 s | 14.56 s |
+| invoice-create | 1.68 s | 6.74 s | 13.70 s |
+| invoice-post | 3.36 s | 9.32 s | 18.19 s |
+| payment-create | 2.59 s | 8.54 s | 17.49 s |
+| trial-balance | 3.27 s | 3.01 s | 3.22 s |
+| stock | 0.42 s | 0.44 s | 0.47 s |
+| dashboard | 1.32 s | 1.33 s | 1.62 s |
+| cycle | 14.35 s | 45.01 s | 84.80 s |
+
+Command samples per operation are 2/8/8, and cycle samples are 2/8/8.
+The 126 measured commands all returned their expected success. Of 403 report
+requests, one burst dashboard request returned **503**; all others returned 200.
+The first verifier recorded the status and validation failure, but not that
+response body, so its exact error code is unproven. Later runs also capture the
+redacted error code. Baseline passes; normal and burst fail the predeclared
+latency targets, and burst also fails the zero-error target. In particular,
+invoice-post p95 is **9.32 s** with four writers and **18.19 s** with eight.
+The successful journal-only experiment cannot stand in for these results.
+
+The first cleanup restored every account balance and zero fixture stock but
+correctly stopped at a dashboard mismatch: creating an empty warehouse adds a
+low-stock row for each of four existing eligible products. The pre-fixture
+low-stock count was 20 and the count with the retained warehouse is 24. It is
+not a monetary imbalance. Cleanup now derives that four-row effect from the
+eligible product count, independently of the observed dashboard difference,
+and compares every other dashboard field exactly. Future runs reuse this
+warehouse, so they must restore the complete pre-run dashboard without another
+warehouse increment. A local regression with an existing low-stock product
+covers both the reused-warehouse and first-run retained-warehouse cases.
+
+Cleanup resumed the same receipts without recreating original commands and
+finished at **07:41:13 UTC**. All 18 payments/invoices/deliveries are reversed,
+orders cancelled, the supply receipt voided and fixture customer/products
+archived. Native checks pass numbering uniqueness, foreign keys, zero assertion
+rows, exact original account balances and the explicitly expected dashboard.
+All three verifier sessions are revoked, no refresh cookie remains in the private
+checkpoint and operational health is `ok`. Immutable history now contains
+638 journals, 7,408 journal lines, 60 invoices, 52 payments and 883 stock moves.
+
+The verifier has separate local regressions for committed payment response loss,
+original-session fencing and resuming cleanup without another journal. Its
+first published implementation passes the hosted quality gate at `4979b29`:
+[run 43690146538](https://github.com/aliahadmd/sme-erp/actions/runs/43690146538).
+
+**Capacity acceptance remains failed.** Reduce sequential D1 reference/settings/
+numbering/account reads while retaining fresh authorization, revision guards,
+exact arithmetic and the single atomic commit; then rerun the unchanged profiles.
+The dashboard 503 also needs diagnosis and an observed zero-error rerun before
+production capacity is claimed. No production or coherent-demo data was used.
+
+### Read-boundary diagnosis
+
+A local trace executes the real API and the same three-product linked cycle,
+counting `D1Database.all` and `batch` calls. Each batch counts as one boundary
+even when it contains several SQL statements. These are source/runtime boundary
+counts, **not native latency attribution**:
+
+| Command | D1 calls, including authorization/receipt/commit |
+|---|---:|
+| Order create | 11 |
+| Order confirm | 7 |
+| Delivery create | 13 |
+| Delivery post | 18 |
+| Invoice create | 10 |
+| Invoice post | 23 |
+| Payment create | 17 |
+
+Invoice posting reads its source order and lines three times. Other repeated
+reads include organization data, numbering prefixes and individual account
+mappings. The first optimization should reuse those explicit, revision-guarded
+references only within the current command and batch independent reads. Retain
+fresh authorization after the mutex, durable receipt claims, uncertain-response
+reconciliation, exact decimal transport, all revision guards and the one atomic
+write batch. A changed query count alone does not prove the native targets pass.

@@ -9,11 +9,15 @@ import httpx
 import pytest
 
 from erp_cf.app import create_app
+from erp_cf.db import D1Database
+from erp_cf.store import UnitOfWork
 
 
-@pytest.mark.parametrize("lose_payment_response", [False, True])
+@pytest.mark.parametrize(
+    ("lose_payment_response", "legacy_warehouse"), [(False, False), (True, False), (False, True)]
+)
 async def test_trade_verifier_reconciles_and_reverses_owned_work(
-    env, monkeypatch, tmp_path, lose_payment_response
+    env, monkeypatch, tmp_path, lose_payment_response, legacy_warehouse
 ):
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     verifier = importlib.import_module("verify_trade_capacity_remote")
@@ -22,6 +26,15 @@ async def test_trade_verifier_reconciles_and_reverses_owned_work(
     monkeypatch.setattr(verifier, "CHECKPOINT", tmp_path / "proof/measurement.json")
     monkeypatch.setattr(verifier, "ORG", env.ORG_ID)
     env.EMAIL_MODE = "test"
+    plan = UnitOfWork(D1Database(env.DB), env.ORG_ID, None, "fixtures", "fixture", {})
+    warehouse = plan.add("inventory_warehouses", {"code": "CAPACITY", "name": "Shared fixture"})
+    plan.add(
+        "catalog_products",
+        {"sku": "EXISTING", "name": "Existing low-stock product", "min_stock": "5"},
+    )
+    await plan.commit({"id": warehouse["id"]})
+    monkeypatch.setattr(verifier, "WAREHOUSE_ID", warehouse["id"])
+    monkeypatch.setattr(verifier, "WAREHOUSE_CODE", warehouse["code"])
     (tmp_path / ".demo.app-staging.json").write_text(
         json.dumps({"email": "admin@example.com", "password": "admin123"})
     )
@@ -75,7 +88,20 @@ async def test_trade_verifier_reconciles_and_reverses_owned_work(
         monkeypatch.setattr(experiment, "read", read)
         proof["measurement_session"] = await experiment.login()
         await experiment.guard()
+        before_warehouse = await experiment.read("/api/reports/dashboard")
+        if legacy_warehouse:
+            legacy = await experiment.command(
+                "setup:warehouse",
+                "warehouse",
+                "/api/inventory/warehouses",
+                {"code": "LEGACY", "name": "First verifier's retained warehouse"},
+                expected=201,
+            )
+            monkeypatch.setattr(verifier, "WAREHOUSE_ID", legacy["id"])
+            monkeypatch.setattr(verifier, "WAREHOUSE_CODE", legacy["code"])
         await experiment.setup()
+        if legacy_warehouse:
+            proof["dashboard"] = before_warehouse
         completed = await experiment.measure(profile)
         assert completed is not lose_payment_response
         if completed:
@@ -97,6 +123,8 @@ async def test_trade_verifier_reconciles_and_reverses_owned_work(
         assert all(c["receipt_verified"] for c in payments)
         assert len(payments) == len(await native("SELECT id FROM invoicing_payments"))
         assert transport.dropped is lose_payment_response
+        if legacy_warehouse:
+            assert proof["retained_warehouse_effect"]["low_stock_count_delta"] == 1
         before_resume = await native("SELECT COUNT(*) AS n FROM accounting_journal_entries")
         resumed = verifier.Experiment(json.loads(verifier.CHECKPOINT.read_text()), client)
         resumed_read = resumed.read
