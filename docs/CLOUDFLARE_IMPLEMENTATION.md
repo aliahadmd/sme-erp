@@ -5,7 +5,7 @@ Status: in progress. The active objective is the complete migration described in
 functionality. A fresh demo database is authorized. This file records evidence
 and outstanding work; the feasibility slice is a gate, not the final deliverable.
 
-Last updated: 16 November 2026 (UTC+08:00). The architecture remains Python Workers with
+Last updated: 17 November 2026 (UTC+08:00). The architecture remains Python Workers with
 FastAPI/Pydantic and D1. The synchronous SQLAlchemy adapter passed the isolated
 runtime proof; the application currently uses typed native D1 repositories and
 batches for explicit persistence and atomic multi-statement commands. No
@@ -38,8 +38,8 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 350 local backend
-  tests. The frontend has passed 39 tests, its TypeScript/
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 353 local backend
+  tests. The frontend has passed 41 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
 - The existing ERP production deployment and production database are unchanged.
@@ -1428,6 +1428,89 @@ D1 checks independently verify the complete baseline, document states,
 numbering/FKs, zero assertions, health `ok` and all three sessions revoked.
 The retained history has 1,294 journals and 8,720 lines. Native capacity remains
 unaccepted; the complete local gate passes 350 backend and 39 frontend tests.
+
+## HR submission recovery and direct CLI demo updates
+
+The coherent demo was updated directly through the Cloudflare CLI to version
+`33476fbd-14cf-4981-8a8d-082019e62391` on 16 November at 13:29:07 UTC,
+reported startup 3,114 ms. It includes the batched reporting runtime without
+changing its frontend asset. The access token obtained before deployment remains
+valid afterward, with identical identity/permissions, dashboard, trial balance,
+stock and leave records. Operational health is `ok`; jobs remain enabled, mail
+stays in test mode, bootstrap and coordinator diagnostics remain closed, and
+the acceptance session is signed out and revoked. A fresh native run passes
+all 112 API role/ownership checks and signs out its successful proof sessions.
+
+The subsequent native HR browser workflow exposes a frontend recovery defect:
+after the server commits a leave request but its successful response is lost,
+Submit generates a different command key and offers no confirmation path.
+The verifier blocks that second transmission. The request itself survives
+reload, and the normal approval/rejection/cancellation and ownership checks pass.
+
+Commit `9c59ad7` retains one session-bound submission intent, its exact input
+and key until acknowledged. Form controls lock while sending or while the
+result is unconfirmed; **Retry submitted request** confirms that original
+intent. A definitive first validation rejection permits corrected input and a
+new key. The intent is held in memory, so the form explicitly directs users
+who leave the page to check existing requests before another submission.
+It does not claim recovery of an in-memory intent across reloads.
+
+The native browser verifier is reproducible on the verification environment:
+
+```sh
+cd cloudflare
+uv run python scripts/verify_browser_hr_remote.py --new --prepare
+uv run python scripts/verify_browser_hr_remote.py --browser
+uv run python scripts/verify_browser_hr_remote.py --cleanup
+```
+
+Use `--new` only after the previous checkpoint is cleaned. The verifier retains
+immutable requests and keys, refuses an already attempted browser run and
+excludes overlapping prepare/browser/cleanup processes. Cleanup closes its own
+browser, deactivates both synthetic actors, re-reads their current disabled state,
+cancels pending requests and compares the exact original financial/dashboard
+baseline. Approved/rejected/cancelled synthetic history remains. Interrupted
+setup and cleanup, including a stale disable receipt after account reactivation,
+are exercised against the real local API.
+
+The checks pass 353 backend and 41 frontend tests, lint/format, schema metadata,
+target-wheel installation and both application staging builds. The fix is
+deployed directly as verification version
+`1be0b98e-4c4a-467f-9b5d-2ed808d60e13` at 14:02:14 UTC on 16 November,
+reported startup 3,615 ms. All 84 runtime source files match the prebuilt
+bundle byte-for-byte. Chrome loads `/assets/index-TNexli78.js` and passes
+self-service ownership, hidden self-approval, submission/reload,
+approve/reject/cancel/reload and committed-response-loss recovery. The two
+submission attempts return 201 with the same key and request ID; controls stay
+locked until confirmation. Cleanup finishes at 14:09:48 UTC, with five retained
+finalized requests, both fixture actors fenced, the administrative session
+revoked and the original financial/dashboard baseline unchanged. Mail remains
+in test mode. Approval/rejection/cancellation response-loss recovery is still
+unverified; normal-path success does not establish it.
+
+The same committed fix is deployed to the coherent demo through the CLI as
+version `caee515e-127c-48aa-aca0-e6476b83d3ed` on 16 November at
+17:00:38 UTC (17 November local time), serving 100%. The reported startup is
+9,502 ms; this deployment timing is not a request-latency or capacity result.
+All 84 runtime source files again match the build exactly. The pre-deployment
+access token still works with identical identity/permissions, dashboard,
+trial balance, stock and leave records. The new asset is
+`/assets/index-TNexli78.js`, operational health is `ok`, jobs remain enabled,
+mail remains in test mode, bootstrap/diagnostics remain closed, and the owned
+continuity session is signed out and revoked. No migration or seeding occurs.
+
+Fresh Chrome checks on that exact asset pass ten page inspections across HR,
+employee and peer-employee profiles with no recorded API/page errors. The same
+browser switches from administrator to employee and displays only the employee's
+three leave rows. A delayed previous-session 401 causes zero refreshes/retries
+under the new account and leaves those three rows unchanged. Every scenario
+signs out its actors; the owned browser is closed and private callback payloads
+are removed. Two initial browser navigation attempts encountered connection
+resets before the successful scenarios; these passing checks do not establish
+network availability. The independent optional
+[GitHub quality check](https://github.com/aliahadmd/sme-erp/actions/runs/43882650387)
+also succeeds for commit `9c59ad78e6abbc14b81affa52639195d48142580`; it performs
+no deployment. Both actual deployments used the Cloudflare CLI.
 
 ## Work still required
 

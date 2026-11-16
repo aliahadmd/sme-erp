@@ -12,7 +12,7 @@ The latest burst also suffers connection failures and incomplete workflows.
 Every submitted command has been reconciled, all fixture effects reversed,
 original balances/dashboard restored and all owned sessions revoked. Final
 API/database checks pass with health `ok`. Details and failed samples are below;
-the 350-backend/39-frontend local gate does not replace native acceptance.
+the 353-backend/41-frontend local checks do not replace native acceptance.
 
 ## Targets and workload
 
