@@ -5,6 +5,15 @@ D1 database, and real authenticated HTTP endpoints. The coherent demo and
 production data are excluded. The measurements are an initial small-company
 workload, not a maximum throughput or long-term data-size guarantee.
 
+Current result (16 November): linked-trade capacity remains **unaccepted**.
+Verification runtime `706c5529e1e2` improves normal trial-balance p95 from
+3.81 to 1.87 seconds, but command tails still miss the five-second target.
+The latest burst also suffers connection failures and incomplete workflows.
+Every submitted command has been reconciled, all fixture effects reversed,
+original balances/dashboard restored and all owned sessions revoked. Final
+API/database checks pass with health `ok`. Details and failed samples are below;
+the 350-backend/39-frontend local gate does not replace native acceptance.
+
 ## Targets and workload
 
 These provisional targets are recorded before measurement. Each writer is a
@@ -754,3 +763,72 @@ fields, zero fixture stock, numbering/FKs, empty assertions, health (`ok`) and
 owned-session revocation pass. History now has 1,188 journals, 8,508 lines,
 150 invoices, 142 payments, 1,453 stock moves and 3,376 receipts. The next
 deployment tests bounded summary-page batching on this retained history.
+
+### Seventh native measurement: batched summary pages
+
+Direct CLI deployment of exact committed runtime `706c5529e1e2` produces
+version `bdc2a09f-bfdd-4f5f-8b36-e7e40efedcb8` at 12:56:58 UTC, serving 100%,
+with reported startup 4,148 ms. All 84 application modules were byte-compared
+against current source before upload. Run `2f39f86ef1f543658c85c0c8752aa5e7`
+begins at 12:57:28 UTC on the retained verification database.
+
+| Operation | Baseline p95 | Normal p95 |
+|---|---:|---:|
+| order-create | 1.01 s | 4.57 s |
+| order-confirm | 1.44 s | 4.30 s |
+| delivery-create | 1.53 s | 5.71 s |
+| delivery-post | 1.53 s | 5.31 s |
+| invoice-create | 1.67 s | 6.15 s |
+| invoice-post | 1.22 s | 5.63 s |
+| payment-create | 1.64 s | 5.88 s |
+| trial-balance | 5.02 s | 1.87 s |
+| stock | 0.85 s | 0.84 s |
+| dashboard | 1.26 s | 1.50 s |
+| cycle | 9.48 s | 35.63 s |
+
+Normal trial-balance p95 improves from the preceding 3.81 seconds to 1.87;
+its median is 1.42 seconds. A correlated baseline trace now has seven native
+`d1_batch` calls (identity, snapshot and five summary batches), replacing two
+batches plus 17 individual page calls. The baseline outlier's Worker record
+reports 871 ms CPU / 2,593 ms wall and its OTel root 4,323 ms; client latency is
+5,020.2 ms. It still **fails** the unchanged five-second target. Normal misses
+five command tails. Scope differences between these metrics remain explicit.
+
+At 12:59:43–13:00:21 UTC, burst requests lose connections without response
+headers. All eight writers report `RemoteProtocolError`: two invoice-post and
+six payment-create responses are lost. Eight report requests fail too (three
+trial balances, four stock reads and one dashboard). No request is retried in
+measurement. Two payments are never submitted after their invoice responses
+are lost. Thus 124 measured commands and 358 report requests were attempted;
+116 commands and 350 reports were acknowledged successfully. Only ten complete
+cycles are acknowledged; full 18-cycle state verification is not performed.
+Burst invoice-post/payment tails exceed 30 seconds and the profile fails.
+
+The initial sign-out fails during TLS connection setup. Resumed cleanup first
+revokes the original measurement session and proves the fence in D1. It then
+reconciles **all 130 submitted setup/business commands** against their durable
+receipts, including the eight lost financial responses, without resending
+original commands. All 18 orders/deliveries/invoices and all 16 submitted
+payments are cancelled/voided, the supply receipt is reversed, and owned
+contact/products are archived. Baseline account balances, complete dashboard
+and zero fixture stock pass before a later CLI connection failure interrupts
+read-only numbering validation. A further resume fails before login, leaving
+both existing owned sessions revoked.
+
+The Worker becomes reachable again. Fresh authenticated readback independently
+rechecks balances, dashboard, stock, test-mail mode, inactive maintenance and
+operational health (`ok`). Connected Cloudflare D1 API checks then pass all
+foreign keys, zero assertions, all five numbering-uniqueness checks, exact
+document-state counts and revocation of both experiment sessions plus the
+additional verification session. This final read-only validation completes at
+**13:19:46 UTC**; the checkpoint is marked cleaned only after those assertions.
+History contains 1,294 journals, 8,720 lines, 168 invoices, 158 payments,
+1,567 stock moves and 3,741 receipts.
+
+During the incident window, native telemetry returns 184 invocation records
+with outcome `ok`; it does not establish the cause of the client failures.
+A later reachability probe receives 200 from the Worker and GitHub while the
+local Cloudflare API connection still fails. Preserve the failed measurement
+and recovery evidence; these observations do not turn it into a passing load
+test. Production and the coherent demo remain unchanged, and both occupied
+recovery targets are preserved.

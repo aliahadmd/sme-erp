@@ -1417,6 +1417,18 @@ per native batch and omits unused journal fields while retaining frozen
 high-water marks and exact Python totals. The full local gate passes 350
 backend and 39 frontend tests; native acceptance is still required.
 
+Batched trial-balance reads are deployed directly as `706c5529e1e2`, version
+`bdc2a09f-bfdd-4f5f-8b36-e7e40efedcb8`. Normal report p95 improves from
+3.81 to 1.87 seconds, but command tails and a 5.020-second baseline report
+still fail the unchanged targets. Burst loses eight financial responses and
+eight reports during connection failures. Cleanup revokes the original session,
+reconciles all 130 submitted commands (including lost responses) and reverses
+all fixture effects without repeating original commands. Final API and connected
+D1 checks independently verify the complete baseline, document states,
+numbering/FKs, zero assertions, health `ok` and all three sessions revoked.
+The retained history has 1,294 journals and 8,720 lines. Native capacity remains
+unaccepted; the complete local gate passes 350 backend and 39 frontend tests.
+
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
