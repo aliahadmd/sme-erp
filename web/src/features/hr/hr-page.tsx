@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
+import { ApiError } from "@/lib/api/client"
+import { CommandIntent } from "@/lib/api/command-intent"
 
 const statusVariant = (status: string) =>
   status === "approved"
@@ -114,6 +116,11 @@ export function EmployeesPage() {
 
 export function LeaveRequestsPage() {
   const queryClient = useQueryClient()
+  const [requestCommand] = useState(
+    () => new CommandIntent(hrApi.createLeaveRequest)
+  )
+  const [saving, setSaving] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const [employeeId, setEmployeeId] = useState("")
   const [typeId, setTypeId] = useState("")
   const [dateFrom, setDateFrom] = useState("")
@@ -158,6 +165,32 @@ export function LeaveRequestsPage() {
   })
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: ["hr", "leave-requests"] })
+  const requestLocked = saving || requestCommand.uncertain
+
+  const submitRequest = async () => {
+    setSaving(true)
+    setRequestError(null)
+    try {
+      if (requestCommand.uncertain) await requestCommand.retry()
+      else
+        await requestCommand.submit({
+          employee_id: selectedEmployee,
+          type_id: typeId,
+          date_from: dateFrom,
+          date_to: dateTo,
+        })
+      toast.success("Leave request submitted")
+      setDateFrom("")
+      setDateTo("")
+      invalidate()
+    } catch (error) {
+      setRequestError(
+        error instanceof ApiError ? error.message : "Something went wrong"
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const employeeName = (id: string) =>
     selectable.find((e) => e.id === id)?.full_name ?? id.slice(0, 8)
@@ -207,11 +240,12 @@ export function LeaveRequestsPage() {
 
       <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
         <div className="flex flex-col gap-1">
-          <Label>Employee</Label>
+          <Label htmlFor="leave-employee">Employee</Label>
           <select
+            id="leave-employee"
             className="rounded-md border bg-transparent px-2 py-1.5 text-sm"
             value={selectedEmployee}
-            disabled={!canSeeEmployees}
+            disabled={!canSeeEmployees || requestLocked}
             onChange={(e) => setEmployeeId(e.target.value)}
           >
             <option value="">—</option>
@@ -223,10 +257,12 @@ export function LeaveRequestsPage() {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <Label>Leave type</Label>
+          <Label htmlFor="leave-type">Leave type</Label>
           <select
+            id="leave-type"
             className="rounded-md border bg-transparent px-2 py-1.5 text-sm"
             value={typeId}
+            disabled={requestLocked}
             onChange={(e) => setTypeId(e.target.value)}
           >
             <option value="">—</option>
@@ -238,42 +274,52 @@ export function LeaveRequestsPage() {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <Label>From</Label>
+          <Label htmlFor="leave-date-from">From</Label>
           <Input
+            id="leave-date-from"
             type="date"
+            disabled={requestLocked}
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
           />
         </div>
         <div className="flex flex-col gap-1">
-          <Label>To</Label>
+          <Label htmlFor="leave-date-to">To</Label>
           <Input
+            id="leave-date-to"
             type="date"
+            disabled={requestLocked}
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
           />
         </div>
         <Button
           variant="outline"
-          disabled={!selectedEmployee || !typeId || !dateFrom || !dateTo}
-          onClick={async () => {
-            try {
-              await hrApi.createLeaveRequest({
-                employee_id: selectedEmployee,
-                type_id: typeId,
-                date_from: dateFrom,
-                date_to: dateTo,
-              })
-              toast.success("Leave request submitted")
-              invalidate()
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Failed")
-            }
-          }}
+          disabled={
+            saving ||
+            (!requestCommand.uncertain &&
+              (!selectedEmployee || !typeId || !dateFrom || !dateTo))
+          }
+          onClick={() => void submitRequest()}
         >
-          Submit
+          {saving
+            ? "Submitting…"
+            : requestCommand.uncertain
+              ? "Retry submitted request"
+              : "Submit"}
         </Button>
       </div>
+      {requestError && (
+        <p role="alert" className="text-sm text-destructive">
+          {requestError}
+        </p>
+      )}
+      {requestCommand.uncertain && (
+        <p role="status" className="text-sm text-muted-foreground">
+          This request's result is unconfirmed. Retry the submitted request. If
+          you leave this page, check Leave requests before submitting another.
+        </p>
+      )}
 
       {canManageTypes && (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3">

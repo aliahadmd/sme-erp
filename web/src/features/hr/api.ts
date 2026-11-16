@@ -1,6 +1,6 @@
 /** HR API — employees, departments, leave. */
 
-import { api } from "@/lib/api/client"
+import { api, type MutationOptions } from "@/lib/api/client"
 
 export type Employee = {
   id: string
@@ -63,13 +63,16 @@ export const hrApi = {
       `/api/hr/leave-requests?${new URLSearchParams(clean)}`
     )
   },
-  createLeaveRequest: (body: {
-    employee_id: string
-    type_id: string
-    date_from: string
-    date_to: string
-    reason?: string
-  }) => api.post<LeaveRequest>("/api/hr/leave-requests", body),
+  createLeaveRequest: (
+    body: {
+      employee_id: string
+      type_id: string
+      date_from: string
+      date_to: string
+      reason?: string
+    },
+    options?: MutationOptions
+  ) => api.post<LeaveRequest>("/api/hr/leave-requests", body, options),
   approveLeave: (id: string) =>
     api.post<LeaveRequest>(`/api/hr/leave-requests/${id}/approve`, undefined),
   rejectLeave: (id: string) =>
