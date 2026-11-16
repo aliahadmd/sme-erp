@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 349 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 350 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1407,6 +1407,15 @@ values and zero fixture stock; both owned sessions are revoked and health is
 attributing that outlier. The verifier now captures bounded transport events
 and validated correlation IDs, and joins all concurrent tasks on unexpected
 failure. Its full local gate passes 349 backend and 39 frontend tests.
+
+The instrumented sixth run keeps the same Worker, succeeds on all 126
+commands and 237 reports, and completes exact cleanup with health `ok` and
+revoked sessions. Baseline and normal fail latency; burst passes. A correlated
+slow trial-balance trace identifies 17 sequential page round trips, each far
+longer than its SQL execution. The next change reads four bounded summary pages
+per native batch and omits unused journal fields while retaining frozen
+high-water marks and exact Python totals. The full local gate passes 350
+backend and 39 frontend tests; native acceptance is still required.
 
 ## Work still required
 

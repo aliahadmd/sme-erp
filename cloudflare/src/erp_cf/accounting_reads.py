@@ -2,7 +2,7 @@
 
 Journal rows are immutable. Capture both header and line rowid high-water marks
 in one read batch; later/backdated postings cannot enter subsequent pages.
-Trial-balance accumulation uses Python integer cents and bounded D1 reads.
+Trial-balance accumulation uses Python integer cents and bounded D1 page batches.
 """
 
 from decimal import Decimal
@@ -21,6 +21,9 @@ def cents(value):
 
 
 class JournalReader:
+    page_size = 500
+    summary_pages = 4
+
     def __init__(self, db, org_id):
         self.db = db
         self.org_id = org_id
@@ -46,7 +49,7 @@ class JournalReader:
         self.accounts = [account_table.decode(plain(r)) for r in results[1]["results"]]
         return self
 
-    async def lines(self, *, account_id=None, as_of=None):
+    async def lines(self, *, account_id=None, as_of=None, summary=False):
         cursor = "0"
         while True:
             where = ""
@@ -62,27 +65,45 @@ class JournalReader:
             if as_of:
                 where += " AND e.entry_date<=?"
                 params.append(as_of.isoformat())
-            rows = await self.db.all(
-                "SELECT CAST(l.rowid AS TEXT) AS cursor,l.id,l.account_id,"
-                "CAST(l.debit AS TEXT) AS debit,CAST(l.credit AS TEXT) AS credit,"
-                "e.id AS entry_id,e.number AS entry_number,e.entry_date,e.created_at,e.memo "
+            projection = (
+                "CAST(l.rowid AS TEXT) AS cursor,l.account_id,"
+                "CAST(l.debit AS TEXT) AS debit,CAST(l.credit AS TEXT) AS credit"
+            )
+            if not summary:
+                projection += (
+                    ",l.id,e.id AS entry_id,e.number AS entry_number,"
+                    "e.entry_date,e.created_at,e.memo"
+                )
+            sql = (
+                f"SELECT {projection} "
                 "FROM accounting_journal_lines l JOIN accounting_journal_entries e "
                 "ON e.id=l.entry_id WHERE e.org_id=? AND e.status='posted' "
                 "AND e.rowid<=CAST(? AS INTEGER) AND l.rowid<=CAST(? AS INTEGER) "
-                "AND l.rowid>CAST(? AS INTEGER)" + where + " ORDER BY l.rowid LIMIT 500",
-                tuple(params),
+                "AND l.rowid>CAST(? AS INTEGER)" + where + " ORDER BY l.rowid LIMIT ? OFFSET ?"
             )
-            if not rows:
-                return
-            for row in rows:
-                yield row
-            cursor = rows[-1]["cursor"]
-            if len(rows) < 500:
-                return
+            if summary:
+                # Posted history is immutable and both high-water marks are
+                # fixed. Offset pages within this bounded batch cannot shift
+                # when later/backdated entries are posted between batches.
+                results = await self.db.batch(
+                    [
+                        Statement(sql, (*params, self.page_size, page * self.page_size))
+                        for page in range(self.summary_pages)
+                    ]
+                )
+                pages = [[plain(row) for row in result["results"]] for result in results]
+            else:
+                pages = [await self.db.all(sql, (*params, self.page_size, 0))]
+            for rows in pages:
+                for row in rows:
+                    yield row
+                if len(rows) < self.page_size:
+                    return
+                cursor = rows[-1]["cursor"]
 
     async def trial_balance(self, as_of=None):
         totals = {}
-        async for line in self.lines(as_of=as_of):
+        async for line in self.lines(as_of=as_of, summary=True):
             total = totals.setdefault(line["account_id"], [0, 0])
             total[0] += int(line["debit"])
             total[1] += int(line["credit"])

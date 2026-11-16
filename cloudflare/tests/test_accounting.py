@@ -49,7 +49,8 @@ def counts(env):
     }
 
 
-async def test_exact_reports_exceed_sqlite_sum_range_and_respect_dates(client, env):
+async def test_exact_reports_exceed_sqlite_sum_range_and_respect_dates(client, env, monkeypatch):
+    monkeypatch.setattr(JournalReader, "page_size", 3)
     headers, accounts = await setup(client)
     amount = "9999999999999999.99"
     for index in range(12):
@@ -267,6 +268,47 @@ async def test_posted_history_is_immutable_and_reports_freeze_backdated_writes(c
     ]:
         with pytest.raises(sqlite3.IntegrityError, match="immutable"):
             env.DB.connection.execute(sql)
+
+
+async def test_summary_batches_remain_bounded_and_exclude_backdated_interleaving(
+    client, env, monkeypatch
+):
+    headers, accounts = await setup(client)
+    body = entry(accounts, "1")
+    body["lines"] *= 300
+    assert (
+        await client.post("/api/accounting/journal-entries", headers=headers, json=body)
+    ).status_code == 201
+    monkeypatch.setattr(JournalReader, "page_size", 100)
+    db = D1Database(env.DB)
+    book = await JournalReader(db, env.ORG_ID).snapshot()
+    original_batch = db.batch
+    pages = []
+
+    async def batch(statements):
+        assert len(statements) == 4
+        assert all("e.memo" not in statement.sql for statement in statements)
+        result = await original_batch(statements)
+        assert all(len(part["results"]) <= 100 for part in result)
+        pages.append(sum(len(part["results"]) for part in result))
+        if len(pages) == 1:
+            later = await client.post(
+                "/api/accounting/journal-entries",
+                headers=headers,
+                json=entry(accounts, "999", "2020-01-01"),
+            )
+            assert later.status_code == 201
+        return result
+
+    monkeypatch.setattr(db, "batch", batch)
+    rows = await book.trial_balance()
+    assert pages == [400, 200]
+    assert next(row for row in rows if row.code == "1000").balance == Decimal("300.00")
+    assert sum(row.total_debit for row in rows) == sum(row.total_credit for row in rows)
+    fresh = await JournalReader(D1Database(env.DB), env.ORG_ID).snapshot()
+    assert next(
+        row for row in await fresh.trial_balance() if row.code == "1000"
+    ).balance == Decimal("1299.00")
 
 
 async def test_reversal_mirrors_all_original_entries_despite_mapping_changes(client, env):

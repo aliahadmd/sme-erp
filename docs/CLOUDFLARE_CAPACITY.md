@@ -691,3 +691,66 @@ The full local gate now passes 349 backend and 39 frontend tests, including
 the four verifier cases, plus metadata, lint/formatting and the locked build.
 Transport diagnostics require no Worker deployment; the next run uses the same
 native `5c40fd822114` version so its only change is client-side observation.
+
+### Correlated trial-balance diagnosis
+
+The instrumented run matches its 6,358.5 ms baseline trial-balance response
+to Cloudflare Ray `a5b6996509fafdac` and trace
+`4816137eaa3fcdbb460f7ae294868751`, on verification version `437f95c9`.
+Client TCP connection takes about 2 ms and TLS about 533 ms. The Worker fetch
+record reports 652 ms CPU and 4,737 ms wall time; its OTel root span is 5,462 ms.
+These metrics have different scopes and are not added or subtracted as a
+precise decomposition of client latency.
+
+The trace contains 17 sequential `d1_all` page spans taking 139–554 ms each,
+while their individual SQL durations are only 2.7–8.3 ms. This directly
+supports reducing page round trips. Trial balance now requests only cursor,
+account ID and debit/credit text, and reads four 500-row pages in one native
+batch. At most 2,000 reduced rows are buffered. Detailed account ledger retains
+its existing row fields and bounded single-page path.
+
+Both journal/header high-water marks, organization/date filters and immutable
+posted history remain authoritative. Offsets apply only within each bounded
+batch after its saved rowid cursor; subsequent batches advance that cursor.
+Later or backdated postings cannot move the selected rows. Money still crosses
+D1 as integer text and sums in unbounded Python integers, with no SQL SUM.
+The extreme-value/date regression now crosses multiple summary batches; another
+test posts backdated data between batches and requires the original frozen
+balance, exact page counts and bounded results. Native remeasurement remains
+required before accepting this change's performance.
+
+The complete local gate passes 350 backend and 39 frontend tests, metadata
+checks, lint/formatting and the locked Worker/SPA build.
+
+### Sixth native measurement: transport observation
+
+Run `bccbdc69532942aeac0198c7ed7c890b` starts at 12:46:13 UTC on 16 November,
+using the same native `5c40fd822114` runtime and verifier `4c36fb7644a6`.
+All 126 commands and 237 reports succeed. The diagnostic fields change no
+protocol, concurrency, retries, timing thresholds or workload:
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 1.37 s | 5.56 s | 9.05 s |
+| order-confirm | 0.78 s | 4.20 s | 6.50 s |
+| delivery-create | 1.80 s | 6.87 s | 9.32 s |
+| delivery-post | 1.88 s | 5.35 s | 9.68 s |
+| invoice-create | 1.49 s | 5.14 s | 9.42 s |
+| invoice-post | 1.84 s | 5.52 s | 8.62 s |
+| payment-create | 1.87 s | 5.42 s | 8.36 s |
+| trial-balance | 6.36 s | 3.81 s | 4.57 s |
+| stock | 0.51 s | 0.81 s | 0.71 s |
+| dashboard | 0.78 s | 0.74 s | 1.16 s |
+| cycle | 10.34 s | 33.78 s | 56.05 s |
+
+Baseline fails its trial-balance tail; normal fails six command tails; burst
+passes. This does not establish a performance regression from the observer or
+change the earlier failed acceptance result. The baseline outlier supplies the
+correlated sequential-read evidence above. No requests are discarded from the
+gate or reclassified as successes because of their transport costs.
+
+Exact cleanup completes at 12:52:34 UTC. All original balances and dashboard
+fields, zero fixture stock, numbering/FKs, empty assertions, health (`ok`) and
+owned-session revocation pass. History now has 1,188 journals, 8,508 lines,
+150 invoices, 142 payments, 1,453 stock moves and 3,376 receipts. The next
+deployment tests bounded summary-page batching on this retained history.
