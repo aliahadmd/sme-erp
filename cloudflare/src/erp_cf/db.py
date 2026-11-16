@@ -110,10 +110,15 @@ class AtomicCommands:
         request_hash: str,
         statements: list[Statement],
         response: dict,
+        replay_checked: bool = False,
     ) -> dict:
-        existing = await self.replay(identity, request_hash)
-        if existing is not None:
-            return existing
+        if not replay_checked:
+            existing = await self.replay(identity, request_hash)
+            if existing is not None:
+                return existing
+        # A command planner may already have checked this receipt. The UNIQUE
+        # claim remains inside the batch, and every failed/uncertain batch still
+        # reconciles against D1, including a receipt created after that check.
         claim = Statement(
             "INSERT INTO cf_commands (id, request_hash, response_json) VALUES (?, ?, ?)",
             (identity, request_hash, json.dumps(response, separators=(",", ":"))),

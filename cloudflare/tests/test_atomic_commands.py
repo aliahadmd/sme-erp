@@ -55,7 +55,8 @@ async def test_failure_after_a_write_rolls_back_claim_business_and_outbox():
 
 
 @pytest.mark.asyncio
-async def test_duplicate_and_lost_response_return_original_outcome():
+@pytest.mark.parametrize("replay_checked", [False, True])
+async def test_duplicate_and_lost_response_return_original_outcome(replay_checked):
     db = LocalDatabase()
     commands = AtomicCommands(db)
     db.lost_response = True
@@ -64,6 +65,7 @@ async def test_duplicate_and_lost_response_return_original_outcome():
         request_hash="h1",
         response={"invoice": "i1"},
         statements=[Statement("INSERT INTO journal VALUES ('j', 100)")],
+        replay_checked=replay_checked,
     )
     assert await commands.execute(**args) == {"invoice": "i1"}
     assert await commands.execute(**args) == {"invoice": "i1"}

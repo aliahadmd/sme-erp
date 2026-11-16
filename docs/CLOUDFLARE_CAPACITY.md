@@ -511,3 +511,44 @@ must still produce `report_busy` after three attempts. Native remeasurement is
 required before claiming this resolves the observed failures. The full quality
 gate passes 343 backend and 39 frontend tests, metadata checks, lint/format,
 vendoring and the app-staging Worker/SPA build.
+
+### Third native measurement: dashboard batching
+
+Run `e5884c043c974a38bfa6fdf650b30df5` began at 12:07:53 UTC on 16 November,
+after direct CLI deployment of `87f9a778643f` as verification version
+`521ff413-db37-485b-852b-2987618e5e8c`. All 18 cycles and 126 measured commands
+complete correctly. **All 292 reports succeed**, with no `report_busy` or other
+report errors observed. The unchanged profiles still fail latency acceptance:
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 2.90 s | 6.50 s | 11.33 s |
+| order-confirm | 0.95 s | 4.43 s | 8.86 s |
+| delivery-create | 1.55 s | 5.62 s | 9.39 s |
+| delivery-post | 1.85 s | 5.17 s | 9.84 s |
+| invoice-create | 1.19 s | 5.13 s | 9.60 s |
+| invoice-post | 1.84 s | 4.76 s | 9.69 s |
+| payment-create | 1.52 s | 5.19 s | 8.87 s |
+| trial-balance | 3.42 s | 4.05 s | 3.73 s |
+| stock | 0.49 s | 0.75 s | 0.71 s |
+| dashboard | 0.68 s | 1.30 s | 1.03 s |
+| cycle | 10.36 s | 32.08 s | 61.97 s |
+
+Baseline passes. Normal misses five command tails; burst misses order-create.
+Dashboard p95 is lower than the second run, but this finite observation does
+not guarantee absence of future consistency retries. Thresholds and the
+three-attempt epoch guard remain unchanged.
+
+### Receipt lookup diagnosis
+
+The coordinator already checks a command's durable receipt after fresh
+authorization and before planning. Commit previously queried it again before
+the atomic receipt claim. The next change reuses that fact within the same
+plan, removing only that duplicate read. The UNIQUE receipt insert stays inside
+the atomic batch; every failed or uncertain batch still queries D1 and verifies
+the request hash. Direct callers without a prior check retain the original
+preflight lookup. Regression cases cover a competing receipt after the initial
+check, changed-input conflict, repeated commit and lost commit response.
+The shared app-staging quality gate passes 347 backend and 39 frontend tests,
+schema checks, lint/formatting and the locked Worker/SPA build. A further native
+measurement is required before accepting command latency.

@@ -373,6 +373,7 @@ class UnitOfWork:
         self.statements: list[Statement] = []
         self.pending_numbers: dict[tuple, dict] = {}
         self._reference_data = None
+        self._replay_checked = False
 
     def repository(self, name: str):
         return Repository(self.db, name, self.org_id)
@@ -548,7 +549,9 @@ class UnitOfWork:
 
     async def replay(self):
         try:
-            return await self.commands.replay(self.identity, self.request_hash)
+            result = await self.commands.replay(self.identity, self.request_hash)
+            self._replay_checked = True
+            return result
         except CommandConflict as exc:
             raise ConflictError(str(exc)) from exc
 
@@ -559,6 +562,7 @@ class UnitOfWork:
                 request_hash=self.request_hash,
                 statements=[*self.statements, advance_business_epoch(self.org_id)],
                 response=wire(response),
+                replay_checked=self._replay_checked,
             )
         except CommandConflict as exc:
             raise ConflictError(str(exc)) from exc

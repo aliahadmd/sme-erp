@@ -100,3 +100,55 @@ def test_every_decimal_and_integer_projection_uses_text():
         for col in table.columns:
             if col.kind in {"decimal", "int", "bool"}:
                 assert f'CAST("{col.name}" AS TEXT)' in projection
+
+
+@pytest.mark.asyncio
+async def test_prechecked_command_avoids_second_lookup_but_reconciles_repeat_commit(
+    db, monkeypatch
+):
+    org = str(uuid.uuid7())
+    plan = command(db, org)
+    row = plan.add("catalog_products", {"sku": "ONCE", "name": "Once"})
+    reads = []
+    original = db.first
+
+    async def first(sql, params=()):
+        if "FROM cf_commands" in sql:
+            reads.append(sql)
+        return await original(sql, params)
+
+    monkeypatch.setattr(db, "first", first)
+    assert await plan.replay() is None
+    assert await plan.commit({"id": row["id"]}) == {"id": row["id"]}
+    assert len(reads) == 1
+    # A repeated commit loses the unique claim and reads the authoritative receipt.
+    assert await plan.commit({"unexpected": True}) == {"id": row["id"]}
+    assert len(reads) == 2
+    assert await Repository(db, "catalog_products", org).count() == 1
+    assert (await db.first("SELECT version FROM cf_business_epochs WHERE org_id=?", (org,)))[
+        "version"
+    ] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("different_input", [False, True])
+async def test_prechecked_command_reconciles_competing_receipt_without_stale_writes(
+    db, different_input
+):
+    org, actor = str(uuid.uuid7()), str(uuid.uuid7())
+    stale = UnitOfWork(
+        db, org, actor, "race", "test", {"input": "different"} if different_input else {}
+    )
+    assert await stale.replay() is None
+    stale.add("catalog_products", {"sku": "STALE", "name": "Never written"})
+    winner = UnitOfWork(db, org, actor, "race", "test", {})
+    row = winner.add("catalog_products", {"sku": "WINNER", "name": "Winner"})
+    expected = {"id": row["id"]}
+    await winner.commit(expected)
+    if different_input:
+        with pytest.raises(ConflictError):
+            await stale.commit({"unexpected": True})
+    else:
+        assert await stale.commit({"unexpected": True}) == expected
+    assert await Repository(db, "catalog_products", org).count() == 1
+    assert await Repository(db, "catalog_products", org).first("sku='STALE'") is None

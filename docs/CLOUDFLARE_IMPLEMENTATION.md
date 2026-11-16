@@ -5,7 +5,7 @@ Status: in progress. The active objective is the complete migration described in
 functionality. A fresh demo database is authorized. This file records evidence
 and outstanding work; the feasibility slice is a gate, not the final deliverable.
 
-Last updated: 15 November 2026 (UTC+08:00). The architecture remains Python Workers with
+Last updated: 16 November 2026 (UTC+08:00). The architecture remains Python Workers with
 FastAPI/Pydantic and D1. The synchronous SQLAlchemy adapter passed the isolated
 runtime proof; the application currently uses typed native D1 repositories and
 batches for explicit persistence and atomic multi-statement commands. No
@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 336 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 347 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1216,12 +1216,12 @@ passed the full gate at `757451f` (332 backend/39 frontend tests at that commit)
 The larger-backup correction at `5c7412c` also passes the complete hosted gate
 (333 backend/39 frontend tests):
 [run 43685221016](https://github.com/aliahadmd/sme-erp/actions/runs/43685221016).
-Cloudflare's repository connection is registered and can read that branch. Its
-hosted quality gate and explicit-commit demo deployment now pass; the real
-GitHub push did not reach Cloudflare, whose dashboard reports a disconnected
-Git account. GitHub reauthentication is required to inspect the installed app's
-repository scope. Build settings, deployment evidence and the remaining push
-delivery check are documented in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
+The earlier hosted quality gate and explicit-commit demo deployment passed,
+but GitHub push delivery did not reach Cloudflare. The user subsequently chose
+direct CLI deployment: the unsaved GitHub access change was cancelled and the
+hosted build configuration removed. GitHub reconnection and push delivery are
+not requirements. The current deployment procedure and historical build proof
+are in [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
 
 ## HTTP surface coverage
 
@@ -1367,7 +1367,7 @@ of the source order/lines. Reduce repeated command-local reads and diagnose the
 dashboard 503, then rerun the same profiles; see the complete evidence in
 [the capacity report](CLOUDFLARE_CAPACITY.md).
 
-## Work still required
+## Command and dashboard batching
 
 The second linked-trade run uses command-local batched reads, deployed directly
 through the Cloudflare CLI as commit `6370e756f11d`. All 126 commands and exact
@@ -1378,11 +1378,17 @@ Thus this broader capacity acceptance remains failed. Cleanup restores the
 entire pre-run dashboard and balances with zero fixture stock and revoked owned
 sessions; retained history now has 748 journals and 7,628 lines.
 
-The next change batches the dashboard's initial bounded pages and starting
-epoch while retaining its final epoch guard, exact arithmetic and retry limit.
-Native testing remains required. The scheduled backups on both isolated
+Dashboard initial-page batching is deployed directly as `87f9a778643f`.
+The third native run completes all 126 commands and 292 reports without errors;
+normal and burst still miss latency targets. Final epoch guards, exact
+arithmetic and the retry limit remain unchanged. The next optimization removes
+one duplicate receipt lookup per already-checked command, retaining the UNIQUE
+claim and failed/uncertain-batch reconciliation. The full quality gate passes
+347 backend and 39 frontend tests. The scheduled backups on both isolated
 environments completed successfully after the second trade run, at 18:04 UTC
 on 15 November; neither recovery target was reset.
+
+## Work still required
 
 The full ERP migration remains incomplete. Next, complete
 larger-history and representative document capacity, production alert replication,
