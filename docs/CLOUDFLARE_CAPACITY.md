@@ -539,6 +539,12 @@ Dashboard p95 is lower than the second run, but this finite observation does
 not guarantee absence of future consistency retries. Thresholds and the
 three-attempt epoch guard remain unchanged.
 
+Cleanup finished at 12:14:44 UTC. Native checks restore every original account
+balance and the entire dashboard, zero the fixture warehouse stock, and pass
+numbering uniqueness, FKs and empty assertions. Health is `ok`; both owned
+sessions are revoked and no refresh cookie remains. Immutable history now has
+858 journals, 7,848 lines, 96 invoices, 88 payments and 1,111 stock moves.
+
 ### Receipt lookup diagnosis
 
 The coordinator already checks a command's durable receipt after fresh
@@ -552,3 +558,47 @@ check, changed-input conflict, repeated commit and lost commit response.
 The shared app-staging quality gate passes 347 backend and 39 frontend tests,
 schema checks, lint/formatting and the locked Worker/SPA build. A further native
 measurement is required before accepting command latency.
+
+### Fourth native measurement: receipt precheck reuse
+
+Run `d7d301cacf524567884aa1d51d4546cb` began at 12:16:50 UTC on 16 November,
+on directly deployed commit `49630bebfc88`, verification version
+`e81ce0eb-0c2b-4c7d-b09c-724400575572` at 100%. All 18 cycles, 126 measured
+commands and 224 reports succeed without errors. Every profile nevertheless
+**fails its original latency target**:
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 5.08 s | 6.45 s | 10.55 s |
+| order-confirm | 1.25 s | 3.79 s | 6.59 s |
+| delivery-create | 1.52 s | 5.01 s | 8.19 s |
+| delivery-post | 1.94 s | 5.08 s | 8.44 s |
+| invoice-create | 1.27 s | 4.83 s | 8.24 s |
+| invoice-post | 1.75 s | 4.62 s | 7.74 s |
+| payment-create | 1.32 s | 5.07 s | 7.12 s |
+| trial-balance | 3.90 s | 4.53 s | 4.30 s |
+| stock | 0.74 s | 0.63 s | 0.78 s |
+| dashboard | 0.87 s | 0.84 s | 1.01 s |
+| cycle | 13.26 s | 30.97 s | 49.48 s |
+
+Baseline misses order-create (5,075.9 ms). Normal misses order-create,
+delivery-create, delivery-post and payment-create. Burst misses order-create
+(10,548.1 ms). Small misses still count; thresholds are unchanged. Invoice-post
+burst p95 improves from the first run's 18.19 seconds to 7.74 seconds, but that
+does not establish overall capacity acceptance. Growing retained history and
+variable request costs also prevent attributing every timing change to one edit.
+
+Cleanup finishes at 12:23:26 UTC. Exact original account balances, complete
+dashboard and zero fixture stock pass, as do numbering/FKs, empty assertions
+and health (`ok`). Both owned sessions are revoked; no refresh cookie remains.
+Retained history has 968 journals, 8,068 lines, 114 invoices, 106 payments,
+1,225 stock moves and 2,630 command receipts. The coherent demo and production
+remain outside this experiment; occupied recovery targets are preserved.
+
+A read-only Cloudflare telemetry query finds 18 matching native order-create
+fetch timing records on this exact version/window: CPU ranges from 20 to
+1,825 ms and wall time from 985 to 8,518 ms. Those server-side diagnostics do
+not replace the client measurements. Per-phase attribution of expensive
+requests is still unproven: profile CPU and coordinator wait/auth/planning/
+commit costs before selecting another optimization. Do not infer that D1 SQL,
+network delay or cold initialization alone explains the outliers.

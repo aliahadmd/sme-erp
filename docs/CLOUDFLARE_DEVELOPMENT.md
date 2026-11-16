@@ -250,6 +250,14 @@ published verifier at `e5c02ee` passed the complete hosted gate with 336 backend
 and 39 frontend tests:
 [run 43691642662](https://github.com/aliahadmd/sme-erp/actions/runs/43691642662).
 
+Direct CLI deployments subsequently published verification code `87f9a778643f`
+and `49630bebfc88` on 16 November. The latter is serving at 100% as version
+`e81ce0eb-0c2b-4c7d-b09c-724400575572`, following the full local gate (347 backend,
+39 frontend tests). Its native linked-trade proof passes all commands, reports
+and exact cleanup, but still fails the unchanged latency targets; see
+[capacity evidence](CLOUDFLARE_CAPACITY.md). No GitHub deployment permission is
+required for this procedure.
+
 ### Earlier hosted-build proof
 
 Before the direct-CLI choice, a Cloudflare hosted preflight exposed missing

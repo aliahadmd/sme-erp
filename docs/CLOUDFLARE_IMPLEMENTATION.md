@@ -1388,6 +1388,16 @@ claim and failed/uncertain-batch reconciliation. The full quality gate passes
 environments completed successfully after the second trade run, at 18:04 UTC
 on 15 November; neither recovery target was reset.
 
+Receipt precheck reuse is directly deployed as `49630bebfc88`, version
+`e81ce0eb-0c2b-4c7d-b09c-724400575572`. The fourth run completes 126 commands
+and 224 reports without errors and restores the complete financial/dashboard
+baseline. All three profiles still fail their original latency targets,
+including a 5.076-second baseline order-create. The retained verification
+history has 968 journals and 8,068 lines, health is `ok`, and both owned sessions
+are revoked. Native timing records show some CPU-heavy order requests;
+per-phase profiling is needed before another performance change. All results,
+including failures, are in [the capacity report](CLOUDFLARE_CAPACITY.md).
+
 ## Work still required
 
 The full ERP migration remains incomplete. Next, complete
