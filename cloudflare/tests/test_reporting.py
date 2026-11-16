@@ -42,6 +42,95 @@ async def test_empty_reports_keep_shapes_and_dashboard_ends_in_current_week(clie
     ]
 
 
+async def test_dashboard_reads_initial_pages_together_and_checks_final_epoch(
+    client, env, monkeypatch
+):
+    await login(client)
+    calls = []
+    original_all, original_batch = D1Database.all, D1Database.batch
+
+    async def read(db, sql, params=()):
+        calls.append(("all", sql))
+        return await original_all(db, sql, params)
+
+    async def batch(db, statements):
+        calls.append(("batch", statements))
+        return await original_batch(db, statements)
+
+    monkeypatch.setattr(D1Database, "all", read)
+    monkeypatch.setattr(D1Database, "batch", batch)
+    dashboard = await Reports(D1Database(env.DB), env.ORG_ID).read("dashboard")
+    assert dashboard.open_ar == Decimal("0.00")
+    assert [kind for kind, _ in calls] == ["batch", "all"]
+    assert len(calls[0][1]) == 4
+    assert "cf_business_epochs" in calls[0][1][0].sql
+    assert "cf_business_epochs" in calls[1][1]
+
+
+@pytest.mark.parametrize("change_at", ["initial", "continuation"])
+async def test_dashboard_discards_changed_initial_and_continuation_pages(
+    client, env, monkeypatch, change_at
+):
+    headers, _, _, party = await setup(client)
+    first = await invoice(client, headers, party, "20")
+    await invoice(client, headers, party, "30")
+    monkeypatch.setattr(ConsistentReader, "page_size", 1)
+    changed, batches = False, 0
+    original_all, original_batch = D1Database.all, D1Database.batch
+
+    async def change():
+        nonlocal changed
+        changed = True
+        await call(client, headers, "POST", f"invoices/{first['id']}/void")
+
+    async def batch(db, statements):
+        nonlocal batches
+        results = await original_batch(db, statements)
+        if "SELECT CAST(version AS TEXT)" in statements[0].sql:
+            batches += 1
+            if not changed and change_at == "initial":
+                await change()
+        return results
+
+    async def read(db, sql, params=()):
+        rows = await original_all(db, sql, params)
+        if (
+            not changed
+            and change_at == "continuation"
+            and "AS _cursor0" in sql
+            and "FROM invoicing_invoices i WHERE" in sql
+        ):
+            await change()
+        return rows
+
+    monkeypatch.setattr(D1Database, "batch", batch)
+    monkeypatch.setattr(D1Database, "all", read)
+    dashboard = await report(client, headers, "dashboard")
+    assert changed and batches == 2
+    assert dashboard["sales_mtd"] == dashboard["open_ar"] == "30.00"
+
+
+async def test_dashboard_still_rejects_three_continuously_changed_attempts(
+    client, env, monkeypatch
+):
+    await login(client)
+    original_batch = D1Database.batch
+    batches = 0
+
+    async def batch(db, statements):
+        nonlocal batches
+        results = await original_batch(db, statements)
+        if "SELECT CAST(version AS TEXT)" in statements[0].sql:
+            batches += 1
+            await plan(env, str(uuid.uuid4())).commit({})
+        return results
+
+    monkeypatch.setattr(D1Database, "batch", batch)
+    with pytest.raises(DomainError) as error:
+        await Reports(D1Database(env.DB), env.ORG_ID).read("dashboard")
+    assert error.value.status == 503 and error.value.code == "report_busy" and batches == 3
+
+
 async def test_reports_net_credit_snapshots_fx_dates_and_exclude_drafts_and_voids(client):
     headers, _, _, party = await setup(client)
     response = await client.post(

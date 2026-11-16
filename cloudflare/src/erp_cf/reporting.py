@@ -13,6 +13,7 @@ from app.modules.reporting import schemas
 
 from erp_cf.accounting_reads import cents
 from erp_cf.consistent_reads import ConsistentReader
+from erp_cf.db import Statement
 from erp_cf.documents import today
 from erp_cf.money import from_coefficient
 
@@ -43,26 +44,45 @@ def converted(rates):
     return cents(round(total))
 
 
+def dashboard_dates(day):
+    # Twelve complete weeks plus the current week, ending at this Monday.
+    return day.replace(day=1), day - timedelta(days=day.weekday() + 84)
+
+
 class Reports(ConsistentReader):
     async def read(self, name, **params):
+        if name == "dashboard":
+            day = today()
+            month, start = dashboard_dates(day)
+            return await self.run(
+                lambda pages: self.dashboard(day, pages),
+                initial=(
+                    self.page(**self.invoice_query(date_from=min(month, start))),
+                    self.page(**self.open_invoice_query()),
+                    self.low_stock_query(),
+                ),
+            )
         return await self.run(lambda: getattr(self, name)(**params))
 
-    async def invoice_rows(self, *, side=None, date_from=None, date_to=None):
+    def invoice_query(self, *, side=None, date_from=None, date_to=None):
         where, params = period(date_from, date_to)
         if side:
             where += " AND i.invoice_type IN (?,?)"
             params += [side, side + "_credit"]
-        async for row in self.rows(
-            "i.id,i.invoice_type,i.invoice_date,i.party_id,i.party_name,"
+        return {
+            "projection": "i.id,i.invoice_type,i.invoice_date,i.party_id,i.party_name,"
             "CAST(i.total_base AS TEXT) AS total_base",
-            "invoicing_invoices i",
-            POSTED + where,
-            (self.org_id, *params),
-            cursors=("i.rowid",),
-        ):
+            "source": "invoicing_invoices i",
+            "where": POSTED + where,
+            "params": (self.org_id, *params),
+            "cursors": ("i.rowid",),
+        }
+
+    async def invoice_rows(self, *, initial_rows=None, **params):
+        async for row in self.rows(**self.invoice_query(**params), initial_rows=initial_rows):
             yield row
 
-    async def open_invoices(self, side=None):
+    def open_invoice_query(self, side=None):
         where, params = "i.org_id=? AND i.status IN ('posted','partial')", [self.org_id]
         if side:
             where += " AND i.invoice_type=?"
@@ -75,15 +95,18 @@ class Reports(ConsistentReader):
             "(e.source_kind='credit' AND EXISTS(SELECT 1 FROM invoicing_invoices c "
             "WHERE c.id=e.source_id AND c.status IN ('posted','partial','paid'))))"
         )
-        current = None
-        async for row in self.rows(
-            "i.id,i.invoice_type,i.due_date,CAST(i.total_base AS TEXT) AS total_base,"
+        return {
+            "projection": "i.id,i.invoice_type,i.due_date,CAST(i.total_base AS TEXT) AS total_base,"
             "CAST(COALESCE(e.amount_base,0) AS TEXT) AS cleared_base",
-            source,
-            where,
-            tuple(params),
-            cursors=("i.rowid", "COALESCE(e.rowid,0)"),
-        ):
+            "source": source,
+            "where": where,
+            "params": tuple(params),
+            "cursors": ("i.rowid", "COALESCE(e.rowid,0)"),
+        }
+
+    async def open_invoices(self, side=None, *, initial_rows=None):
+        current = None
+        async for row in self.rows(**self.open_invoice_query(side), initial_rows=initial_rows):
             if current is None or row["id"] != current["id"]:
                 if current:
                     yield current
@@ -92,13 +115,10 @@ class Reports(ConsistentReader):
         if current:
             yield current
 
-    async def dashboard(self):
-        day = today()
-        month = day.replace(day=1)
-        # Twelve complete weeks plus the current week, ending at this Monday.
-        start = day - timedelta(days=day.weekday() + 84)
+    async def dashboard(self, day, pages):
+        month, start = dashboard_dates(day)
         totals, opened, weeks = {"ar": 0, "ap": 0}, {"ar": 0, "ap": 0}, {}
-        async for row in self.invoice_rows(date_from=min(month, start)):
+        async for row in self.invoice_rows(date_from=min(month, start), initial_rows=pages[0]):
             side = row["invoice_type"][:2]
             amount = int(row["total_base"]) * (-1 if row["invoice_type"].endswith("_credit") else 1)
             invoice_date = date.fromisoformat(row["invoice_date"])
@@ -107,23 +127,11 @@ class Reports(ConsistentReader):
             week = (invoice_date - timedelta(days=invoice_date.weekday())).isoformat()
             point = weeks.setdefault(week, {"ar": 0, "ap": 0})
             point[side] += amount
-        async for row in self.open_invoices():
+        async for row in self.open_invoices(initial_rows=pages[1]):
             opened[row["invoice_type"][:2]] += row["open_base"] * (
                 -1 if row["invoice_type"].endswith("_credit") else 1
             )
-        low = await self.db.first(
-            "SELECT CAST((SELECT COUNT(*) FROM catalog_products p WHERE p.org_id=? "
-            "AND p.status='active' AND p.type='goods' AND p.track_inventory=1 "
-            "AND p.min_stock>0) AS TEXT) AS products,"
-            "CAST((SELECT COUNT(*) FROM inventory_warehouses WHERE org_id=?) "
-            "AS TEXT) AS warehouses,"
-            "CAST((SELECT COUNT(*) FROM inventory_stock s JOIN catalog_products p "
-            "ON p.id=s.product_id AND p.org_id=s.org_id JOIN inventory_warehouses w "
-            "ON w.id=s.warehouse_id AND w.org_id=s.org_id WHERE s.org_id=? "
-            "AND p.status='active' AND p.type='goods' AND p.track_inventory=1 "
-            "AND p.min_stock>0 AND s.qty_on_hand>p.min_stock) AS TEXT) AS above_min",
-            (self.org_id, self.org_id, self.org_id),
-        )
+        low = pages[2][0]
         points = []
         for index in range(13):
             week = (start + timedelta(days=index * 7)).isoformat()
@@ -140,6 +148,21 @@ class Reports(ConsistentReader):
             open_ap=cents(opened["ap"]),
             low_stock_count=int(low["products"]) * int(low["warehouses"]) - int(low["above_min"]),
             weeks=points,
+        )
+
+    def low_stock_query(self):
+        return Statement(
+            "SELECT CAST((SELECT COUNT(*) FROM catalog_products p WHERE p.org_id=? "
+            "AND p.status='active' AND p.type='goods' AND p.track_inventory=1 "
+            "AND p.min_stock>0) AS TEXT) AS products,"
+            "CAST((SELECT COUNT(*) FROM inventory_warehouses WHERE org_id=?) "
+            "AS TEXT) AS warehouses,"
+            "CAST((SELECT COUNT(*) FROM inventory_stock s JOIN catalog_products p "
+            "ON p.id=s.product_id AND p.org_id=s.org_id JOIN inventory_warehouses w "
+            "ON w.id=s.warehouse_id AND w.org_id=s.org_id WHERE s.org_id=? "
+            "AND p.status='active' AND p.type='goods' AND p.track_inventory=1 "
+            "AND p.min_stock>0 AND s.qty_on_hand>p.min_stock) AS TEXT) AS above_min",
+            (self.org_id, self.org_id, self.org_id),
         )
 
     async def by_party(self, side, date_from=None, date_to=None):

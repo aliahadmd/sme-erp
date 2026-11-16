@@ -436,7 +436,7 @@ fresh authorization after the mutex, durable receipt claims, uncertain-response
 reconciliation, exact decimal transport, all revision guards and the one atomic
 write batch. A changed query count alone does not prove the native targets pass.
 
-### Batching changes prepared for native remeasurement
+### Command batching and second native measurement
 
 The command plan now batches bounded organization/settings/numbering/mapped-
 account references once within the current command. Aggregate headers/lines,
@@ -460,6 +460,54 @@ The same local API trace now reports:
 | invoicing/payments | 17 | 8 |
 
 These counts include the independent HTTP/coordinator authorization, receipt
-checks and one atomic commit. They demonstrate fewer boundaries, not accepted
-native latency. Deployment and the unchanged native profiles must verify that
-the new code meets the original targets. No cross-request cache was added.
+checks and one atomic commit. No cross-request cache was added.
+
+The second native run (`71556363c93a48d88bba8f0dcf64a771`) began at 15:41:52 UTC
+on 15 November, after direct CLI deployment of commit `6370e756f11d`, version
+`63700716-6c5b-40bc-84b8-ef288eaa7720`. The unchanged profiles complete all 18
+linked cycles and all 126 commands, but capacity remains **failed**:
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 2.45 s | 10.26 s | 9.81 s |
+| order-confirm | 0.83 s | 4.66 s | 7.99 s |
+| delivery-create | 1.61 s | 5.34 s | 8.44 s |
+| delivery-post | 1.86 s | 4.95 s | 9.86 s |
+| invoice-create | 1.08 s | 5.63 s | 10.35 s |
+| invoice-post | 1.63 s | 5.14 s | 9.77 s |
+| payment-create | 1.48 s | 4.95 s | 9.18 s |
+| trial-balance | 3.65 s | 3.74 s | 4.12 s |
+| stock | 0.43 s | 0.55 s | 0.56 s |
+| dashboard | 1.76 s | 1.78 s | 2.18 s |
+| cycle | 10.00 s | 37.51 s | 58.80 s |
+
+Of 255 reports, five dashboards return 503 with the captured code `report_busy`:
+one in normal and four in burst. All other reports return 200. Baseline passes;
+normal and burst fail both their respective latency and zero-error targets.
+These small samples describe this bounded run, not a population percentile or
+saturation limit. Faster invoice posting does not make the full profile pass.
+
+Exact cleanup finished at 15:48:25 UTC. The reused warehouse is empty, every
+original account balance and the complete dashboard match the pre-run values,
+and numbering/FKs, empty assertions, health and owned-session revocation pass.
+Retained history contains 748 journals, 7,628 journal lines, 78 invoices,
+70 payments and 997 stock moves. No refresh cookie remains in the checkpoint.
+
+### Dashboard consistency window
+
+The dashboard previously read its epoch, invoice pages, clearing-effect pages,
+low-stock counts and final epoch through separate sequential boundaries. Under
+concurrent commits it exhausted all three consistency attempts and correctly
+returned `report_busy`. Initial invoice/clearing pages, low-stock counts and
+the initial epoch now share one native read batch. Continuation pages remain
+bounded at 500 rows; all money still crosses D1 as text and aggregates exactly
+in Python. A separate final epoch comparison and the same three-attempt limit
+remain mandatory. [D1 batch semantics](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
+
+A dashboard without continuation pages now needs two D1 boundaries rather than
+five. Regression cases commit after the initial batch and between continuation
+pages, requiring discarded results and a fresh attempt; continuous changes
+must still produce `report_busy` after three attempts. Native remeasurement is
+required before claiming this resolves the observed failures. The full quality
+gate passes 343 backend and 39 frontend tests, metadata checks, lint/format,
+vendoring and the app-staging Worker/SPA build.

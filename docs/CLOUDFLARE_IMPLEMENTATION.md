@@ -1369,6 +1369,21 @@ dashboard 503, then rerun the same profiles; see the complete evidence in
 
 ## Work still required
 
+The second linked-trade run uses command-local batched reads, deployed directly
+through the Cloudflare CLI as commit `6370e756f11d`. All 126 commands and exact
+reversals pass. Invoice-post p95 improves to 5.14 seconds with four writers and
+9.77 seconds with eight, but other command tails still miss the unchanged
+targets. Five of 255 reports return the explicit `report_busy` consistency error.
+Thus this broader capacity acceptance remains failed. Cleanup restores the
+entire pre-run dashboard and balances with zero fixture stock and revoked owned
+sessions; retained history now has 748 journals and 7,628 lines.
+
+The next change batches the dashboard's initial bounded pages and starting
+epoch while retaining its final epoch guard, exact arithmetic and retry limit.
+Native testing remains required. The scheduled backups on both isolated
+environments completed successfully after the second trade run, at 18:04 UTC
+on 15 November; neither recovery target was reset.
+
 The full ERP migration remains incomplete. Next, complete
 larger-history and representative document capacity, production alert replication,
 live ERP email acceptance/delivery, complete browser/role parity, direct CLI release verification,
