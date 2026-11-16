@@ -602,3 +602,36 @@ not replace the client measurements. Per-phase attribution of expensive
 requests is still unproven: profile CPU and coordinator wait/auth/planning/
 commit costs before selecting another optimization. Do not infer that D1 SQL,
 network delay or cold initialization alone explains the outliers.
+
+### First-request route metadata diagnosis
+
+A host `cProfile` capture of the real ASGI API on locked FastAPI 0.162.5 finds
+142 `_EffectiveRouteContext.from_api_route` / `_populate_api_route_state`
+builds during a first order request. The request intentionally names a missing
+contact and returns the expected 422 without committing business data. Building
+those contexts takes approximately 71 ms of the profiled 87 ms request; the
+same request then takes approximately 3 ms with no context builds. These host
+times are **not Worker latency measurements**.
+
+Resolving the final named route through `app.url_path_for('meta')` performs
+that pure setup before serving requests (31 ms unprofiled in the host sample),
+after which the first request takes about 3 ms. The application factory now
+does that resolution during module initialization so the metadata can be part
+of Python Workers' deployment snapshot. No handler or binding I/O is executed,
+and no business data or authorization result is cached. A regression rejects
+binding access during initialization and further dependency-metadata setup
+during first protected requests; authentication, document creation, reporting
+and immediate logout revocation still pass.
+[Python deployment snapshots](https://developers.cloudflare.com/workers/languages/python/how-python-workers-work/)
+
+The pinned CLI has no runtime-profile command, so a read-only native CPU capture
+used the connected API on exact version `e81ce0eb-0c2b-4c7d-b09c-724400575572`.
+106 readiness requests returned 200. The five-second capture contains only a
+1 ms idle sample: it does **not** identify the expensive order-request frames.
+The local causal comparison supports trying eager route initialization, but
+native startup validation and unchanged capacity profiles are still required.
+[Native profiling scope](https://developers.cloudflare.com/workers/observability/profiling-in-production/)
+
+The complete local gate passes 348 backend and 39 frontend tests, including
+the no-I/O/first-request regression, metadata checks, lint/formatting and the
+locked Worker/SPA build. No native performance improvement is claimed yet.

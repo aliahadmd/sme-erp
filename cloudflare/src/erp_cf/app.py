@@ -77,4 +77,8 @@ def create_app(test_environment=None):
             "environment": str(environment(request).ENVIRONMENT),
         }
 
+    # FastAPI builds included-router dependency/response metadata lazily. Resolve
+    # our final route through its public URL API so this pure setup is included
+    # in the Python Worker's deploy-time snapshot, rather than its first request.
+    app.url_path_for("meta")
     return app
