@@ -635,3 +635,59 @@ native startup validation and unchanged capacity profiles are still required.
 The complete local gate passes 348 backend and 39 frontend tests, including
 the no-I/O/first-request regression, metadata checks, lint/formatting and the
 locked Worker/SPA build. No native performance improvement is claimed yet.
+
+### Fifth native measurement: initialized routing metadata
+
+Direct CLI deployment of `5c40fd822114` produces verification version
+`437f95c9-8d26-417a-a500-00608c34e9cb` at 12:34:15 UTC on 16 November,
+with reported startup 4,371 ms. Run `ae80ee7a704b44c19d4c9c8515e9ab63`
+begins at 12:34:50 UTC. All 18 cycles, 126 commands and 235 reports succeed
+without errors. **Baseline and burst pass; normal remains failed.**
+
+| Operation | Baseline p95 | Normal p95 | Burst p95 |
+|---|---:|---:|---:|
+| order-create | 2.77 s | 5.64 s | 8.52 s |
+| order-confirm | 1.29 s | 3.81 s | 6.92 s |
+| delivery-create | 1.47 s | 5.26 s | 8.61 s |
+| delivery-post | 2.33 s | 5.76 s | 9.40 s |
+| invoice-create | 1.09 s | 11.19 s | 8.69 s |
+| invoice-post | 1.34 s | 4.77 s | 8.99 s |
+| payment-create | 1.35 s | 5.31 s | 7.04 s |
+| trial-balance | 3.44 s | 4.79 s | 4.99 s |
+| stock | 0.60 s | 0.84 s | 1.25 s |
+| dashboard | 1.03 s | 0.96 s | 1.30 s |
+| cycle | 10.11 s | 34.39 s | 51.46 s |
+
+Cleanup completes at 12:41:28 UTC. All original balances and the complete
+dashboard are restored, fixture stock is zero, numbering/FKs and empty
+assertions pass, health is `ok` and both owned sessions are revoked. No refresh
+cookie remains. Retained history has 1,078 journals, 8,288 lines, 132 invoices,
+124 payments, 1,339 stock moves and 3,003 command receipts.
+
+Read-only telemetry retrieves 18 native order-create and 18 invoice-create
+fetch records on the exact deployed version during the measurement window.
+Order CPU has a maximum of 606 ms; invoice CPU has a maximum of 84 ms. The
+eight normal-profile native invoice records have wall times at most 4,318 ms,
+while one client invoice sample takes 11,185.5 ms. Those records lack a saved
+client correlation ID, so a specific request and its extra delay are not yet
+matched. Do not assign that gap to the application or transport without stronger
+evidence, and do not substitute server timings for the unchanged client gate.
+
+The verifier now records validated Cloudflare Ray IDs, API request IDs, HTTP
+version, UTC start/receive times and bounded HTTPcore transport event timings.
+It never retains trace-info objects, headers, credentials or message bodies in
+these diagnostic fields. Profiles, HTTP protocol, retries and target rules are
+unchanged. [HTTPcore trace extension](https://www.encode.io/httpcore/extensions/#trace)
+
+The diagnostic edit's first local run caught a helper-name collision. Its
+exception also exposed unjoined concurrent verifier writers. Measurement now
+cancels and joins both reader tasks and individual writer tasks before returning,
+including unexpected reader failure; a regression covers asynchronous writer
+cleanup. The live native run retained its original in-memory state, finished
+exact cleanup and saved the correct checkpoint with revoked sessions. No
+business load is restarted from the transient local-test artifact.
+
+The full local gate now passes 349 backend and 39 frontend tests, including
+the four verifier cases, plus metadata, lint/formatting and the locked build.
+Transport diagnostics require no Worker deployment; the next run uses the same
+native `5c40fd822114` version so its only change is client-side observation.

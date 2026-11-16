@@ -1,5 +1,6 @@
 """Exercise the remote verifier's compensation with the real local ERP API."""
 
+import asyncio
 import importlib
 import json
 import uuid
@@ -140,3 +141,42 @@ async def test_trade_verifier_reconciles_and_reverses_owned_work(
         await resumed.logout()
         assert await native("SELECT COUNT(*) AS n FROM accounting_journal_entries") == before_resume
         assert resumed.proof["cleaned"] and "owned_session" not in resumed.proof
+
+
+async def test_unexpected_reader_failure_joins_all_owned_writers_before_returning(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    verifier = importlib.import_module("verify_trade_capacity_remote")
+    monkeypatch.setattr(verifier, "save", lambda proof: None)
+    proof = {"measurements": [], "commands": [], "run": "task-lifetime"}
+    experiment = verifier.Experiment(proof, None)
+    monkeypatch.setattr(experiment, "entity", lambda name: {"id": name})
+    active, started = 0, 0
+
+    async def waiting_command(*args, **kwargs):
+        nonlocal active, started
+        active += 1
+        started += 1
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            active -= 1
+
+    def broken_reader(kind):
+        raise RuntimeError("Unexpected reader setup failure")
+
+    monkeypatch.setattr(experiment, "command", waiting_command)
+    monkeypatch.setattr(verifier, "start_measurement", broken_reader)
+    before = asyncio.all_tasks()
+    try:
+        with pytest.raises(RuntimeError, match="reader setup"):
+            await experiment.measure(
+                {"name": "normal", "writers": 4, "cycles_each": 1, "readers": 1}
+            )
+        assert started == 4 and active == 0
+    finally:
+        # Keep this negative regression isolated even if it detects a task leak.
+        remaining = asyncio.all_tasks() - before
+        for task in remaining:
+            task.cancel()
+        await asyncio.gather(*remaining, return_exceptions=True)

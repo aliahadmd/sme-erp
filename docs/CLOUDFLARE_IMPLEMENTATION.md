@@ -38,7 +38,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   runtime/proof schema applied. It contains no migrated production records.
 - The proof, persistence foundation, authentication, management, accounting,
   orders/quotations, inventory, invoicing/payments, HR, reporting, background delivery
-  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 348 local backend
+  AI, mail delivery, full backup/recovery, operations and fresh demo/migrations have passed 349 local backend
   tests. The frontend has passed 39 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
@@ -1397,6 +1397,16 @@ history has 968 journals and 8,068 lines, health is `ok`, and both owned session
 are revoked. Native timing records show some CPU-heavy order requests;
 per-phase profiling is needed before another performance change. All results,
 including failures, are in [the capacity report](CLOUDFLARE_CAPACITY.md).
+
+The route-initialization deployment `5c40fd822114` passes the fifth native
+linked-trade baseline and burst profiles, with all 126 commands and 235 reports
+succeeding. Normal load still misses its latency targets, including one
+11.19-second invoice-create. Exact cleanup restores all balances/dashboard
+values and zero fixture stock; both owned sessions are revoked and health is
+`ok`. Native timings and client timings need request-level correlation before
+attributing that outlier. The verifier now captures bounded transport events
+and validated correlation IDs, and joins all concurrent tasks on unexpected
+failure. Its full local gate passes 349 backend and 39 frontend tests.
 
 ## Work still required
 

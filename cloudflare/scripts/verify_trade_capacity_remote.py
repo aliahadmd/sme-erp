@@ -12,8 +12,10 @@ import base64
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -46,6 +48,37 @@ KINDS = [
     "stock",
     "dashboard",
 ]
+
+
+def start_measurement(kind):
+    started = time.perf_counter()
+    sample = {
+        "kind": kind,
+        "status": None,
+        "started_at": datetime.now(UTC).isoformat(),
+        "transport": [],
+    }
+
+    async def trace(name, _info):
+        # Trace info includes request headers and response objects. Keep only
+        # bounded event labels/times, never info, credentials or message content.
+        if len(sample["transport"]) < 64:
+            sample["transport"].append(
+                {"event": name[:128], "ms": round((time.perf_counter() - started) * 1000, 1)}
+            )
+
+    return sample, started, {"trace": trace}
+
+
+def correlate(sample, response):
+    sample["received_at"] = datetime.now(UTC).isoformat()
+    sample["http_version"] = response.http_version
+    ray = response.headers.get("cf-ray", "")
+    if re.fullmatch(r"[0-9a-f]{16,32}-[A-Z]{3}", ray):
+        sample["cf_ray"] = ray
+    request_id = response.headers.get("x-request-id", "")
+    with suppress(ValueError):
+        sample["request_id"] = str(uuid.UUID(request_id))
 
 
 def save(proof):
@@ -127,19 +160,23 @@ class Experiment:
             self.proof["commands"].append(record)
         record["submitted"] = True
         save(self.proof)
-        sample = {"kind": kind, "status": None}
-        started = time.perf_counter()
+        sample, started, extensions = start_measurement(kind)
         try:
             for attempt in range(1 if self.phase == "measure" else 3):
                 try:
                     response = await self.client.request(
-                        method, path, json=body, headers={"Idempotency-Key": record["key"]}
+                        method,
+                        path,
+                        json=body,
+                        headers={"Idempotency-Key": record["key"]},
+                        extensions=extensions if self.phase == "measure" else {},
                     )
                     break
                 except httpx.TransportError:
                     if self.phase == "measure" or attempt == 2:
                         raise
             sample["status"] = record["status"] = response.status_code
+            correlate(sample, response)
             assert response.status_code == expected, f"{kind}: HTTP {response.status_code}"
             result = response.json() if response.content else None
             record["result"] = result
@@ -323,11 +360,11 @@ class Experiment:
             ]
             for number in range(120):
                 kind, path = paths[(number + index) % len(paths)]
-                sample = {"kind": kind, "status": None}
-                started = time.perf_counter()
+                sample, started, extensions = start_measurement(kind)
                 try:
-                    response = await self.client.get(path)
+                    response = await self.client.get(path, extensions=extensions)
                     sample["status"] = response.status_code
+                    correlate(sample, response)
                     if response.status_code != 200:
                         try:
                             sample["error_code"] = str(
@@ -360,14 +397,28 @@ class Experiment:
                 if number >= 8 and done.is_set():
                     return
 
+        writer_tasks = [asyncio.create_task(writer(i)) for i in range(profile["writers"])]
+
         async def writers():
             try:
-                await asyncio.gather(*(writer(i) for i in range(profile["writers"])))
+                await asyncio.gather(*writer_tasks)
             finally:
                 done.set()
 
         print("Measuring linked trade " + profile["name"], flush=True)
-        await asyncio.gather(writers(), *(reader(i) for i in range(profile["readers"])))
+        tasks = [
+            asyncio.create_task(writers()),
+            *(asyncio.create_task(reader(i)) for i in range(profile["readers"])),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            # A reader/setup exception must not leave writers running beyond
+            # this experiment (or beyond a local test's isolated bindings).
+            for task in [*tasks, *writer_tasks]:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, *writer_tasks, return_exceptions=True)
         measurement["summary"] = self.summarize(profile, measurement)
         save(self.proof)
         print(json.dumps({"profile": profile["name"], **measurement["summary"]}), flush=True)
