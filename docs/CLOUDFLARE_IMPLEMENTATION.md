@@ -1528,6 +1528,12 @@ custom domain, required session origin and closed bootstrap. The final trigger
 deployment reconciled the custom domain, Queue consumers and Cron and disabled
 the original workers.dev hostname and preview URLs.
 
+The final CLI release deploys commit `c421eb6` as version
+`065cf83a-305b-405b-9e2a-64b1e972941e`, serving 100% from 15:44 local time.
+The deployed config owns the domain and trigger settings. The migration plan
+finds 16 matching migration receipts and zero pending migrations. The R2
+bucket has neither an enabled public URL nor a custom domain.
+
 Cloudflare required removal of the existing Tunnel CNAME before attaching the
 Worker Custom Domain. The prior CNAME was recorded and the hostname now resolves
 through the Cloudflare-managed Worker record. No other hostname or Tunnel was
@@ -1544,6 +1550,12 @@ was healthy, and the latest R2 archive was listed through its authenticated
 API. That capture completed on 23 November at 02:04 local time with 1,769 rows.
 The event queue and dead-letter consumer target the live Worker. All three
 previously approved Cloudflare Monitors remain active on the promoted Worker.
+
+The final release limits login IP addresses in audit results to superusers.
+The targeted management and migration suites pass all 11 tests. Public
+operator and viewer smoke checks pass again on the final release, including
+viewer audit redaction, cookie rotation and logout. Staging readiness also
+passes on its separate Worker.
 
 The shared public demo uses test mode for invoice email and leaves Workers AI
 disabled. The private verification environment previously exercised native AI
