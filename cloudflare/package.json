@@ -8,9 +8,10 @@
     "build": "node scripts/build.mjs",
     "build:app-staging": "CF_MODE=app-staging node scripts/build.mjs",
     "build:demo-staging": "CF_MODE=demo-staging node scripts/build.mjs",
+    "build:production": "CF_MODE=production node scripts/build.mjs",
     "deploy:staging": "cf deploy --prebuilt --mode staging --secrets-file .secrets.staging.json",
     "deploy:app-staging": "cf deploy --prebuilt --mode app-staging --secrets-file .secrets.app-staging.json",
-    "deploy:demo-staging": "cf deploy --prebuilt --mode demo-staging --secrets-file .secrets.demo-staging.json",
+    "deploy:production": "cf deploy --prebuilt --mode production --secrets-file .secrets.production.json",
     "test": "uv run pytest -q",
     "lint": "uv run ruff check src tests scripts",
     "quality": "node scripts/quality.mjs"

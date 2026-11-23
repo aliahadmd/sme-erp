@@ -1,12 +1,13 @@
 import { bindings, defineConfig, exports, triggers } from "cf/config";
 
 export default defineConfig(({ mode }) => {
-  if (!["staging", "app-staging", "demo-staging"].includes(mode)) {
-    throw new Error("Select staging (proof), app-staging (verification), or demo-staging.");
+  if (!["staging", "app-staging", "demo-staging", "production"].includes(mode)) {
+    throw new Error("Select staging (proof), app-staging (verification), demo-staging (local build), or production.");
   }
   const proof = mode === "staging";
-  const demo = mode === "demo-staging";
-  const initializing = demo && process.env.ERP_DEMO_BOOTSTRAP === "true";
+  const production = mode === "production";
+  const demo = production || mode === "demo-staging";
+  const initializing = mode === "demo-staging" && process.env.ERP_DEMO_BOOTSTRAP === "true";
   const restartProof = mode === "app-staging" && process.env.ERP_RESTART_PROOF === "true";
   const application = demo ? "erp-demo-staging-20261114" : "erp-migration-staging-20261113";
   const eventQueue = demo ? "erp-demo-staging-events-20261114" : "erp-staging-events-20261113";
@@ -74,8 +75,8 @@ export default defineConfig(({ mode }) => {
         // Switch only under a verified D1 write pause; generations are not shards.
         COMMAND_COORDINATOR_GENERATION: bindings.text(demo ? "" : "apac-v1"),
         COMMAND_LOCATION_HINT: bindings.text("apac"),
-        ENVIRONMENT: bindings.text("staging"),
-        PUBLIC_ORIGIN: bindings.text(`https://${application}.aliahad.workers.dev`),
+        ENVIRONMENT: bindings.text(production ? "production" : "staging"),
+        PUBLIC_ORIGIN: bindings.text(production ? "https://erp.aliahad.com" : `https://${application}.aliahad.workers.dev`),
         ORG_ID: bindings.text(demo ? "01a1d6bf-eca3-7654-b225-ae37c723ed96" : "019a78e1-6d80-7000-8000-000000000001"),
         BOOTSTRAP_ENABLED: bindings.text(demo ? String(initializing) : "true"),
         RESTART_PROOFS_ENABLED: bindings.text(String(restartProof)),
@@ -100,7 +101,7 @@ export default defineConfig(({ mode }) => {
         AI_BUDGETS: bindings.durableObject({
           worker: application, exportName: "AIBudget",
         }),
-        AI_ENABLED: bindings.text("true"),
+        AI_ENABLED: bindings.text(String(!production)),
         AI_MODEL: bindings.text("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
         AI_DAILY_REQUEST_LIMIT: bindings.text("200"),
         BACKUPS: bindings.r2({ name: demo ? "erp-demo-staging-backups-20261114" : "erp-staging-backups-20261113" }),
