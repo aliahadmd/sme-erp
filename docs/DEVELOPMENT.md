@@ -1,7 +1,7 @@
 # Developer guide — SME ERP
 
-> This guide describes the current Docker/VPS reference runtime. The migration's
-> Python Workers/D1 implementation, demo environments and build commands are in
+> This guide documents the legacy Docker/VPS reference runtime. The live demo
+> runs on Cloudflare. For current architecture and deployment commands, see
 > [the Cloudflare developer guide](CLOUDFLARE_DEVELOPMENT.md).
 
 > Looking for the live demo and login details? See the [project README](../README.md).
@@ -99,7 +99,7 @@ services — no code changes.
 - Backups: prod worker cron `backup_database` (02:30, GFS retention) and
   `prune_audit_logs` (03:15, `AUDIT_RETENTION_DAYS`); dev: `make backup`.
 
-## Production deployment (single demo server + Cloudflare Tunnel)
+## Legacy deployment reference (Docker and Cloudflare Tunnel)
 
 Everything runs in Docker; **the only published port is the web container on
 `127.0.0.1:$PROXY_PORT`** (loopback — never `0.0.0.0`, Docker bypasses host

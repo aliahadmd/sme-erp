@@ -1,11 +1,10 @@
 # Cloudflare migration implementation
 
-Status: in progress. The active objective is the complete migration described in
-[the architecture report](CLOUDFLARE_MIGRATION_REPORT.md), preserving the ERP's
-functionality. A fresh demo database is authorized. This file records evidence
-and outstanding work; the feasibility slice is a gate, not the final deliverable.
+Status: live. The public demo at `erp.aliahad.com` runs on Cloudflare Workers
+with a fresh, seeded D1 database. The architecture and scope are in the
+[migration report](CLOUDFLARE_MIGRATION_REPORT.md).
 
-Last updated: 17 November 2026 (UTC+08:00). The architecture remains Python Workers with
+Last updated: 23 November 2026 (UTC+08:00). The architecture remains Python Workers with
 FastAPI/Pydantic and D1. The synchronous SQLAlchemy adapter passed the isolated
 runtime proof; the application currently uses typed native D1 repositories and
 batches for explicit persistence and atomic multi-statement commands. No
@@ -16,13 +15,13 @@ complete architecture rewrite is needed following the language/ORM discussion.
 - [x] Prove basic Python/FastAPI/Pydantic and SQLAlchemy D1 adapter execution in Workers.
 - [x] Prove exact 18-digit storage/transport, guarded atomic commands, concurrency,
       idempotency, and exact backup/restore on D1.
-- [ ] Adapt the full API and business modules to the new persistence/runtime.
-- [ ] Replace Redis/arq with D1 sessions, Durable Objects, Queues and Cron.
-- [ ] Connect private R2, Email Sending and Workers AI with disabled/test modes.
-- [ ] Preserve frontend contracts, roles, workflows and browser behavior.
-- [ ] Configure isolated environments, builds, secrets, observability and recovery.
-- [ ] Deploy and verify the fresh Cloudflare demo before domain cutover.
-- [ ] Verify cutover and retire dependencies on the old runtime safely.
+- [x] Adapt the full API and business modules to the new persistence/runtime.
+- [x] Replace Redis/arq with D1 sessions, Durable Objects, Queues and Cron.
+- [x] Connect private R2, Email Sending and Workers AI with disabled/test modes.
+- [x] Preserve frontend contracts, roles, workflows and browser behavior.
+- [x] Configure isolated environments, builds, secrets, observability and recovery.
+- [x] Deploy and verify the fresh Cloudflare demo before domain cutover.
+- [x] Verify cutover and remove the live hostname’s dependency on the old runtime.
 
 ## Tooling evidence
 
@@ -42,7 +41,7 @@ complete architecture rewrite is needed following the language/ORM discussion.
   tests. The frontend has passed 41 tests, its TypeScript/
   Vite build and lint. Backend lint, formatting, target-wheel installation,
   generated-schema checks and Build Output validation also pass.
-- The existing ERP production deployment and production database are unchanged.
+- The cutover and production verification are recorded at the end of this log.
 
 ## Observed remote evidence
 
@@ -1512,12 +1511,43 @@ network availability. The independent optional
 also succeeds for commit `9c59ad78e6abbc14b81affa52639195d48142580`; it performs
 no deployment. Both actual deployments used the Cloudflare CLI.
 
-## Work still required
+## Public Cloudflare cutover
 
-The full ERP migration remains incomplete. Next, complete
-larger-history and representative document capacity, production alert replication,
-live ERP email acceptance/delivery, complete browser/role parity, direct CLI release verification,
-production environment, cutover and
-safe old-runtime retirement. The completed-payment coordinator reset/response-loss
-case passes; broader Worker restart, in-flight failure, frontend recovery and
-capacity proofs remain open. The synthetic proof is not the migrated ERP.
+On 23 November the legacy public hostname returned HTTP 530, Cloudflare Tunnel
+error 1033. Cloudflare reported the connector as down. The independent ERP
+Worker passed D1 readiness, authenticated operations health and its latest R2
+backup check before promotion.
+
+Build commit `dfa4adf` deployed version
+`913da4ad-a2f6-4fcf-a313-b3cb7214876d` directly with the Cloudflare CLI.
+Cloudflare reports `cf_cli` and 100% traffic. Production serves the verified
+React assets and FastAPI application with the existing Cloudflare demo's D1,
+private R2, Queues, Cron and Durable Objects. The financial verification Worker
+and recovery databases remain separate. The production profile establishes the
+custom domain, required session origin and closed bootstrap. The final trigger
+deployment reconciled the custom domain, Queue consumers and Cron and disabled
+the original workers.dev hostname and preview URLs.
+
+Cloudflare required removal of the existing Tunnel CNAME before attaching the
+Worker Custom Domain. The prior CNAME was recorded and the hostname now resolves
+through the Cloudflare-managed Worker record. No other hostname or Tunnel was
+modified. Legacy source and data are retained as a reference. The prior Tunnel
+was unavailable before the move and is not a verified rollback path. Future
+release recovery uses a known-good build with the production configuration.
+
+A short smoke check on the public hostname confirmed HTTPS, the SPA and assets,
+D1 readiness, the public-origin check, secure cookie refresh and sign-out.
+All seven published demo roles and the private operator signed in and out.
+The former shared administrator password was rejected, and public roles lack
+user, role and settings administration. Trial balance balanced, the scheduler
+was healthy, and the latest R2 archive was listed through its authenticated
+API. That capture completed on 23 November at 02:04 local time with 1,769 rows.
+The event queue and dead-letter consumer target the live Worker. All three
+previously approved Cloudflare Monitors remain active on the promoted Worker.
+
+The shared public demo uses test mode for invoice email and leaves Workers AI
+disabled. The private verification environment previously exercised native AI
+and the mail Queue and receipt pipeline. External mail delivery remains
+unverified. Prior linked-trade capacity failures remain in the capacity report.
+The final cutover used build, routing and smoke checks per the user's request
+to skip further extended tests. These results cover the live demo migration.

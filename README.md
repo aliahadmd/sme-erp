@@ -17,7 +17,6 @@ Each role sees a different app — try two or three to see how permissions work.
 
 | Role | Email | Password | What this person can do |
 |---|---|---|---|
-| **Administrator** | `admin@example.com` | `8abb04127570a863` | Everything, including users, roles and settings |
 | Accountant | `accountant@example.com` | `dc920aa1846e` | Invoices, payments, journal, trial balance, reports |
 | Sales | `sales@example.com` | `dc920aa1846e` | Customers, quotations, sales orders, customer invoices |
 | Purchasing | `purchasing@example.com` | `dc920aa1846e` | Suppliers, purchase orders, goods receipts |
@@ -28,31 +27,24 @@ Each role sees a different app — try two or three to see how permissions work.
 
 > **This is a shared demo.** Other visitors use the same accounts, so data you
 > see may change and may be reset at any time. Please don't enter real
-> personal or company information.
+> personal or company information. The operator account is private. Invoice email
+> runs in test mode without delivering messages to recipients.
 
 ---
 
 ## A 5-minute tour
 
-Sign in as **Administrator** and follow the money from a sale to the books:
+Follow a sale from order to books using the demo roles:
 
-1. **Dashboard** — sales this month, open receivables and payables, low-stock
-   alerts and a 12-week sales vs purchases chart, all live from the books.
-2. **Sales → New sales order** — pick a customer and products; prices, discounts
-   and tax are calculated as you type. **Save draft**, then **Confirm**.
-3. **Inventory → Deliveries → New delivery** — choose the order and **Post** it.
-   Stock goes down and the cost of goods sold is booked automatically.
-4. **Invoicing → New invoice** — create it *from the order* (only what hasn't
-   been invoiced yet is copied), then **Post**. It gets its official number.
-5. **Invoicing → Payments → Record payment** — money in from the customer. The
-   payment is matched to open invoices oldest-first; partial payments work too.
-6. **Accounting → Journal entries** — every step above already created a
-   balanced journal entry. **Trial balance** shows the books always balance.
-7. **Reports** — sales by customer, purchases by supplier, stock valuation,
-   aging and tax summary; export any of them to CSV.
-
-Then sign out and sign in as **Sales** or **Viewer** to see the same company
-through a narrower set of permissions.
+1. **Viewer** opens the dashboard to see sales, open balances and low stock.
+2. **Sales** creates and confirms a sales order for a customer.
+3. **Warehouse** posts a delivery from the order. The app reduces stock and books
+   the cost of goods sold.
+4. **Sales** creates a draft invoice from the order. **Accountant** posts it and
+   records the payment.
+5. **Accountant** opens the journal and trial balance to inspect the postings.
+6. **HR** can approve or reject leave. **Employee** can request and view their own
+   leave.
 
 ---
 
@@ -96,19 +88,8 @@ journal entry are saved together or not at all; every change is audit-logged.
 
 ## Technology
 
-**Frontend:** React 19, TypeScript, Vite, TanStack Query, Tailwind CSS, shadcn/ui ·
-**Backend:** Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic ·
-**Data:** PostgreSQL 17, Redis 7, S3-compatible storage ·
-**Operations:** Docker, background job worker, nightly backups, automated tests and CI,
-automatic deployment on every push.
-
-The public deployment still uses this Docker stack. The Cloudflare migration
-retains Python/FastAPI and React, with native D1 repositories, Queues, Durable
-Objects and Workers AI verified in isolated staging. See the
-[migration status](docs/CLOUDFLARE_IMPLEMENTATION.md) for completed checks and
-remaining deployment, integration and acceptance work. A fresh isolated
-Cloudflare demo is deployed; its architecture, environment and quality commands
-are in the [Cloudflare developer guide](docs/CLOUDFLARE_DEVELOPMENT.md).
-
-Developers: setup, architecture and deployment notes are in
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+The public demo serves React and Vite from Cloudflare Workers Static Assets.
+Python Workers run FastAPI and Pydantic with typed D1 repositories. Durable
+Objects coordinate writes, Queues and Cron handle jobs, and private R2 stores
+nightly backups. Releases use the Cloudflare CLI.
+[Cloudflare developer guide](docs/CLOUDFLARE_DEVELOPMENT.md)

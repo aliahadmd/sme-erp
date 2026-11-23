@@ -82,7 +82,8 @@ logs and the health stream enabled, verify observed heartbeats, and investigate
 an absence as either application or telemetry failure. This is one provider's
 monitoring plane, within the requested all-Cloudflare failure domain.
 
-The three demo Monitors are enabled with one user-approved email destination.
+The three live ERP demo Monitors are enabled with one user-approved email destination.
+They continue to monitor the same Worker after its promotion to the public domain.
 Their IDs and query mappings are in `cloudflare/monitoring/deployed-demo.json`.
 Cloudflare accepted one INFO-severity delivery test per policy, notification
 history records all three as sent and not silenced, and the user confirmed all

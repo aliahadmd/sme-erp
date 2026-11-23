@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: "2026-11-12",
       compatibilityFlags: ["python_workers"],
       observability: { enabled: true, traces: { enabled: true } },
+      ...(production ? { domains: ["erp.aliahad.com"], workersDev: false, previewUrls: false } : {}),
       assets: proof ? undefined : {
         notFoundHandling: "single-page-application",
         runWorkerFirst: [

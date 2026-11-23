@@ -1,6 +1,6 @@
 """Apply reviewed D1 migrations with atomic SHA-256 receipts using the pinned cf CLI.
 
-Only the two isolated application databases are selectable. Read-only planning
+Only the verification and public-demo application databases are selectable. Read-only planning
 is the default; --apply executes missing migrations. A lost command response is
 reconciled against its durable receipt before further work. Never reset a D1
 database or rewrite an already applied migration to resolve an error.
@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATABASES = {
     "app-staging": "0f278204-3190-49e1-96d2-a9312fa57e3d",
+    "production": "71ee20e1-b6de-4f2a-8f8f-4a5ecd070225",
     "demo-staging": "71ee20e1-b6de-4f2a-8f8f-4a5ecd070225",
 }
 RECEIPTS = "platform_schema_migrations"
@@ -94,7 +95,7 @@ def migrate(execute, *, apply=False, directory=ROOT / "migrations"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=DATABASES, default="demo-staging")
+    parser.add_argument("--mode", choices=DATABASES, default="app-staging")
     parser.add_argument("--apply", action="store_true")
     arguments = parser.parse_args()
     print(

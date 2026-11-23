@@ -199,7 +199,6 @@ async def put_preferences(body: dict, request: Request):
 @router.get(
     "/audit-logs",
     response_model=Page[AuditLogOut],
-    dependencies=[Depends(require("core.audit.read"))],
 )
 async def audits(
     params: PageParamsDep,
@@ -207,19 +206,25 @@ async def audits(
     entity_type: str | None = None,
     action: str | None = None,
     user_id: uuid.UUID | None = None,
+    actor: Actor = Depends(current_actor),
 ):
+    actor.require("core.audit.read")
     conditions, values = ["1"], []
     for field, value in [("entity_type", entity_type), ("action", action), ("user_id", user_id)]:
         if value:
             conditions.append(field + "=?")
             values.append(str(value))
-    return await repository(request, "core_audit_logs").page(
+    page = await repository(request, "core_audit_logs").page(
         params.limit,
         params.offset,
         where=" AND ".join(conditions),
         params=tuple(values),
         order_by="created_at DESC,id DESC",
     )
+    if not actor.is_superuser:
+        for record in page["items"]:
+            record["ip"] = None
+    return page
 
 
 @router.get("/notifications", response_model=Page[NotificationOut])

@@ -1,10 +1,8 @@
 # Python Workers migration
 
-This directory contains the isolated financial proof and the ERP application
-being ported to Workers. The existing public deployment still uses the
-original runtime.
-See [implementation status](../docs/CLOUDFLARE_IMPLEMENTATION.md) for the full
-migration scope and unfinished work.
+This directory contains the ERP application serving erp.aliahad.com and its
+isolated Workers verification environments.
+[Implementation and cutover evidence](../docs/CLOUDFLARE_IMPLEMENTATION.md)
 
 The proof uses FastAPI/Pydantic, Python Decimal, synchronous SQLAlchemy with
 `sqlalchemy-cloudflare-d1`, and native D1 batches. The adapter's `commit()` and
@@ -32,8 +30,8 @@ The deployment requires the ignored `.secrets.staging.json` with a `PROOF_TOKEN`
 property. This credential must be a random secret, never a demo password. It is
 not included in generated bundles or logs. Proof endpoints require it as a
 Bearer token. The `staging` mode selects only the proof Worker; `app-staging`
-selects the verification application Worker. `demo-staging` selects the fresh
-demo; production is not configured. See
+selects the verification application Worker. `production` deploys the public
+demo. See
 [the Cloudflare developer guide](../docs/CLOUDFLARE_DEVELOPMENT.md).
 
 `uv.lock` resolves host development dependencies; `pylock.toml` pins the

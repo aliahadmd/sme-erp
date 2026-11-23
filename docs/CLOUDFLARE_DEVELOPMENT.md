@@ -2,8 +2,8 @@
 
 The migrated application runs Python/FastAPI/Pydantic in Workers with native D1
 repositories and atomic SQL batches. React/Vite remains the browser application
-and is served by Workers Static Assets on the same origin. The current public
-`erp.aliahad.com` deployment remains on its original runtime until cutover.
+and is served by Workers Static Assets on the same origin. The live demo uses
+`https://erp.aliahad.com` as its Worker Custom Domain.
 
 Command routing and database placement are part of deployment configuration.
 See [capacity measurements and the quiesced coordinator transition](CLOUDFLARE_CAPACITY.md).
@@ -20,7 +20,8 @@ or run multiple generations as write shards against this database.
 |---|---|---|
 | `staging` | `erp-feasibility` | Isolated runtime/precision/SQLAlchemy adapter proof |
 | `app-staging` | `erp-migration-staging-20261113` | Full-schema financial, failure, Queue and recovery verification |
-| `demo-staging` | `erp-demo-staging-20261114` | Fresh, coherent ERP demo and role acceptance |
+| `production` | `erp-demo-staging-20261114` | Live ERP demo at `erp.aliahad.com` |
+| `demo-staging` | `erp-demo-staging-20261114` | Historical initialization and build-only CI profile |
 
 The demo owns D1 `71ee20e1-b6de-4f2a-8f8f-4a5ecd070225`, private R2 bucket
 `erp-demo-staging-backups-20261114`, independent event/dead-letter queues and
@@ -97,12 +98,12 @@ applied `0002_business.sql` to make a schema check pass.
 
 ## Migrations and fresh-demo seeding
 
-`scripts/apply_migrations.py` selects only the configured isolated databases.
-Its default is a read-only plan:
+`scripts/apply_migrations.py` selects the configured verification and live-demo databases.
+Its default is a read-only plan against verification. Select production
+explicitly to inspect live migration history:
 
 ```sh
-uv run python scripts/apply_migrations.py --mode demo-staging
-uv run python scripts/apply_migrations.py --mode demo-staging --apply
+uv run python scripts/apply_migrations.py --mode production
 ```
 
 Every DDL/data migration and SHA-256 receipt commit in the same D1 batch. Changed,
@@ -110,35 +111,16 @@ missing or noncontiguous history is rejected. An uncertain command result is
 checked against its receipt before continuing. Never reset a target to rerun a
 verifier or regenerate already applied SQL.
 
-The private `.secrets.demo-staging.json` contains `JWT_SECRET`,
-`COMMAND_HASH_KEY` and `BOOTSTRAP_TOKEN`. The private `.demo.demo-staging.json`
-contains the administrator and nine role credentials. Keep these ignored files
-at mode 0600. Preserve the command hash key across deployments.
+The live demo was initialized and verified before promotion. Its private
+operator credentials remain in `.demo.demo-staging.json` on the release
+machine. Keep this file ignored and at mode 0600. For financial fixtures,
+bootstrap and recovery exercises, use the separate verification environment.
 
-For a genuinely new, empty demo target, the initialization deployment is:
+The original seed and role verifiers use the historical demo Worker hostname.
+That hostname has been retired. Their checkpoints and results document the
+initial seed and staging validation.
 
-```sh
-ERP_DEMO_BOOTSTRAP=true pnpm build:demo-staging
-ERP_DEMO_BOOTSTRAP=true pnpm deploy:demo-staging
-uv run python -u scripts/seed_demo_remote.py --bootstrap
-pnpm quality
-pnpm deploy:demo-staging
-uv run python -u scripts/seed_demo_remote.py
-uv run python -u scripts/verify_demo_roles_remote.py
-```
-
-The temporary flag disables ordinary jobs/scheduled capture during seeding.
-The final build closes bootstrap and enables jobs/daily backups. The seed's
-ignored checkpoint preserves its date, step results and mutation keys. Re-running
-it resumes the same commands and verifies live balances; it does not reset data.
-The native role verifier checkpoints completed roles and supports `--resume`.
-Both remote demo scripts accept `--ipv4` for a broken local IPv6 path while
-retaining normal certificate verification.
-After users change demo data, review the seed acceptance baseline before trying
-to apply it again.
-
-For native browser checks, open a Playwright CLI session named `erp-roles` at
-the fresh demo's `/login` page, then run:
+The following browser scripts were used for staging acceptance before promotion:
 
 ```sh
 uv run python scripts/verify_browser_session_remote.py --scenario roles
@@ -226,8 +208,9 @@ the current demo deployment remains at 100%.
 From `cloudflare/`, build/check and deploy the same mode together:
 
 ```sh
-CF_MODE=demo-staging pnpm quality
-pnpm deploy:demo-staging
+pnpm build:production
+pnpm deploy:production
+curl --fail https://erp.aliahad.com/readyz
 ```
 
 For the separate financial verification environment:
@@ -241,8 +224,11 @@ The deployment scripts call the pinned `cf deploy --prebuilt` with the explicit
 mode and its ignored local secrets file. Complete one environment's build and
 deployment before building another: Build Output holds the latest build. Keep
 local secrets at mode 0600 and preserve the command hash key across deployments.
-Migrations and seeding remain separate explicit steps. Production configuration
-and cutover remain outstanding; these commands select only staging environments.
+Migrations and seeding remain separate explicit steps. The production build
+uses the public custom domain, disables the workers.dev hostname and previews,
+and keeps bootstrap closed. The file `.secrets.production.json` contains
+`JWT_SECRET` and `COMMAND_HASH_KEY`. The app verifies the public domain as its
+session origin.
 
 The optional `.github/workflows/cloudflare.yml` quality workflow uses no
 Cloudflare credentials and performs no deployment, migration or seeding. The

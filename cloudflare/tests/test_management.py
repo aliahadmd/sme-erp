@@ -20,6 +20,30 @@ async def request(client, method, path, headers, body=None, status=200):
     return response
 
 
+async def test_only_operator_can_read_login_ip_in_audit(client):
+    admin = await auth(client)
+    credentials = {"email": "audit-viewer@example.com", "password": "viewer123"}
+    await request(
+        client,
+        "POST",
+        "/api/users",
+        admin,
+        {**credentials, "full_name": "Demo viewer", "role_codes": ["viewer"]},
+        status=201,
+    )
+    login_response = await client.post(
+        "/api/auth/login", json=credentials, headers={"cf-connecting-ip": "192.0.2.44"}
+    )
+    assert login_response.status_code == 200
+    viewer = {"Authorization": "Bearer " + login_response.json()["access_token"]}
+    path = "/api/audit-logs?action=login"
+    private = (await request(client, "GET", path, admin)).json()
+    public = (await request(client, "GET", path, viewer)).json()
+    assert any(record["ip"] == "192.0.2.44" for record in private["items"])
+    assert public["total"] == private["total"]
+    assert all(record["ip"] is None for record in public["items"])
+
+
 async def test_concurrent_duplicate_creates_one_number_contact_and_audit(client, env):
     headers = {**await auth(client), "Idempotency-Key": "one-contact"}
     body = {"name": "Idempotent", "is_customer": True}
